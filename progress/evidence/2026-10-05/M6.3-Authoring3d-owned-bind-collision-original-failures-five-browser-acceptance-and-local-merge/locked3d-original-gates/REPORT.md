@@ -1,0 +1,13 @@
+最终新提交3d4520e9：限定PASS（strict4harness TS /原make build /现有Authoring5browser cases）。
+
+新隔离tree $HOME/.cache/learning-workbench-acceptance/m63-authoring-bind5fb-locked-environment-oct05；head3d4520e9a35e325e3f6062429229fbce8ca5e105，tree1aecf271e3edc7035878eb46fa8f5367ae920733，clean。相对冻结5fb仅authoringRuntime把Playwright入口改为有声明的CJS default index.js，并从官方TestType.expect读取expect；没有any/unknown shim。三个helper/test文件逐字节等于5fb。
+
+原make setup复用唯一31890184B公开pin archive，原make build最终exit0；保留chunk>500kB原warning。explicit strict/noEmit semantic最终exit0。实际--list记录authoring.spec.ts两例+authoring-groups.spec.ts三例；实际同5case短ownedTMPDIR回归5passed(1.1m)/exit0，原global30s/个案90或120s/retry0/1worker不改。
+
+12个实际stage各有command/log/receipt/selfrunner和完整1556 non-progress文件before/after，含generated/derived，全部字节exact且等于Git。最终manifest477535B SHA5a823df080e2b6b0bba3aab26bd751a7d55156c553e92a0b7cd6897ffbd1a77b。成功browser log1381B SHAd2959588005f0b9e12edf38d3d107bf0ce60394e439bab6dfa5c16d423fc3e8a；自runner5839B SHA08b06f293914a4b8e8240cf5191e53f43ab6267b98afd6a13a16acbfd3634306。
+
+原失败完整保留：5fb TS7016；5fb --list errno-122/write（不猜quota根因）；7c --list CJS具名expect SyntaxError；3d首次真实suite5failed，Chrome明确Socket path too long/SIGABRT，发生在API+实际Vite已ready之后。后一次suite仅纠正我设置的长owned TMPDIR为新短私有目录，同source/list/budget；原FAIL不可改判。
+
+这次实际Vite正常selectedport marker+HTTP readiness及五例browser行为通过，没有向真实Vite注入collision。先前真实owned子进程碰撞RED/同testGREEN和10PASS仍属冻结5fb独立证据。原CI竞争方identity未知。133full/原CI重跑、3d fullPython、Review/grading修复、physical numeric/wholeM6.3/M7均不升级。原68a fullgate/canonical环境与source不变；不读取runtime JSON/DB/profile/secret/PNG/ZIP，不scan端口owner、不kill未知进程，不调用model/remote写。
+
+本私有有限candidate待root独立采用。

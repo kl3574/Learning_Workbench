@@ -1,0 +1,34 @@
+diff --git a/services/api/app/application/codex_bootstrap.py b/services/api/app/application/codex_bootstrap.py
+index 3df018bc..134165bb 100644
+--- a/services/api/app/application/codex_bootstrap.py
++++ b/services/api/app/application/codex_bootstrap.py
+@@ -4,6 +4,7 @@ Only consume calls the execution port, outside every database transaction.
+ Original facts survive later access loss; delivery rechecks current authority.
+ """
+ from datetime import datetime, timedelta
++from contextlib import ExitStack
+ from uuid import uuid4
+ 
+ from packages.contracts import domain_models as dm
+@@ -156,9 +157,7 @@ class CodexBootstrapService:
+     def create_session(self, identity: SessionIdentity, body: CodexSessionCreateWrite, key: str) -> CodexSessionCreateAck:
+         command = self._command(identity, 'session', None, key, body)
+         owner_id = 'codex_owner_' + uuid4().hex
+-        with self.owners.hold(owner_id) as acquired:
+-            if not acquired:
+-                raise conflict('CODEX_SESSION_INITIALIZING')
++        with ExitStack() as ownership:
+             with self.database.transaction() as connection:
+                 repository, history = self._history(connection, identity, write=True)
+                 replay = self._replay(history, command)
+@@ -173,6 +172,10 @@ class CodexBootstrapService:
+                         or snapshot.operation.runtime.scope.sandbox_root_id != body.sandbox_root_id
+                         or self._validity(snapshot) != 'current'):
+                     raise conflict()
++                # Do not create even an execution lock for rejected commands or
++                # original replays. Hold it before the unique permit commits.
++                if not ownership.enter_context(self.owners.hold(owner_id)):
++                    raise conflict('CODEX_SESSION_INITIALIZING')
+                 identifier = snapshot.operation.preparation_id
+                 consumed = ConsumedEvent(kind='consumed', command=command, session_id='codex_session_' + uuid4().hex,
+                     consent_id=body.consent_id, started_at=utc_now(), owner_id=owner_id)

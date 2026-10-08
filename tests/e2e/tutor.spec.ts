@@ -4,6 +4,7 @@ import type { AttemptSnapshot, ProviderConfigWrite, SessionResponse, TutorMessag
 import { RestartRuntime } from './restartRuntime'
 import { TutorRuntime } from './tutorRuntime'
 import { observeTutorCompletion } from './tutorDiagnostic'
+import { expectTutorCompletion } from './tutorCompletion'
 import { importAssessmentPackage, originalAssessmentPackage } from './assessmentTestData'
 
 async function unregisteredProvider(page: Page, origin: string) {
@@ -192,7 +193,7 @@ test('explicit same-Run consent uses the real loopback protocol and restores raw
     diagnostic.mark('grant_click')
     await tutor.getByRole('button', { name: '确认发送批准授权', exact: true }).click()
     await diagnostic.around(info, async () => {
-      await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
+      await expectTutorCompletion(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true }))
     })
     const complete: TutorRunView = await page.request.get(`/api/v1/runs/${ack.run.id}`).then(value => value.json())
     expect(complete.run.id).toBe(ack.run.id); expect(complete.run.thread_id).toBe(thread.id)

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "P2-cancel-ack-state-binding",
+  "status": "OPEN_STATIC",
+  "axis": "Spec",
+  "location": "apps/web/src/features/codex/turnCommands.ts:37",
+  "related_location": "apps/web/src/features/codex/turnClient.ts:76-80",
+  "counterexamples": [
+    {
+      "basis": {
+        "job_status": "awaiting_approval",
+        "job_revision": 1,
+        "execution": "not_started",
+        "cancel_requested": false
+      },
+      "same_owner_target_ack": {
+        "status": "awaiting_approval",
+        "revision": 1
+      },
+      "required_owner_result": {
+        "status": "cancelled",
+        "revision": 2
+      }
+    },
+    {
+      "basis": {
+        "job_status": "completed",
+        "job_revision": 5,
+        "execution": "terminal"
+      },
+      "same_owner_target_ack": {
+        "status": "failed",
+        "revision": 4
+      },
+      "required_owner_result": {
+        "status": "completed",
+        "revision": 5
+      }
+    }
+  ],
+  "trace": "Wire checks only schema/id/kind/workspace; decoder returns the impossible ACK and persistence can store it as confirmed.",
+  "norm": "PRODUCT_DESIGN.md:2451 and 1826; AuthoringJobRepository.verify_cancel_ack:258-282.",
+  "narrow_scope": "Bind the journal ACK to original status/revision/cancel_requested without excluding legitimate running or terminal observations and without using current GET to reconstruct history.",
+  "validation": "Static counterpath only; producer accepted it. Its later actual RED and fix require a separate closure."
+}

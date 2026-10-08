@@ -1,0 +1,1038 @@
+diff --git a/apps/web/src/features/codex/CodexTurnOutboundPanel.test.tsx b/apps/web/src/features/codex/CodexTurnOutboundPanel.test.tsx
+new file mode 100644
+index 00000000..a8c68e36
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexTurnOutboundPanel.test.tsx
+@@ -0,0 +1,232 @@
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { sha256 } from '@noble/hashes/sha2.js'
++import { bytesToHex } from '@noble/hashes/utils.js'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, beforeEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { request } from '../../api/client'
++import { actor, deferred, session, workspace } from './bootstrapTestFixtures'
++import { CodexTurnOutboundPanel } from './CodexTurnOutboundPanel'
++import { CodexTurnPanel } from './CodexTurnPanel'
++import { turnOutboundClient, type TurnOutboundPort } from './turnOutboundClient'
++import { outboundConsent, outboundControl, outboundCurrent, outboundGrant, outboundPreparation, outboundProposal, outboundProvider } from './turnOutboundFixtures'
++import { readOutboundCommand, type OutboundCommand } from './turnOutboundCommands'
++import { heldOutboundCommands, heldOutboundForms, releaseOutboundCommand, releaseOutboundForm } from './turnOutboundMemory'
++import { emptyOutboundFields, persistOutboundForm, snapshotOutboundForm } from './turnOutboundForms'
++const stores: DraftStore[] = []
++const local = () => { const value = new DraftStore({ name: `outbound-panel-${crypto.randomUUID()}`, factory: new IDBFactory() }); stores.push(value); return value }
++beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-04T00:00:01Z')) })
++afterEach(async () => { cleanup(); for (const w of [workspace, 'workspace_other']) { heldOutboundCommands(w).forEach(releaseOutboundCommand); heldOutboundForms(w).forEach(releaseOutboundForm) }; await Promise.all(stores.splice(0).map(v => v.close())); vi.unstubAllGlobals(); vi.useRealTimers() })
++const port = (): TurnOutboundPort => ({ ...turnOutboundClient, session: vi.fn(async () => session()), current: vi.fn(async () => outboundCurrent()), preparation: vi.fn(async () => outboundPreparation()),
++ control: vi.fn(async () => outboundControl()), config: vi.fn(async () => outboundProvider()), proposal: vi.fn(async () => outboundProposal()), consent: vi.fn(async () => outboundConsent()) })
++const buttons = { preview: '明确创建完整外发预览', grant: '明确批准当前完整外发提案', revoke: '明确撤销本回合外发许可', start: '明确开始本回合' }
++const response = (kind: OutboundCommand['kind']) => kind === 'preview' ? outboundProposal() : kind === 'grant' ? outboundGrant() : kind === 'revoke' ? { id: 'codexconsent_original', revision: 2, applied: true } : { turn_id: 'turn_test', session_revision: 4, job: { id: 'job_turn_test', status: 'queued' } }
++const refresh = async () => { fireEvent.click(screen.getByText('读取外发记录与权限')); await screen.findByText(/外发本机记录已读取/) }
++async function prepare(kind: OutboundCommand['kind']) {
++ await refresh()
++ fireEvent.change(screen.getByLabelText('外发回合 ID'), { target: { value: 'turn_test' } })
++ if (kind === 'revoke') { fireEvent.click(screen.getByText('读取外发安全控制')); await screen.findByLabelText('外发安全控制原基准') }
++ else {
++  for (const [label, value] of [['原准备 ID', 'turn_preparation_test'], ['外发 session ID', 'codex_session_test'], ['外发 proposal ID', 'proposal_turn'], ['外发 consent ID', 'codexconsent_original'], ['完整输入 token 硬上限', '1000'], ['输出 token 硬上限', '100'], ['明确到期 UTC（未来十分钟内）', '2026-10-04T00:10:00Z']]) fireEvent.change(screen.getByLabelText(label), { target: { value } })
++  fireEvent.click(screen.getByText('读取准备、Job 与 Provider 基准')); await screen.findByLabelText('外发准备只读基准')
++  if (kind === 'grant') { fireEvent.click(screen.getByText('独立读取当前外发提案')); await screen.findByLabelText('当前外发提案') }
++  if (kind === 'start') { fireEvent.click(screen.getByText('独立读取当前外发许可')); await screen.findByLabelText('当前外发许可'); fireEvent.click(screen.getByText('独立读取开始 session 基准')); await screen.findByLabelText('开始 session 原基准') }
++ }
++ await waitFor(() => expect((screen.getByText(buttons[kind]) as HTMLButtonElement).disabled).toBe(false))
++}
++
++test.each(['preview', 'grant', 'revoke', 'start'] as const)('%s full HTTP wire survives lost ACK, remount with zero POST, explicit original replay and durable ACK reload', async kind => {
++ const p = port(), store = local(), formStore = local(), posts: Array<{ path: string; key: string; body: string }> = []
++ const fetch = vi.fn(async (path: string, init: RequestInit) => {
++  const key = new Headers(init.headers).get('Idempotency-Key')!, original = readOutboundCommand((await store.load(workspace))[key], workspace)
++  expect(original.actor_session_id).toBe(actor); expect(original.kind).toBe(kind); expect(original.ack).toBeNull(); expect(original.body).toEqual(JSON.parse(init.body as string))
++  posts.push({ path, key, body: init.body as string })
++  if (posts.length === 1) throw new Error('Synthetic lost original ACK')
++  return new Response(JSON.stringify(response(kind)), { status: kind === 'start' ? 202 : kind === 'revoke' ? 200 : 201 })
++ })
++ vi.stubGlobal('fetch', fetch)
++ let view = render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await prepare(kind); fireEvent.click(screen.getByText(buttons[kind])); await screen.findByText(/外发结果或本机保存未知/)
++ const original = readOutboundCommand((await store.load(workspace))[posts[0].key], workspace)
++ view.unmount(); view = render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await refresh(); expect(posts).toHaveLength(1)
++ fireEvent.click(screen.getByText(`显式回放外发原 key ${original.command_id}`)); await screen.findByText(new RegExp(`外发 ${kind} 原 ACK 已保存`))
++ expect(posts).toEqual([posts[0], posts[0]])
++ expect(readOutboundCommand((await store.load(workspace))[original.command_id], workspace)).toEqual({ ...original, ack: response(kind) })
++ view.unmount(); render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await refresh(); expect(posts).toHaveLength(2); expect(screen.getByText(`${kind} · 原 ACK 已保存，不是当前 GET`)).toBeTruthy()
++ expect(screen.queryByLabelText('当前外发提案')).toBeNull(); expect(screen.queryByLabelText('当前外发许可')).toBeNull()
++})
++
++test.each(['preview', 'grant', 'revoke', 'start'] as const)('%s storage refusal keeps original command isolated and sends zero POST', async kind => {
++ const p = port(), store = local(), formStore = local(), changed = vi.fn(), fetch = vi.fn()
++ vi.stubGlobal('fetch', fetch); vi.spyOn(store, 'save').mockRejectedValue(new Error('Synthetic storage unavailable'))
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} onState={changed} />)
++ await prepare(kind); fireEvent.click(screen.getByText(buttons[kind])); await screen.findByText(/外发结果或本机保存未知/)
++ expect(fetch).not.toHaveBeenCalled(); expect(heldOutboundCommands(workspace)).toHaveLength(1)
++ expect(heldOutboundCommands(workspace)[0].kind).toBe(kind); expect(changed).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true })
++})
++
++test.each(['workspace', 'port', 'store', 'admission', 'unmount'] as const)('late original grant ACK after %s change is retained under original actor and hidden', async change => {
++ const p = port(), store = local(), formStore = local(), pending = deferred<Response>(), fetch = vi.fn(() => pending.promise)
++ vi.stubGlobal('fetch', fetch)
++ const view = render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await prepare('grant'); fireEvent.click(screen.getByText(buttons.grant)); await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
++ if (change === 'unmount') view.unmount()
++ else view.rerender(<CodexTurnOutboundPanel workspace={change === 'workspace' ? 'workspace_other' : workspace} writeAdmitted={change !== 'admission'} port={change === 'port' ? port() : p} store={change === 'store' ? local() : store} formStore={formStore} />)
++ await act(async () => pending.resolve(new Response(JSON.stringify(outboundGrant()), { status: 201 })))
++ await waitFor(() => expect(heldOutboundCommands(workspace)[0]?.ack).toEqual(outboundGrant()))
++ expect(heldOutboundCommands(workspace)[0].actor_session_id).toBe(actor); expect(screen.queryByText(/外发 grant 原 ACK 已保存/)).toBeNull(); expect(fetch).toHaveBeenCalledOnce()
++})
++
++test.each(['learner', 'independent', 'open_book'] as const)('fresh %s Policy after durable grant blocks POST and hides subject data while preserving original command', async mode => {
++ const p = port(), store = local(), formStore = local(), save = store.save.bind(store), fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
++ vi.spyOn(store, 'save').mockImplementation(async (...args) => { const value = await save(...args); vi.mocked(p.session).mockResolvedValue({ ...session(), role: mode === 'learner' ? 'learner' : 'author', active_independent_attempt_id: mode === 'independent' ? 'attempt_test' : null, active_open_book_attempt_id: mode === 'open_book' ? 'attempt_test' : null }); return value })
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await prepare('grant'); fireEvent.click(screen.getByText(buttons.grant)); await screen.findByText(/外发操作的当前权限或原 actor 已变化/)
++ expect(fetch).not.toHaveBeenCalled(); expect(Object.keys(await store.load(workspace))).toHaveLength(1); expect(screen.queryByLabelText('当前外发提案')).toBeNull()
++})
++
++test('new learner with active assessment can revoke using actual safe control without reading subject details', async () => {
++ const p = port(), store = local(), formStore = local()
++ vi.mocked(p.session).mockResolvedValue({ ...session(), actor_session_id: 'learner_new', role: 'learner', active_independent_attempt_id: 'attempt_test' })
++ const fetch = vi.fn(async () => new Response(JSON.stringify(response('revoke')), { status: 200 })); vi.stubGlobal('fetch', fetch)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted={false} port={p} store={store} formStore={formStore} />)
++ await prepare('revoke'); fireEvent.click(screen.getByText(buttons.revoke)); await screen.findByText(/外发 revoke 原 ACK 已保存/)
++ const original = Object.values(await store.load(workspace)).map(v => readOutboundCommand(v, workspace))[0]
++ expect(original.actor_session_id).toBe('learner_new'); expect(original.ack).toEqual(response('revoke'))
++ expect(p.preparation).not.toHaveBeenCalled(); expect(p.proposal).not.toHaveBeenCalled(); expect(p.consent).not.toHaveBeenCalled(); expect(fetch).toHaveBeenCalledOnce()
++})
++
++test('editing while a real preview is pending preserves the newer budget and original frozen request separately', async () => {
++ const p = port(), store = local(), formStore = local(), pending = deferred<Response>(), fetch = vi.fn(() => pending.promise); vi.stubGlobal('fetch', fetch)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await prepare('preview'); fireEvent.click(screen.getByText(buttons.preview)); await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
++ fireEvent.change(screen.getByLabelText('完整输入 token 硬上限'), { target: { value: '2000' } })
++ await act(async () => pending.resolve(new Response(JSON.stringify(outboundProposal()), { status: 201 }))); await screen.findByText(/外发 preview 原 ACK 已保存/)
++ expect((screen.getByLabelText('完整输入 token 硬上限') as HTMLInputElement).value).toBe('2000')
++ const command = Object.values(await store.load(workspace)).map(v => readOutboundCommand(v, workspace))[0]
++ if (command.kind !== 'preview') throw new Error('Expected preview')
++ expect(command.body.budget.max_input_tokens).toBe(1000)
++})
++
++test.each([412, 409, 503])('real HTTP %s preserves original body/key/basis and only explicit replay can send again', async status => {
++ const p = port(), store = local(), formStore = local(), posts: Array<{ key: string; body: string }> = []
++ const code = status === 503 ? 'CODEX_INPUT_PROOF_UNAVAILABLE' : 'CODEX_SOURCE_CHANGED'
++ vi.stubGlobal('fetch', vi.fn(async (_path: string, init: RequestInit) => { posts.push({ key: new Headers(init.headers).get('Idempotency-Key')!, body: init.body as string }); return new Response(JSON.stringify({ error: { code, message: 'private synthetic diagnostic must stay hidden' } }), { status }) }))
++ let view = render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await prepare('preview'); fireEvent.click(screen.getByText(buttons.preview)); await screen.findByText(status === 412 ? /外发版本已变化/ : status === 409 ? /外发绑定冲突/ : /BLOCKED：CODEX_INPUT_PROOF_UNAVAILABLE/)
++ const original = readOutboundCommand((await store.load(workspace))[posts[0].key], workspace)
++ expect(original.error).toEqual({ status, code }); expect(screen.queryByText(/private synthetic diagnostic/)).toBeNull()
++ fireEvent.change(screen.getByLabelText('完整输入 token 硬上限'), { target: { value: '2000' } })
++ view.unmount(); view = render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await refresh(); expect(posts).toHaveLength(1)
++ fireEvent.click(screen.getByText(`显式回放外发原 key ${original.command_id}`)); await waitFor(() => expect(posts).toHaveLength(2)); await screen.findByText(status === 412 ? /外发版本已变化/ : status === 409 ? /外发绑定冲突/ : /BLOCKED：CODEX_INPUT_PROOF_UNAVAILABLE/)
++ expect(posts[1]).toEqual(posts[0]); expect(readOutboundCommand((await store.load(workspace))[original.command_id], workspace)).toEqual(original)
++})
++
++test.each(['actor', 'workspace', 'learner', 'independent', 'open_book'] as const)('restore fresh %s change without a page notification never shows an old form or saves a new branch', async change => {
++ const p = port(), store = local(), formStore = local(), original = snapshotOutboundForm(workspace, actor, { ...emptyOutboundFields(), preparation_id: 'original_private_preparation', max_input_tokens: '1234' }, null), fetch = vi.fn()
++ await persistOutboundForm(original, formStore); vi.stubGlobal('fetch', fetch)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />)
++ await refresh()
++ vi.mocked(p.session).mockResolvedValue({ ...session(), actor_session_id: change === 'actor' ? 'other_actor' : actor, workspace_id: change === 'workspace' ? 'workspace_other' : workspace,
++  role: change === 'learner' ? 'learner' : 'author', active_independent_attempt_id: change === 'independent' ? 'attempt_test' : null, active_open_book_attempt_id: change === 'open_book' ? 'attempt_test' : null })
++ fireEvent.click(screen.getByText(`恢复外发表单 ${original.draft_id} · 1`)); await screen.findByText(/外发操作的当前权限或原 actor 已变化/)
++ expect(screen.queryByDisplayValue('original_private_preparation')).toBeNull(); expect(screen.queryByDisplayValue('1234')).toBeNull()
++ expect(Object.values(await formStore.load(workspace)).map(v => JSON.parse(v.text))).toEqual([original]); expect(fetch).not.toHaveBeenCalled()
++})
++
++test('restore rechecks identity after local read; an unnotified actor change leaves the original form intact', async () => {
++ const p = port(), store = local(), formStore = local(), original = snapshotOutboundForm(workspace, actor, { ...emptyOutboundFields(), preparation_id: 'private_original' }, null)
++ await persistOutboundForm(original, formStore)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await refresh()
++ const load = formStore.load.bind(formStore)
++ vi.spyOn(formStore, 'load').mockImplementation(async (...args) => { const values = await load(...args); vi.mocked(p.session).mockResolvedValue({ ...session(), actor_session_id: 'other_actor' }); return values })
++ fireEvent.click(screen.getByText(`恢复外发表单 ${original.draft_id} · 1`)); await screen.findByText(/外发操作的当前权限或原 actor 已变化/)
++ expect(screen.queryByDisplayValue('private_original')).toBeNull(); expect(Object.keys(await load(workspace))).toEqual([original.snapshot_id])
++})
++
++test('restore successful fresh reads preserve its original snapshot and never replace a newer edit made while reading', async () => {
++ const p = port(), store = local(), formStore = local(), original = snapshotOutboundForm(workspace, actor, { ...emptyOutboundFields(), preparation_id: 'private_original', max_input_tokens: '1234' }, null)
++ await persistOutboundForm(original, formStore)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await refresh()
++ const pending = deferred<ReturnType<typeof session>>()
++ vi.mocked(p.session).mockReturnValueOnce(pending.promise)
++ fireEvent.click(screen.getByText(`恢复外发表单 ${original.draft_id} · 1`))
++ fireEvent.change(screen.getByLabelText('完整输入 token 硬上限'), { target: { value: '2222' } })
++ await act(async () => pending.resolve(session())); await screen.findByText(/原外发表单已核验并保存独立分支/)
++ expect((screen.getByLabelText('完整输入 token 硬上限') as HTMLInputElement).value).toBe('2222')
++ expect(JSON.parse((await formStore.load(workspace))[original.snapshot_id].text)).toEqual(original)
++})
++
++test('fresh actor change after durable start admission blocks transport without adopting the original consent', async () => {
++ const p = port(), store = local(), formStore = local(), save = store.save.bind(store), fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await prepare('start')
++ vi.spyOn(store, 'save').mockImplementation(async (...args) => { const value = await save(...args); vi.mocked(p.session).mockResolvedValue({ ...session(), actor_session_id: 'other_actor' }); return value })
++ fireEvent.click(screen.getByText(buttons.start)); await screen.findByText(/外发操作的当前权限或原 actor 已变化/)
++ expect(fetch).not.toHaveBeenCalled(); expect(Object.values(await store.load(workspace)).map(v => readOutboundCommand(v, workspace))[0].actor_session_id).toBe(actor)
++ expect(screen.queryByLabelText('当前外发许可')).toBeNull()
++})
++
++test('late grant ACK after an unnotified actor change remains isolated under its original author', async () => {
++ const p = port(), store = local(), formStore = local(), pending = deferred<Response>(), fetch = vi.fn(() => pending.promise); vi.stubGlobal('fetch', fetch)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await prepare('grant')
++ fireEvent.click(screen.getByText(buttons.grant)); await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
++ vi.mocked(p.session).mockResolvedValue({ ...session(), actor_session_id: 'other_actor' })
++ await act(async () => pending.resolve(new Response(JSON.stringify(outboundGrant()), { status: 201 })))
++ await screen.findByText(/外发操作的当前权限或原 actor 已变化/)
++ expect(heldOutboundCommands(workspace)[0].ack).toEqual(outboundGrant()); expect(heldOutboundCommands(workspace)[0].actor_session_id).toBe(actor)
++ expect(screen.queryByText(/外发 grant 原 ACK 已保存/)).toBeNull(); expect(screen.queryByLabelText('当前外发提案')).toBeNull()
++ await refresh(); expect(screen.queryByText(/核对外发原命令/)).toBeNull(); expect(fetch).toHaveBeenCalledOnce()
++})
++
++test('access generation invalidates a pending subject GET and never automatically retries it', async () => {
++ const p = port(), store = local(), formStore = local(), pending = deferred<ReturnType<typeof outboundProposal>>()
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await prepare('grant')
++ vi.mocked(p.proposal).mockReturnValueOnce(pending.promise); fireEvent.click(screen.getByText('独立读取当前外发提案'))
++ await waitFor(() => expect(p.proposal).toHaveBeenCalledTimes(2)); vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')))
++ await act(async () => { await request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic_outbound_access_change' }) })
++ await act(async () => pending.resolve(outboundProposal()))
++ expect(screen.queryByLabelText('当前外发提案')).toBeNull(); expect(p.proposal).toHaveBeenCalledTimes(2); expect(screen.queryByText(/外发 grant 原 ACK/)).toBeNull()
++})
++
++test('production-shaped unavailable preparation honestly blocks preview without creating a command or POST', async () => {
++ const p = port(), store = local(), formStore = local(), fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
++ vi.mocked(p.preparation).mockResolvedValue({ ...outboundPreparation(), validity: 'unavailable' })
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await refresh()
++ fireEvent.change(screen.getByLabelText('原准备 ID'), { target: { value: 'turn_preparation_test' } }); fireEvent.click(screen.getByText('读取准备、Job 与 Provider 基准'))
++ await screen.findByText(/BLOCKED：CODEX_INPUT_PROOF_UNAVAILABLE。当前没有完整输入证明/)
++ expect((screen.getByText(buttons.preview) as HTMLButtonElement).disabled).toBe(true); expect(Object.keys(await store.load(workspace))).toHaveLength(0); expect(fetch).not.toHaveBeenCalled()
++})
++
++test('runtime unavailable start retains its exact original command and never displays a result as completed', async () => {
++ const p = port(), store = local(), formStore = local(), fetch = vi.fn(async () => new Response(JSON.stringify({ error: { code: 'CODEX_RUNTIME_UNAVAILABLE', message: 'private synthetic runtime' } }), { status: 503 })); vi.stubGlobal('fetch', fetch)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await prepare('start')
++ fireEvent.click(screen.getByText(buttons.start)); await screen.findByText(/BLOCKED：CODEX_RUNTIME_UNAVAILABLE/)
++ expect(fetch).toHaveBeenCalledOnce(); expect(screen.queryByLabelText('当前未审回合结果')).toBeNull()
++ const command = Object.values(await store.load(workspace)).map(v => readOutboundCommand(v, workspace))[0]
++ expect(command.ack).toBeNull(); expect(command.error).toEqual({ status: 503, code: 'CODEX_RUNTIME_UNAVAILABLE' })
++})
++
++test.each(['none', 'partial', 'complete'] as const)('real result GET displays preserved %s output with all quality checks NOT_RUN', async output_state => {
++ const p = port(), store = local(), formStore = local(), answer = output_state === 'none' ? '' : '  未审 α\n中文😀  ', outcome = output_state === 'complete' ? 'completed' as const : 'failed' as const
++ const value = { control: { ...outboundControl(), job: { id: 'job_turn_test', status: outcome }, execution: 'terminal', outcome, started_at: '2026-10-04T00:00:02Z', finished_at: '2026-10-04T00:00:03Z', error_code: outcome === 'completed' ? null : 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED' },
++  preparation_id: 'turn_preparation_test', answer_markdown: answer, output_sha256: answer ? bytesToHex(sha256(new TextEncoder().encode(answer))) : null, output_state,
++  usage: { input_tokens: 50, output_tokens: answer ? 5 : 0 }, mathematical: 'NOT_RUN', sources: 'NOT_RUN', independent_pedagogy: 'NOT_RUN' }
++ const fetch = vi.fn(async (_path: string, init: RequestInit) => { expect(init.method).toBe('GET'); return new Response(JSON.stringify(value)) }); vi.stubGlobal('fetch', fetch)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await prepare('preview')
++ fireEvent.click(screen.getByText('独立读取本回合结果')); await screen.findByLabelText('当前未审回合结果')
++ expect(screen.getByLabelText('原始未审回答').textContent).toBe(answer); expect(screen.getByText(`输出 ${output_state} · terminal · ${outcome}`)).toBeTruthy()
++ expect(screen.getByText(/数学审查 NOT_RUN · 来源审查 NOT_RUN · 独立教学审查 NOT_RUN/)).toBeTruthy(); expect(fetch).toHaveBeenCalledOnce(); expect(Object.keys(await store.load(workspace))).toHaveLength(0)
++})
++
++test('outbound unsaved input and isolated memory reach the existing parent navigation guard', async () => {
++ const p = port(), store = local(), formStore = local(), changed = vi.fn()
++ vi.spyOn(formStore, 'save').mockRejectedValue(new Error('Synthetic storage unavailable'))
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted outboundPort={p} outboundStore={store} outboundFormStore={formStore} onState={changed} />)
++ await refresh(); fireEvent.change(screen.getByLabelText('完整输入 token 硬上限'), { target: { value: '1234' } })
++ await screen.findByText(/外发表单尚未落盘/)
++ expect(changed).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true })
++ expect(heldOutboundForms(workspace)[0].fields.max_input_tokens).toBe('1234')
++})
+diff --git a/apps/web/src/features/codex/CodexTurnOutboundPanel.tsx b/apps/web/src/features/codex/CodexTurnOutboundPanel.tsx
+new file mode 100644
+index 00000000..7506a169
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexTurnOutboundPanel.tsx
+@@ -0,0 +1,62 @@
++import { useEffect, useRef } from 'react'
++import type { DraftStore } from '../../workbench/DraftStore'
++import type { TurnOutboundPort } from './turnOutboundClient'
++import type { TurnPanelState } from './CodexTurnPanel'
++import type { OutboundFields } from './turnOutboundForms'
++import { useCodexOutbound } from './useCodexOutbound'
++export function CodexTurnOutboundPanel({ workspace, writeAdmitted, port, store, formStore, onState }: {
++ workspace: string; writeAdmitted: boolean; port?: TurnOutboundPort; store?: DraftStore; formStore?: DraftStore; onState?: (state: TurnPanelState) => void
++}) {
++ const state = useCodexOutbound(workspace, writeAdmitted, port, store, formStore), callback = useRef(onState); callback.current = onState
++ useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe, isolated: state.isolated }) }, [state.dirty, state.safe, state.isolated])
++ const field = (key: keyof OutboundFields, label: string) => <label>{label}<input value={state.fields[key]} disabled={!state.ready} onChange={e => state.edit({ [key]: e.target.value })} /></label>
++ const disabled = !state.ready || state.busy
++ return <section aria-label="Codex 外发许可与回合结果"><h3>Codex 外发许可与回合结果</h3>
++  <p>先读取真实基准，逐次明确预览、批准和开始。批准不会自动开始；开始 ACK 仅表示排队。默认完整证明或执行器不可用时保持 BLOCKED。</p>
++  <button disabled={!workspace || state.busy} onClick={() => void state.refresh()}>读取外发记录与权限</button>
++  {state.error && <p role="status">{state.error}</p>}{state.message && <p role="status">{state.message}</p>}
++  {state.busy && <p role="status">正在处理本次明确外发操作；新的表单编辑独立保存，不改变原命令。</p>}
++  {state.retained > 0 && <p>存在未落盘的外发原事实或表单，已隔离保留。</p>}
++  {state.canSave && <button disabled={state.busy} onClick={() => void state.saveMemory()}>仅保存外发本机事实</button>}
++  {state.ready && !state.allowed && <p>当前仅开放安全许可撤销。学科摘要、原批准记录和结果已收起，原记录仍保留。</p>}
++  {state.ready && <section aria-label="安全许可撤销">
++   {field('turn_id', '外发回合 ID')}
++   <button disabled={disabled || !state.fields.turn_id} onClick={() => void state.read('control')}>读取外发安全控制</button>
++   {state.control && <><pre aria-label="外发安全控制原基准">{JSON.stringify(state.control, null, 2)}</pre>
++    <button disabled={!state.can('revoke')} onClick={() => void state.submit('revoke')}>明确撤销本回合外发许可</button>
++    <p>撤销只使用安全 control 中真实许可 ID 与 revision。撤销不退款，也不证明已发生的外发停止。</p></>}
++  </section>}
++  {state.allowed && <section aria-label="外发预算与学科读口">
++   {field('preparation_id', '原准备 ID')}{field('session_id', '外发 session ID')}{field('proposal_id', '外发 proposal ID')}{field('consent_id', '外发 consent ID')}
++   {field('max_input_tokens', '完整输入 token 硬上限')}{field('max_output_tokens', '输出 token 硬上限')}{field('max_cost_usd', '最高费用 USD（空表示未知上限）')}{field('expires_at', '明确到期 UTC（未来十分钟内）')}
++   <p>模型请求固定最多 1 次；搜索固定 0 次。费用为空不会显示成零。必须明确填写两个正整数 token 上限和到期时间，例如 UTC 的 …Z 格式。</p>
++   <button disabled={disabled || !state.fields.preparation_id} onClick={() => void state.read('basis')}>读取准备、Job 与 Provider 基准</button>
++   {state.basis && <section aria-label="外发准备只读基准"><pre>{JSON.stringify(state.basis, null, 2)}</pre>
++    {state.basis.preparation.validity === 'unavailable' && <p>BLOCKED：CODEX_INPUT_PROOF_UNAVAILABLE。当前没有完整输入证明，不能以字符数或 bootstrap ready 代替。</p>}
++   </section>}
++   <button disabled={!state.can('preview')} onClick={() => void state.submit('preview')}>明确创建完整外发预览</button>
++   <button disabled={disabled || !state.fields.proposal_id} onClick={() => void state.read('proposal')}>独立读取当前外发提案</button>
++   {state.proposal && <section aria-label="当前外发提案"><p>{state.proposal.id} · {state.proposal.validity}</p><pre>{JSON.stringify(state.proposal, null, 2)}</pre>
++    <p>请核对 endpoint、模型、完整请求的计量保证、预算、引用与历史摘要、工具与 runtime、费用估算及 warnings。摘要不替代服务端私有证明。</p></section>}
++   <button disabled={!state.can('grant')} onClick={() => void state.submit('grant')}>明确批准当前完整外发提案</button>
++   <button disabled={disabled || !state.fields.consent_id} onClick={() => void state.read('consent')}>独立读取当前外发许可</button>
++   {state.consent && <section aria-label="当前外发许可"><pre>{JSON.stringify(state.consent, null, 2)}</pre><p>active 不表示尚未消费；dispatch 是独立真实事实。原批准 ACK 保持不变。</p></section>}
++   <button disabled={disabled || !state.fields.session_id} onClick={() => void state.read('current')}>独立读取开始 session 基准</button>
++   {state.current && <pre aria-label="开始 session 原基准">{JSON.stringify(state.current, null, 2)}</pre>}
++   <button disabled={!state.can('start')} onClick={() => void state.submit('start')}>明确开始本回合</button>
++   <p>预算、提案过期或证明变化时，先明确取消原未开始 Job，再新准备。不会自动换 key、重试、借用 bootstrap 或普通 Provider 许可。</p>
++   <button disabled={disabled || !state.basis || state.basis.preparation.turn_id !== state.fields.turn_id} onClick={() => void state.read('result')}>独立读取本回合结果</button>
++   {state.result && <section aria-label="当前未审回合结果"><p>输出 {state.result.output_state} · {state.result.control.execution} · {state.result.control.outcome ?? '尚无终态'}</p>
++    <pre aria-label="原始未审回答">{state.result.answer_markdown}</pre><pre>{JSON.stringify({ output_sha256: state.result.output_sha256, usage: state.result.usage }, null, 2)}</pre>
++    <p>数学审查 NOT_RUN · 来源审查 NOT_RUN · 独立教学审查 NOT_RUN。partial 是部分结果，HTTP 200 或空文本不表示完成；未自动发布或回导。</p></section>}
++   {state.forms.map(f => <button key={f.snapshot_id} disabled={state.busy} onClick={() => void state.restore(f)}>恢复外发表单 {f.draft_id} · {f.sequence}</button>)}
++  </section>}
++  <section aria-label="外发原命令与历史 ACK"><h4>外发原命令与历史 ACK</h4>
++   {state.commands.map(c => <article key={c.command_id}><p>{c.kind} · {c.ack ? '原 ACK 已保存，不是当前 GET' : c.error ? `安全错误 ${c.error.status} ${c.error.code ?? ''}；原基准保持` : '结果未知；仅显式原 key 回放'}</p>
++    {c.actor_session_id !== state.actor && <p>其他 actor 的安全撤销记录只读，不能接管回放。</p>}
++    <details><summary>核对外发原命令 {c.command_id}</summary><pre>{JSON.stringify(c, null, 2)}</pre></details>
++    <button disabled={state.busy || !state.canReplay(c)} onClick={() => void state.execute(c)}>显式回放外发原 key {c.command_id}</button>
++   </article>)}
++  </section>
++ </section>
++}
+diff --git a/apps/web/src/features/codex/CodexTurnPanel.tsx b/apps/web/src/features/codex/CodexTurnPanel.tsx
+index 5f5698ab..525aa13a 100644
+--- a/apps/web/src/features/codex/CodexTurnPanel.tsx
++++ b/apps/web/src/features/codex/CodexTurnPanel.tsx
+@@ -1,18 +1,22 @@
+-import { useEffect, useRef } from 'react'
++import { useEffect, useRef, useState } from 'react'
+ import type { ContentRef } from '../../../../../packages/contracts/generated/api-types'
+ import type { TurnPort } from './turnClient'
+ import type { DraftStore } from '../../workbench/DraftStore'
+ import { useCodexTurns } from './useCodexTurns'
++import { CodexTurnOutboundPanel } from './CodexTurnOutboundPanel'
++import type { TurnOutboundPort } from './turnOutboundClient'
+ export type TurnPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
+-export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStore, currentBlock = null, selectedSession = null, onState }: {
++export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStore, outboundPort, outboundStore, outboundFormStore, currentBlock = null, selectedSession = null, onState }: {
+  workspace: string; writeAdmitted: boolean; port?: TurnPort; store?: DraftStore; formStore?: DraftStore; currentBlock?: ContentRef | null;
+  selectedSession?: string | null; onState?: (value: TurnPanelState) => void
++ outboundPort?: TurnOutboundPort; outboundStore?: DraftStore; outboundFormStore?: DraftStore
+ }) {
+  const state = useCodexTurns(workspace, writeAdmitted, port, store, formStore), callback = useRef(onState); callback.current = onState
+- useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe, isolated: state.isolated }) }, [state.dirty, state.safe, state.isolated])
++ const [outbound, setOutbound] = useState<TurnPanelState>({ dirty: false, safe: true, isolated: false })
++ useEffect(() => { callback.current?.({ dirty: state.dirty || outbound.dirty, safe: state.safe && outbound.safe, isolated: state.isolated || outbound.isolated }) }, [state.dirty, state.safe, state.isolated, outbound])
+  const blocked = state.busy || !state.ready, current = state.current
+  return <section aria-label="Codex 回合准备与安全控制"><h3>Codex 回合准备与安全控制</h3>
+-  <p>明确准备只冻结原输入并预约一个 Job。本面板尚未接入外发许可、开始或结果读取，不会调用模型或工具。</p>
++  <p>明确准备只冻结原输入并预约一个 Job。外发预览、批准、开始和结果读取须在下方逐次明确操作；准备本身不调用模型或工具。</p>
+   <button disabled={!workspace || state.busy} onClick={() => void state.refresh()}>读取回合记录与权限</button>
+   {!state.ready && <p>先读取当前权限和本机记录；不会自动恢复发送。</p>}
+   {state.ready && !state.allowed && <p>当前仅开放安全控制。原文、材料和准备详情已收起；本机原记录保留，须原作者且当前策略允许后显式恢复。</p>}
+@@ -54,7 +58,7 @@ export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStor
+    </article>)}
+   </section>
+   {state.detail && <section aria-label="当前回合准备详情"><h4>独立 GET 的准备详情</h4><p>{state.detail.id} · {state.detail.validity} · Job {state.detail.job.id} · {state.detail.job.status}</p>
+-   {state.detail.validity === 'unavailable' && <p>当前准备不可用于执行（unavailable），原准备仍保留。缺完整输入证明时服务端拒绝 CODEX_INPUT_PROOF_UNAVAILABLE；本面板未外发。</p>}
++   {state.detail.validity === 'unavailable' && <p>当前准备不可用于执行（unavailable），原准备仍保留。缺完整输入证明时服务端拒绝 CODEX_INPUT_PROOF_UNAVAILABLE。</p>}
+    <pre>{JSON.stringify(state.detail.request, null, 2)}</pre><pre>{JSON.stringify(state.detail.summary, null, 2)}</pre>
+    <p>字符数不是完整 token 证明；生成、数学、来源与独立教学审查均未验收。</p>
+   </section>}
+@@ -69,5 +73,6 @@ export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStor
+    <button disabled={blocked} onClick={() => void state.cancel(value)}>明确取消回合 Job {value.job.id}</button>
+    <p>取消使用本次控制 GET 的 Job revision；ACK 和取消请求不证明远端已经停止。</p>
+   </section>)}
++  <CodexTurnOutboundPanel workspace={workspace} writeAdmitted={writeAdmitted} port={outboundPort} store={outboundStore} formStore={outboundFormStore} onState={setOutbound} />
+  </section>
+ }
+diff --git a/apps/web/src/features/codex/turnOutboundClient.ts b/apps/web/src/features/codex/turnOutboundClient.ts
+new file mode 100644
+index 00000000..1eb43bde
+--- /dev/null
++++ b/apps/web/src/features/codex/turnOutboundClient.ts
+@@ -0,0 +1,97 @@
++import { sha256 } from '@noble/hashes/sha2.js'
++import { bytesToHex } from '@noble/hashes/utils.js'
++import type { ConsentRevoke, MutationAck, ProviderConfigView } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexConsentCreateAck, CodexConsentCreateWrite, CodexConsentProposalView, CodexConsentView, CodexFrozenOutboundSummary, CodexOutboundPreviewWrite, CodexTurnResultView, CodexTurnStartAck, CodexTurnStartWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
++import schemas from '../../../../../packages/contracts/generated/codex-turn-schemas.json'
++import { request } from '../../api/client'
++import { checkedProvider, sameValue } from '../providers/providerSchema'
++import { providerClient } from '../providers/providerClient'
++import { checkedTurn, turnClient, type TurnPort } from './turnClient'
++import { turnIdentity } from './turnCommands'
++
++type Wire = { CodexOutboundPreviewWrite: CodexOutboundPreviewWrite; CodexConsentProposalView: CodexConsentProposalView; CodexConsentCreateWrite: CodexConsentCreateWrite; CodexConsentCreateAck: CodexConsentCreateAck; CodexConsentView: CodexConsentView; CodexTurnStartWrite: CodexTurnStartWrite; CodexTurnStartAck: CodexTurnStartAck; CodexTurnResultView: CodexTurnResultView }
++const fail = (): never => { throw new Error('Codex 外发记录不符合闭合契约或原对象；本机原命令保留。') }
++const id = (value: string) => { if (!turnIdentity(value)) fail(); return value }
++function instant(value: string): bigint {
++ const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?Z$/.exec(value), result = Date.parse(match?.[1] + 'Z')
++ if (!match || value.trim() !== value || value.startsWith('0000') || !Number.isFinite(result) || new Date(result).toISOString().slice(0, 19) !== match[1]) fail()
++ return BigInt(result) * 1000n + BigInt((match![2] ?? '').slice(0, 6).padEnd(6, '0'))
++}
++export function outboundTime(value: string): number { return Number(instant(value)) / 1000 }
++function summary(value: CodexFrozenOutboundSummary) {
++ const duration = instant(value.expires_at) - instant(value.created_at), proof = value.input_token_assurance
++ const tokens = proof.kind === 'local_exact' ? proof.input_tokens : proof.input_tokens_upper_bound
++ if (duration <= 0n || duration > 600000000n || proof.request_body_sha256 !== value.request_body_sha256 || tokens > value.budget.max_input_tokens
++  || value.cost_estimate.kind === 'estimated' && value.budget.max_cost_usd !== null && value.cost_estimate.maximum_estimated_cost > value.budget.max_cost_usd) fail()
++ const endpoint = new URL(value.endpoint)
++ if (!['http:', 'https:'].includes(endpoint.protocol) || !endpoint.hostname || endpoint.username || endpoint.password || endpoint.hash || endpoint.search
++  || /[\x00-\x20\x7f\\]/.test(value.endpoint) || value.endpoint.split('/')[2]?.includes('@') || endpoint.port === '0'
++  || value.endpoint_policy === 'public_https' && endpoint.protocol !== 'https:'
++  || value.endpoint_policy === 'explicit_loopback' && !['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname)) fail()
++ const refs = value.references.map(v => [v.ref.entity, v.ref.id, v.ref.revision])
++ if (value.references.some(v => v.ref.entity !== 'block') || new Set(refs.map(v => JSON.stringify(v))).size !== refs.length) fail()
++}
++export function checkedOutbound<N extends keyof Wire>(name: N, raw: unknown): Wire[N] {
++ const value = checkedProvider<Wire[N]>(name, raw, schemas.schemas)
++ if (name === 'CodexOutboundPreviewWrite') outboundTime((value as CodexOutboundPreviewWrite).expires_at)
++ if ('summary' in value) summary(value.summary)
++ if (name === 'CodexConsentProposalView') {
++  const p = value as CodexConsentProposalView
++  if (new Set(p.warnings.map(v => v.code)).size !== p.warnings.length) fail()
++ }
++ if (name === 'CodexConsentView') {
++  const c = value as CodexConsentView, created = instant(c.created_at)
++  if (c.expires_at !== c.summary.expires_at || created < instant(c.summary.created_at) || created >= instant(c.expires_at)
++   || (c.status === 'revoked') !== (c.revoked_at !== null) || c.revoked_at && instant(c.revoked_at) < created
++   || c.revision !== (c.status === 'revoked' ? 2 : 1) || c.dispatch && c.dispatch.job.id !== c.summary.job_id) fail()
++  if (c.dispatch) {
++   const d = c.dispatch
++   if ((d.finished_at === null) !== (d.outcome === null) || d.outcome === 'completed' && d.error_code !== null) fail()
++   if (d.started_at) instant(d.started_at)
++   if (d.finished_at && (instant(d.finished_at) < created || d.started_at && instant(d.finished_at) < instant(d.started_at))) fail()
++  }
++ }
++ if (name === 'CodexTurnStartAck' && (value as CodexTurnStartAck).job.status !== 'queued') fail()
++ if (name === 'CodexTurnResultView') {
++  const r = value as CodexTurnResultView; checkedTurn('CodexTurnControlView', r.control)
++  const digest = r.answer_markdown === '' ? null : bytesToHex(sha256(new TextEncoder().encode(r.answer_markdown)))
++  if (r.output_sha256 !== digest || (r.output_state === 'none') !== (digest === null)
++   || r.output_state === 'complete' && r.control.outcome !== 'completed' || digest !== null && r.control.outcome === 'completed' && r.output_state !== 'complete') fail()
++ }
++ return value
++}
++export type TurnOutboundPort = Pick<TurnPort, 'session' | 'current' | 'preparation' | 'control'> & {
++ config(id: string): Promise<ProviderConfigView>
++ preview(body: CodexOutboundPreviewWrite, key: string): Promise<CodexConsentProposalView>
++ proposal(id: string): Promise<CodexConsentProposalView>
++ grant(body: CodexConsentCreateWrite, key: string): Promise<CodexConsentCreateAck>
++ consent(id: string): Promise<CodexConsentView>
++ revoke(id: string, body: ConsentRevoke, key: string): Promise<MutationAck>
++ start(id: string, body: CodexTurnStartWrite, key: string): Promise<CodexTurnStartAck>
++ result(id: string): Promise<CodexTurnResultView>
++}
++export const turnOutboundClient: TurnOutboundPort = {
++ session: turnClient.session, current: turnClient.current, preparation: turnClient.preparation, control: turnClient.control,
++ config: async target => { const v = await providerClient.config(id(target)); if (v.id !== target) fail(); return v },
++ preview: async (body, key) => {
++  const b = checkedOutbound('CodexOutboundPreviewWrite', body), v = checkedOutbound('CodexConsentProposalView', await request('POST /api/v1/codex/consent-previews', b, { 'Idempotency-Key': key }))
++  if (v.summary.preparation_id !== b.preparation_id || v.summary.preparation_sha256 !== b.preparation_sha256 || v.summary.source_job_revision !== b.expected_job_revision
++   || v.summary.provider_revision !== b.expected_provider_revision || !sameValue(v.summary.budget, b.budget) || v.summary.expires_at !== b.expires_at) fail()
++  return v
++ },
++ proposal: async target => { const v = checkedOutbound('CodexConsentProposalView', await request('GET /api/v1/codex/consent-proposals/{id}', undefined, undefined, { path: { id: id(target) } })); if (v.id !== target) fail(); return v },
++ grant: async (body, key) => {
++  const b = checkedOutbound('CodexConsentCreateWrite', body), v = checkedOutbound('CodexConsentCreateAck', await request('POST /api/v1/codex/consents', b, { 'Idempotency-Key': key }))
++  if (v.proposal_id !== b.proposal_id || v.proposal_sha256 !== b.proposal_sha256) fail(); return v
++ },
++ consent: async target => { const v = checkedOutbound('CodexConsentView', await request('GET /api/v1/codex/consents/{id}', undefined, undefined, { path: { id: id(target) } })); if (v.id !== target) fail(); return v },
++ revoke: async (target, body, key) => {
++  const b = checkedProvider<ConsentRevoke>('ConsentRevoke', body), v = checkedProvider<MutationAck>('MutationAck', await request('POST /api/v1/codex/consents/{id}/revoke', b, { 'Idempotency-Key': key }, { path: { id: id(target) } }))
++  if (v.id !== target) fail(); return v
++ },
++ start: async (target, body, key) => {
++  const b = checkedOutbound('CodexTurnStartWrite', body), v = checkedOutbound('CodexTurnStartAck', await request('POST /api/v1/codex/sessions/{id}/turns', b, { 'Idempotency-Key': key }, { path: { id: id(target) } }))
++  if (v.session_revision !== b.expected_session_revision + 1) fail(); return v
++ },
++ result: async target => { const v = checkedOutbound('CodexTurnResultView', await request('GET /api/v1/codex/turns/{id}/result', undefined, undefined, { path: { id: id(target) } })); if (v.control.id !== target) fail(); return v },
++}
+diff --git a/apps/web/src/features/codex/turnOutboundCommands.ts b/apps/web/src/features/codex/turnOutboundCommands.ts
+new file mode 100644
+index 00000000..785fbfc0
+--- /dev/null
++++ b/apps/web/src/features/codex/turnOutboundCommands.ts
+@@ -0,0 +1,124 @@
++import type { ConsentRevoke, MutationAck, ProviderConfigView } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexConsentCreateAck, CodexConsentCreateWrite, CodexConsentProposalView, CodexConsentView, CodexCurrentSessionView, CodexFrozenOutboundSummary, CodexOutboundPreviewWrite, CodexTurnControlView, CodexTurnPreparationView, CodexTurnStartAck, CodexTurnStartWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { checkedProvider, exactObject, sameValue } from '../providers/providerSchema'
++import { checkedTurn } from './turnClient'
++import { turnIdentity } from './turnCommands'
++import { checkedOutbound, type TurnOutboundPort } from './turnOutboundClient'
++import { checkedBootstrap } from './bootstrapClient'
++
++type Base = { version: 1; workspace_id: string; actor_session_id: string; command_id: string; target_id: string; error: { status: number; code: string | null } | null }
++export type OutboundCommand = Base & (
++ { kind: 'preview'; route: 'POST /api/v1/codex/consent-previews'; basis: { preparation: CodexTurnPreparationView; control: CodexTurnControlView; provider: ProviderConfigView }; body: CodexOutboundPreviewWrite; ack: CodexConsentProposalView | null }
++ | { kind: 'grant'; route: 'POST /api/v1/codex/consents'; basis: { preparation: CodexTurnPreparationView; proposal: CodexConsentProposalView }; body: CodexConsentCreateWrite; ack: CodexConsentCreateAck | null }
++ | { kind: 'revoke'; route: 'POST /api/v1/codex/consents/{id}/revoke'; basis: CodexTurnControlView; body: ConsentRevoke; ack: MutationAck | null }
++ | { kind: 'start'; route: 'POST /api/v1/codex/sessions/{id}/turns'; basis: { preparation: CodexTurnPreparationView; current: CodexCurrentSessionView; consent: CodexConsentView }; body: CodexTurnStartWrite; ack: CodexTurnStartAck | null })
++type Input<T> = T extends OutboundCommand ? Omit<T, keyof Base | 'route' | 'ack'> : never
++export type OutboundCommandInput = Input<OutboundCommand>
++const routes = { preview: 'POST /api/v1/codex/consent-previews', grant: 'POST /api/v1/codex/consents', revoke: 'POST /api/v1/codex/consents/{id}/revoke', start: 'POST /api/v1/codex/sessions/{id}/turns' } as const
++const fail = (): never => { throw new Error('外发原命令、只读基准或完整回执无法核验；本机记录保留。') }
++function boundSummary(s: CodexFrozenOutboundSummary, p: CodexTurnPreparationView) {
++ if (s.preparation_id !== p.id || s.preparation_sha256 !== p.preparation_sha256 || s.session_id !== p.session_id || s.turn_id !== p.turn_id || s.job_id !== p.job.id
++  || s.provider_id !== p.request.provider_id || s.context_snapshot_id !== p.summary.context_snapshot_id || s.context_snapshot_sha256 !== p.summary.snapshot_sha256
++  || s.source_input_sha256 !== p.summary.job_input_sha256 || s.input_sha256 !== p.summary.prepared_input_sha256 || !sameValue(s.references, p.summary.materials)
++  || !sameValue(s.tools, p.summary.tools) || !sameValue(s.runtime, p.summary.runtime)) fail()
++}
++export const outboundStore = new DraftStore({ name: 'learning-workbench.codex-outbound-commands.v1' })
++export function decodeOutboundCommand(raw: string, workspace: string): OutboundCommand {
++ const c = JSON.parse(raw) as OutboundCommand
++ if (!exactObject(c, ['version', 'kind', 'route', 'workspace_id', 'actor_session_id', 'command_id', 'target_id', 'basis', 'body', 'ack', 'error']) || c.version !== 1 || c.workspace_id !== workspace || !turnIdentity(workspace)
++  || !turnIdentity(c.actor_session_id) || !turnIdentity(c.command_id) || !turnIdentity(c.target_id) || !Object.hasOwn(routes, c.kind) || c.route !== routes[c.kind]) fail()
++ if (c.error !== null && (!exactObject(c.error, ['status', 'code']) || !Number.isSafeInteger(c.error.status) || c.error.status < 400 || c.error.status > 599
++  || c.ack !== null || c.error.code !== null && (typeof c.error.code !== 'string' || !/^[A-Z][A-Z0-9_]{0,79}$/.test(c.error.code) || c.error.code.trim() !== c.error.code))) throw new Error('Invalid outbound error')
++ if (c.kind === 'revoke') {
++  const basis = checkedTurn('CodexTurnControlView', c.basis); checkedProvider('ConsentRevoke', c.body)
++  if (!basis.consent_control || c.target_id !== basis.consent_control.id || c.body.expected_revision !== basis.consent_control.revision) fail()
++  if (c.ack !== null) { checkedProvider('MutationAck', c.ack); if (c.ack.id !== c.target_id || c.ack.revision !== 2 || c.ack.applied !== (basis.consent_control!.status !== 'revoked')) fail() }
++ } else {
++  const keys = c.kind === 'preview' ? ['preparation', 'control', 'provider'] : c.kind === 'grant' ? ['preparation', 'proposal'] : ['preparation', 'current', 'consent']
++  if (!exactObject(c.basis, keys)) fail()
++  const p = checkedTurn('CodexTurnPreparationView', c.basis.preparation)
++  if (p.actor_session_id !== c.actor_session_id) fail()
++  if (c.kind === 'preview') {
++   const control = checkedTurn('CodexTurnControlView', c.basis.control), config = checkedProvider<ProviderConfigView>('ProviderConfigView', c.basis.provider), body = checkedOutbound('CodexOutboundPreviewWrite', c.body)
++   if (c.target_id !== p.id || p.validity !== 'current' || p.proposal_id !== null || p.consent_id !== null || control.id !== p.turn_id || control.session_id !== p.session_id
++    || control.actor_session_id !== c.actor_session_id || control.job.id !== p.job.id || control.job.status !== 'awaiting_approval' || control.execution !== 'not_started' || control.cancel_requested
++    || config.id !== p.request.provider_id || body.preparation_id !== p.id || body.preparation_sha256 !== p.preparation_sha256
++    || body.expected_job_revision !== control.job_revision || body.expected_provider_revision !== config.revision) fail()
++   if (c.ack !== null) {
++    const ack = checkedOutbound('CodexConsentProposalView', c.ack), s = ack.summary; boundSummary(s, p)
++    if (ack.consent_id !== null || s.source_job_revision !== control.job_revision || s.provider_revision !== config.revision || s.config_sha256 !== config.config_sha256
++     || s.model !== config.model || s.endpoint_policy !== config.endpoint_policy || !sameValue(s.budget, body.budget) || s.expires_at !== body.expires_at) fail()
++   }
++  } else if (c.kind === 'grant') {
++   const proposal = checkedOutbound('CodexConsentProposalView', c.basis.proposal), body = checkedOutbound('CodexConsentCreateWrite', c.body)
++   boundSummary(proposal.summary, p)
++   if (c.target_id !== proposal.id || proposal.validity !== 'current' || proposal.consent_id !== null || body.proposal_id !== proposal.id || body.proposal_sha256 !== proposal.proposal_sha256) fail()
++   if (c.ack !== null) {
++    const ack = checkedOutbound('CodexConsentCreateAck', c.ack)
++    if (ack.actor_session_id !== c.actor_session_id || ack.proposal_id !== proposal.id || ack.proposal_sha256 !== proposal.proposal_sha256 || !sameValue(ack.summary, proposal.summary)) fail()
++   }
++  } else {
++   const current = checkedBootstrap<CodexCurrentSessionView>('CodexCurrentSessionView', c.basis.current), consent = checkedOutbound('CodexConsentView', c.basis.consent), body = checkedOutbound('CodexTurnStartWrite', c.body)
++   boundSummary(consent.summary, p)
++   if (c.target_id !== p.session_id || current.id !== p.session_id || current.active_turn_id !== p.turn_id || current.status !== 'ready'
++    || consent.actor_session_id !== c.actor_session_id || consent.status !== 'active' || consent.dispatch !== null || body.consent_id !== consent.id
++    || body.preparation_id !== p.id || body.preparation_sha256 !== p.preparation_sha256 || body.expected_session_revision !== current.revision) fail()
++   if (c.ack !== null) {
++    const ack = checkedOutbound('CodexTurnStartAck', c.ack)
++    if (ack.turn_id !== p.turn_id || ack.job.id !== p.job.id || ack.session_revision !== current.revision + 1) fail()
++   }
++  }
++ }
++ return c
++}
++export function outboundRevokeCommand(workspace: string, actor: string, basis: CodexTurnControlView): OutboundCommand {
++ return decodeOutboundCommand(JSON.stringify({ version: 1, kind: 'revoke', route: 'POST /api/v1/codex/consents/{id}/revoke', workspace_id: workspace, actor_session_id: actor,
++  command_id: `codexout_${crypto.randomUUID()}`, target_id: basis.consent_control?.id, basis, body: { expected_revision: basis.consent_control?.revision }, ack: null, error: null }), workspace)
++}
++function commandFromInput(workspace: string, actor: string, input: OutboundCommandInput, key: string): OutboundCommand {
++ const target = input.kind === 'revoke' ? input.basis.consent_control?.id : input.kind === 'preview' ? input.basis.preparation.id : input.kind === 'grant' ? input.basis.proposal.id : input.basis.current.id
++ return decodeOutboundCommand(JSON.stringify({ ...input, version: 1, workspace_id: workspace, actor_session_id: actor, command_id: key, target_id: target, route: routes[input.kind], ack: null, error: null }), workspace)
++}
++export function validateOutboundInput(workspace: string, actor: string, input: OutboundCommandInput): void { commandFromInput(workspace, actor, input, 'codexout_validation') }
++export function makeOutboundCommand(workspace: string, actor: string, input: OutboundCommandInput): OutboundCommand { return commandFromInput(workspace, actor, input, `codexout_${crypto.randomUUID()}`) }
++const immutable = (value: OutboundCommand) => ({ ...value, ack: null, error: null })
++export function readOutboundCommand(record: DraftRecord, workspace: string): OutboundCommand {
++ const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeOutboundCommand(raw, workspace)), first = values[0]
++ if (first.command_id !== record.objectId || values.some(v => !sameValue(immutable(v), immutable(first)))) throw new Error('Conflicting original outbound command')
++ const confirmed = values.filter(v => v.ack)
++ if (confirmed.some(v => !sameValue(v.ack, confirmed[0].ack))) throw new Error('Conflicting outbound ACK')
++ return confirmed[0] ?? values.find(v => v.error) ?? first
++}
++export async function persistOutboundCommand(command: OutboundCommand, store = outboundStore, guard?: DraftWriteGuard): Promise<OutboundCommand> {
++ let desired = decodeOutboundCommand(JSON.stringify(command), command.workspace_id)
++ for (let attempt = 0; attempt < 4; attempt++) {
++  assertDraftWriteAllowed(guard)
++  const old = (await store.load(command.workspace_id))[command.command_id]
++  assertDraftWriteAllowed(guard)
++  if (old) {
++   const current = readOutboundCommand(old, command.workspace_id)
++   if (!sameValue(immutable(current), immutable(desired)) || current.ack && desired.ack && !sameValue(current.ack, desired.ack)) throw new Error('Cannot replace original outbound command or ACK')
++   if (current.ack || !desired.ack && !desired.error && current.error) desired = current
++   if (!old.conflicts.length && sameValue(current, desired)) return current
++  }
++  const saved = await store.save(command.workspace_id, command.command_id, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(v => v.id) ?? [], guard)
++  const actual = readOutboundCommand(saved.record, command.workspace_id)
++  if (!saved.record.conflicts.length && sameValue(actual, desired)) return actual
++ }
++ throw new Error('Concurrent outbound command remains unresolved')
++}
++export async function dispatchOutboundCommand(command: OutboundCommand, port: TurnOutboundPort, store = outboundStore,
++ options: { guard?: DraftWriteGuard; beforePost?: () => Promise<void>; onAck?: (ack: OutboundCommand) => void; beforeDelivery?: () => Promise<void> } = {}): Promise<OutboundCommand> {
++ const original = await persistOutboundCommand(command, store, options.guard)
++ if (original.ack) { await options.beforeDelivery?.(); return original }
++ await options.beforePost?.(); assertDraftWriteAllowed(options.guard)
++ const raw = original.kind === 'preview' ? await port.preview(original.body, original.command_id)
++  : original.kind === 'grant' ? await port.grant(original.body, original.command_id)
++   : original.kind === 'start' ? await port.start(original.target_id, original.body, original.command_id)
++    : await port.revoke(original.target_id, original.body, original.command_id)
++ const acknowledged = decodeOutboundCommand(JSON.stringify({ ...original, ack: raw, error: null }), original.workspace_id)
++ options.onAck?.(acknowledged)
++ await options.beforeDelivery?.()
++ return persistOutboundCommand(acknowledged, store, options.guard)
++}
+diff --git a/apps/web/src/features/codex/turnOutboundContracts.test.ts b/apps/web/src/features/codex/turnOutboundContracts.test.ts
+new file mode 100644
+index 00000000..2c4064a3
+--- /dev/null
++++ b/apps/web/src/features/codex/turnOutboundContracts.test.ts
+@@ -0,0 +1,94 @@
++import { sha256 } from '@noble/hashes/sha2.js'
++import { bytesToHex } from '@noble/hashes/utils.js'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import type { CodexTurnResultView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { DraftStore } from '../../workbench/DraftStore'
++import { actor, workspace } from './bootstrapTestFixtures'
++import { turnControl } from './turnTestFixtures'
++import { checkedOutbound, outboundTime, turnOutboundClient } from './turnOutboundClient'
++import { decodeOutboundCommand, dispatchOutboundCommand, makeOutboundCommand, persistOutboundCommand, readOutboundCommand } from './turnOutboundCommands'
++import { outboundConsent, outboundControl, outboundCurrent, outboundGrant, outboundPreparation, outboundProposal, outboundProvider, previewBody } from './turnOutboundFixtures'
++afterEach(() => vi.unstubAllGlobals())
++const proposal = () => { const p = outboundProposal(); p.summary.input_sha256 = outboundPreparation().summary.prepared_input_sha256; return p }
++const preview = () => makeOutboundCommand(workspace, actor, { kind: 'preview', basis: { preparation: outboundPreparation(), control: turnControl(), provider: outboundProvider() }, body: previewBody() })
++const result = (answer: string, outcome: 'completed' | 'failed' = 'completed'): CodexTurnResultView => ({
++ control: { ...turnControl(), job: { id: 'job_turn_test', status: outcome }, execution: 'terminal', outcome, started_at: '2026-10-04T00:00:02Z', finished_at: '2026-10-04T00:00:03Z', error_code: outcome === 'completed' ? null : 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED' },
++ preparation_id: 'turn_preparation_test', answer_markdown: answer, output_sha256: answer ? bytesToHex(sha256(new TextEncoder().encode(answer))) : null,
++ output_state: answer ? outcome === 'completed' ? 'complete' : 'partial' : 'none', usage: { input_tokens: 50, output_tokens: 3 }, mathematical: 'NOT_RUN', sources: 'NOT_RUN', independent_pedagogy: 'NOT_RUN',
++})
++
++test.each(['source_input_sha256', 'input_sha256', 'references'] as const)('journal rejects a preview ACK whose %s differs from its frozen preparation', field => {
++ const ack = proposal()
++ if (field === 'references') ack.summary.references = [{ ref: { entity: 'block', id: 'block_other', revision: 1, sha256: 'a'.repeat(64) }, title: '公开合成材料', locator: 'block:1', character_count: 1, excerpt_sha256: 'f'.repeat(64) }]
++ else ack.summary[field] = '0'.repeat(64)
++ expect(() => decodeOutboundCommand(JSON.stringify({ ...preview(), ack }), workspace)).toThrow()
++})
++test('closed decoder accepts actual completed-but-empty receipt as no output, never promotes empty text to complete', () => {
++ expect(checkedOutbound('CodexTurnResultView', result(''))).toEqual(result(''))
++})
++test('loopback summary still rejects a non-HTTP protocol', () => {
++ const p = proposal(); p.summary.endpoint_policy = 'explicit_loopback'; p.summary.endpoint = 'ftp://localhost/responses'
++ expect(() => checkedOutbound('CodexConsentProposalView', p)).toThrow()
++})
++test.each(['2026-10-04T00:00:00Z\n', '2026-02-30T00:00:00Z', '2026-10-04T00:00:00+00:00', '0000-10-04T00:00:00Z'])('rejects non-canonical UTC %j', time => {
++ expect(() => outboundTime(time)).toThrow()
++})
++test('closed summary preserves a valid positive microsecond lifetime without rounding it to zero', () => {
++ const p = proposal(); p.summary.created_at = '2026-10-04T00:00:00.000001Z'; p.summary.expires_at = '2026-10-04T00:00:00.000002Z'
++ expect(checkedOutbound('CodexConsentProposalView', p)).toEqual(p)
++})
++test.each(['  原文 α\n中文😀  ', '', 'e\u0301 ≠ é'])('UTF-8 result wire preserves %j exactly', async answer => {
++ const value = result(answer, answer ? 'failed' : 'completed'), fetch = vi.fn(async (_path: string) => new Response(JSON.stringify(value)))
++ vi.stubGlobal('fetch', fetch)
++ expect(await turnOutboundClient.result('turn_test')).toEqual(value)
++ expect(fetch.mock.calls[0][0]).toBe('/api/v1/codex/turns/turn_test/result')
++})
++test.each(['digest', 'normalized', 'empty', 'complete_failed', 'wrong_turn', 'extra'])('actual result GET rejects %s wire before delivery', async mode => {
++ const value = result('  α\n中文😀  ', 'failed')
++ const raw = mode === 'digest' ? { ...value, output_sha256: '0'.repeat(64) }
++  : mode === 'normalized' ? { ...value, answer_markdown: value.answer_markdown.trim() }
++  : mode === 'empty' ? { ...value, answer_markdown: '', output_sha256: null }
++  : mode === 'complete_failed' ? { ...value, output_state: 'complete' }
++  : mode === 'wrong_turn' ? { ...value, control: { ...value.control, id: 'other_turn' } } : { ...value, private_body: 'synthetic-only' }
++ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(raw))))
++ await expect(turnOutboundClient.result('turn_test')).rejects.toThrow()
++})
++test.each(['proof_body', 'tokens', 'cost', 'expiry', 'credential', 'duplicate_warning'])('closed summary rejects %s', mode => {
++ const p = proposal()
++ if (mode === 'proof_body') p.summary.input_token_assurance.request_body_sha256 = '0'.repeat(64)
++ if (mode === 'tokens') p.summary.budget.max_input_tokens = 1
++ if (mode === 'cost') { p.summary.budget.max_cost_usd = 1; p.summary.cost_estimate = { kind: 'estimated', currency: 'USD', maximum_estimated_cost: 2, pricing_sha256: 'a'.repeat(64) } }
++ if (mode === 'expiry') p.summary.expires_at = '2026-10-04T00:10:01Z'
++ if (mode === 'credential') p.summary.endpoint = 'https://user:synthetic@example.test/v1/responses'
++ if (mode === 'duplicate_warning') p.warnings = [{ code: 'price_unknown', message: 'synthetic' }, { code: 'price_unknown', message: 'synthetic' }]
++ expect(() => checkedOutbound('CodexConsentProposalView', p)).toThrow()
++})
++test('grant ACK permanently retains original summary when the independent current consent becomes revoked', async () => {
++ const store = new DraftStore({ name: `outbound-facts-${crypto.randomUUID()}`, factory: new IDBFactory() })
++ const p = proposal(), original = makeOutboundCommand(workspace, actor, { kind: 'grant', basis: { preparation: outboundPreparation(), proposal: p }, body: { proposal_id: p.id, proposal_sha256: p.proposal_sha256 } })
++ const ack = { ...outboundGrant(), summary: p.summary }
++ try {
++  await persistOutboundCommand({ ...original, ack } as typeof original, store)
++  const stale = await persistOutboundCommand(original, store)
++  expect(stale.ack).toEqual(ack)
++  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...outboundConsent(), summary: p.summary, revision: 2, status: 'revoked', revoked_at: '2026-10-04T00:00:03Z' }))))
++  expect((await turnOutboundClient.consent(ack.id)).status).toBe('revoked')
++  expect(readOutboundCommand((await store.load(workspace))[original.command_id], workspace).ack).toEqual(ack)
++  const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
++  expect((await dispatchOutboundCommand(original, turnOutboundClient, store)).ack).toEqual(ack); expect(fetch).not.toHaveBeenCalled()
++ } finally { await store.close() }
++})
++test.each(['actor', 'job', 'session_revision'])('start journal rejects ACK/basis changed %s', field => {
++ const consent = outboundConsent(); consent.summary = proposal().summary
++ const c = makeOutboundCommand(workspace, actor, { kind: 'start', basis: { preparation: outboundPreparation(), current: outboundCurrent(), consent }, body: { preparation_id: 'turn_preparation_test', preparation_sha256: 'a'.repeat(64), consent_id: consent.id, expected_session_revision: 3 } })
++ const raw = { ...c, ack: { turn_id: 'turn_test', session_revision: field === 'session_revision' ? 3 : 4, job: { id: field === 'job' ? 'job_other' : 'job_turn_test', status: 'queued' } } }
++ if (field === 'actor') raw.actor_session_id = 'actor_other'
++ expect(() => decodeOutboundCommand(JSON.stringify(raw), workspace)).toThrow()
++})
++test('safe revoke no-op retains actual revoked revision without fabricating another mutation', () => {
++ const basis = outboundControl(); basis.consent_control = { id: 'codexconsent_original', revision: 2, status: 'revoked' }
++ const c = makeOutboundCommand(workspace, 'learner_new', { kind: 'revoke', basis, body: { expected_revision: 2 } })
++ expect(decodeOutboundCommand(JSON.stringify({ ...c, ack: { id: 'codexconsent_original', revision: 2, applied: false } }), workspace).ack).toEqual({ id: 'codexconsent_original', revision: 2, applied: false })
++ expect(() => decodeOutboundCommand(JSON.stringify({ ...c, ack: { id: 'codexconsent_original', revision: 3, applied: true } }), workspace)).toThrow()
++})
+diff --git a/apps/web/src/features/codex/turnOutboundFixtures.ts b/apps/web/src/features/codex/turnOutboundFixtures.ts
+new file mode 100644
+index 00000000..f3cc62f8
+--- /dev/null
++++ b/apps/web/src/features/codex/turnOutboundFixtures.ts
+@@ -0,0 +1,20 @@
++import type { ProviderConfigView } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexConsentCreateAck, CodexConsentProposalView, CodexConsentView, CodexCurrentSessionView, CodexOutboundPreviewWrite, CodexTurnControlView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { actor, codexSession } from './bootstrapTestFixtures'
++import { turnControl, turnPreparation } from './turnTestFixtures'
++export const outboundPreparation = () => ({ ...turnPreparation(), validity: 'current' as const })
++export const outboundProvider = (): ProviderConfigView => ({ id: 'codex_local', revision: 1, config_sha256: 'b'.repeat(64), adapter: 'official_responses', base_url: 'https://synthetic.example.test/v1', model: 'synthetic-model', embedding_model: null, endpoint_policy: 'public_https', pricing: null, configured: true, secret_present: true })
++export const outboundCurrent = (): CodexCurrentSessionView => ({ ...codexSession(), revision: 3, active_turn_id: 'turn_test' })
++export const previewBody = (): CodexOutboundPreviewWrite => ({ preparation_id: 'turn_preparation_test', preparation_sha256: 'a'.repeat(64), expected_job_revision: 1, expected_provider_revision: 1,
++ budget: { max_input_tokens: 1000, max_output_tokens: 100, max_provider_calls: 1, max_search_calls: 0, max_cost_usd: null }, expires_at: '2026-10-04T00:10:00Z' })
++export const outboundProposal = (): CodexConsentProposalView => ({ id: 'proposal_turn', proposal_sha256: 'c'.repeat(64), validity: 'current', consent_id: null, warnings: [], summary: {
++ version: 'codex-outbound-summary-v1', preparation_id: 'turn_preparation_test', preparation_sha256: 'a'.repeat(64), session_id: 'codex_session_test', turn_id: 'turn_test', job_id: 'job_turn_test',
++ source_job_revision: 1, source_input_sha256: 'a'.repeat(64), provider_id: 'codex_local', provider_revision: 1, config_sha256: 'b'.repeat(64), adapter: 'codex_app_server', adapter_version: 'synthetic-protocol-peer/v1',
++ endpoint: 'https://synthetic.example.test/v1/responses', endpoint_policy: 'public_https', model: 'synthetic-model', context_snapshot_id: 'snapshot_test', context_snapshot_sha256: 'a'.repeat(64), input_sha256: 'a'.repeat(64), request_body_sha256: 'e'.repeat(64),
++ messages: [{ role: 'system', character_count: 50, content_sha256: 'f'.repeat(64) }, { role: 'user', character_count: 50, content_sha256: 'a'.repeat(64) }], references: [], input_character_count: 100,
++ input_token_assurance: { kind: 'local_exact', input_tokens: 50, checker_version: 'synthetic-counter/v1', proof_sha256: 'f'.repeat(64), request_body_sha256: 'e'.repeat(64) },
++ budget: previewBody().budget, tools: outboundPreparation().summary.tools, runtime: outboundPreparation().summary.runtime, cost_estimate: { kind: 'unknown', currency: 'USD' }, created_at: '2026-10-04T00:00:00Z', expires_at: previewBody().expires_at,
++} })
++export const outboundGrant = (): CodexConsentCreateAck => ({ id: 'codexconsent_original', revision: 1, status: 'active', actor_session_id: actor, proposal_id: 'proposal_turn', proposal_sha256: 'c'.repeat(64), summary: outboundProposal().summary })
++export const outboundConsent = (): CodexConsentView => ({ ...outboundGrant(), created_at: '2026-10-04T00:00:01Z', expires_at: previewBody().expires_at, revoked_at: null, dispatch: null })
++export const outboundControl = (): CodexTurnControlView => ({ ...turnControl(), consent_control: { id: 'codexconsent_original', revision: 1, status: 'active' as const } })
+diff --git a/apps/web/src/features/codex/turnOutboundForms.ts b/apps/web/src/features/codex/turnOutboundForms.ts
+new file mode 100644
+index 00000000..95a2d1e9
+--- /dev/null
++++ b/apps/web/src/features/codex/turnOutboundForms.ts
+@@ -0,0 +1,36 @@
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { exactObject, sameValue } from '../providers/providerSchema'
++import { turnIdentity } from './turnCommands'
++export type OutboundFields = { session_id: string; preparation_id: string; proposal_id: string; consent_id: string; turn_id: string; max_input_tokens: string; max_output_tokens: string; max_cost_usd: string; expires_at: string }
++export type OutboundForm = { version: 1; workspace_id: string; actor_session_id: string; snapshot_id: string; draft_id: string; sequence: number; fields: OutboundFields }
++export const outboundFormStore = new DraftStore({ name: 'learning-workbench.codex-outbound-forms.v1' })
++export const emptyOutboundFields = (): OutboundFields => ({ session_id: '', preparation_id: '', proposal_id: '', consent_id: '', turn_id: '', max_input_tokens: '', max_output_tokens: '', max_cost_usd: '', expires_at: '' })
++const fail = (): never => { throw new Error('外发表单快照无法核验；原记录保留。') }
++export function decodeOutboundForm(raw: string, workspace: string): OutboundForm {
++ const value = JSON.parse(raw) as OutboundForm
++ if (!exactObject(value, ['version', 'workspace_id', 'actor_session_id', 'snapshot_id', 'draft_id', 'sequence', 'fields']) || value.version !== 1
++  || !turnIdentity(workspace) || value.workspace_id !== workspace || !turnIdentity(value.actor_session_id) || !turnIdentity(value.snapshot_id)
++  || !turnIdentity(value.draft_id) || !Number.isSafeInteger(value.sequence) || value.sequence < 1
++  || !exactObject(value.fields, ['session_id', 'preparation_id', 'proposal_id', 'consent_id', 'turn_id', 'max_input_tokens', 'max_output_tokens', 'max_cost_usd', 'expires_at'])
++  || Object.values(value.fields).some(v => typeof v !== 'string' || v.length > 1000)) fail()
++ return value
++}
++export function snapshotOutboundForm(workspace: string, actor: string, fields: OutboundFields, previous: OutboundForm | null): OutboundForm {
++ return decodeOutboundForm(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor,
++  snapshot_id: `outboundform_${crypto.randomUUID()}`, draft_id: previous?.draft_id ?? `outbounddraft_${crypto.randomUUID()}`, sequence: (previous?.sequence ?? 0) + 1, fields }), workspace)
++}
++export function readOutboundForm(record: DraftRecord, workspace: string): OutboundForm {
++ const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeOutboundForm(raw, workspace)), first = values[0]
++ if (record.objectId !== first.snapshot_id || values.some(v => !sameValue(v, first))) fail()
++ return first
++}
++/** Immutable edit snapshots prevent delayed saves or another tab from replacing an unsent form. */
++export async function persistOutboundForm(form: OutboundForm, store = outboundFormStore, guard?: DraftWriteGuard): Promise<void> {
++ const checked = decodeOutboundForm(JSON.stringify(form), form.workspace_id)
++ assertDraftWriteAllowed(guard)
++ const old = (await store.load(form.workspace_id))[form.snapshot_id]
++ assertDraftWriteAllowed(guard)
++ if (old) { if (!sameValue(readOutboundForm(old, form.workspace_id), checked)) fail(); return }
++ const saved = await store.save(form.workspace_id, form.snapshot_id, JSON.stringify(checked), 0, [], guard)
++ if (!sameValue(readOutboundForm(saved.record, form.workspace_id), checked)) fail()
++}
+diff --git a/apps/web/src/features/codex/turnOutboundMemory.ts b/apps/web/src/features/codex/turnOutboundMemory.ts
+new file mode 100644
+index 00000000..253bcd12
+--- /dev/null
++++ b/apps/web/src/features/codex/turnOutboundMemory.ts
+@@ -0,0 +1,34 @@
++import { sameValue } from '../providers/providerSchema'
++import { decodeOutboundCommand, type OutboundCommand } from './turnOutboundCommands'
++import { decodeOutboundForm, type OutboundForm } from './turnOutboundForms'
++const commands = new Map<string, OutboundCommand>(), forms = new Map<string, OutboundForm>(), listeners = new Set<() => void>()
++let revision = 0
++const changed = () => { revision++; listeners.forEach(listener => listener()) }
++export const subscribeOutboundMemory = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
++export const outboundMemoryVersion = () => revision
++export const heldOutboundCommands = (workspace: string) => [...commands.values()].filter(v => v.workspace_id === workspace).map(v => structuredClone(v))
++export const heldOutboundForms = (workspace: string) => [...forms.values()].filter(v => v.workspace_id === workspace).map(v => structuredClone(v))
++export function retainOutboundCommand(command: OutboundCommand) {
++ const next = decodeOutboundCommand(JSON.stringify(command), command.workspace_id), old = commands.get(next.command_id)
++ const basis = (v: OutboundCommand) => ({ ...v, ack: null, error: null })
++ if (old && (!sameValue(basis(old), basis(next)) || old.ack && next.ack && !sameValue(old.ack, next.ack))) throw new Error('Original turn command changed')
++ commands.set(next.command_id, old?.ack ? old : next); changed()
++}
++export function releaseOutboundCommand(command: OutboundCommand) {
++ const old = commands.get(command.command_id), basis = (v: OutboundCommand) => ({ ...v, ack: null, error: null })
++ // A checked durable ACK also covers an older pending copy. Never release a
++ // newer ACK merely because its earlier pending command reached storage.
++ if (old && (sameValue(old, command) || sameValue(basis(old), basis(command)) && !old.ack
++  && (command.ack || !old.error && command.error))) { commands.delete(command.command_id); changed() }
++}
++export function retainOutboundForm(form: OutboundForm) {
++ const next = decodeOutboundForm(JSON.stringify(form), form.workspace_id), old = forms.get(next.snapshot_id)
++ if (old && !sameValue(old, next)) throw new Error('Original turn form changed')
++ forms.set(next.snapshot_id, next); changed()
++}
++export function releaseOutboundForm(form: OutboundForm) {
++ if (sameValue(forms.get(form.snapshot_id), form)) { forms.delete(form.snapshot_id); changed() }
++}
++if (typeof window !== 'undefined') window.addEventListener('beforeunload', event => {
++ if (commands.size || forms.size) { event.preventDefault(); event.returnValue = '' }
++})
+diff --git a/apps/web/src/features/codex/turnOutboundWire.test.ts b/apps/web/src/features/codex/turnOutboundWire.test.ts
+new file mode 100644
+index 00000000..ca87b92f
+--- /dev/null
++++ b/apps/web/src/features/codex/turnOutboundWire.test.ts
+@@ -0,0 +1,51 @@
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { actor, workspace } from './bootstrapTestFixtures'
++import { turnControl } from './turnTestFixtures'
++import { turnOutboundClient } from './turnOutboundClient'
++import { dispatchOutboundCommand, outboundRevokeCommand, type OutboundCommand } from './turnOutboundCommands'
++import { outboundConsent, outboundCurrent, outboundGrant, outboundPreparation, outboundProposal, outboundProvider, previewBody } from './turnOutboundFixtures'
++afterEach(() => vi.unstubAllGlobals())
++test('actual Codex revoke wire first persists the original safe reader, key, full body and control before any POST', async () => {
++ const store = new DraftStore({ name: `outbound-wire-${crypto.randomUUID()}`, factory: new IDBFactory() })
++ const basis = { ...turnControl(), consent_control: { id: 'codexconsent_original', revision: 1, status: 'active' as const } }
++ const original = outboundRevokeCommand(workspace, actor, basis)
++ try {
++  const fetch = vi.fn(async (path: string, init: RequestInit) => {
++   expect(path).toBe('/api/v1/codex/consents/codexconsent_original/revoke')
++   expect(new Headers(init.headers).get('Idempotency-Key')).toBe(original.command_id)
++   expect(JSON.parse(init.body as string)).toEqual({ expected_revision: 1 })
++   const durable = (await store.load(workspace))[original.command_id]
++   expect(durable, 'original command must exist before the real transport boundary').toBeDefined()
++   expect(JSON.parse(durable.text)).toEqual(original)
++   return new Response(JSON.stringify({ id: 'codexconsent_original', revision: 2, applied: true }), { status: 200 })
++  })
++  vi.stubGlobal('fetch', fetch)
++  const actual = await dispatchOutboundCommand(original, turnOutboundClient, store)
++  expect(actual.ack).toEqual({ id: 'codexconsent_original', revision: 2, applied: true })
++  expect(fetch).toHaveBeenCalledOnce()
++  expect(JSON.parse((await store.load(workspace))[original.command_id].text)).toEqual(actual)
++ } finally { await store.close() }
++})
++test.each(['preview', 'grant', 'start'] as const)('actual %s route retains original full wire ACK after durable request admission', async kind => {
++ const store = new DraftStore({ name: `outbound-${kind}-${crypto.randomUUID()}`, factory: new IDBFactory() })
++ const preparation = outboundPreparation(), proposal = outboundProposal(), consent = outboundConsent()
++ const part = kind === 'preview' ? { route: 'POST /api/v1/codex/consent-previews', target_id: preparation.id, basis: { preparation, control: turnControl(), provider: outboundProvider() }, body: previewBody(), response: proposal, path: '/api/v1/codex/consent-previews' }
++  : kind === 'grant' ? { route: 'POST /api/v1/codex/consents', target_id: proposal.id, basis: { preparation, proposal }, body: { proposal_id: proposal.id, proposal_sha256: proposal.proposal_sha256 }, response: outboundGrant(), path: '/api/v1/codex/consents' }
++   : { route: 'POST /api/v1/codex/sessions/{id}/turns', target_id: preparation.session_id, basis: { preparation, current: outboundCurrent(), consent }, body: { preparation_id: preparation.id, preparation_sha256: preparation.preparation_sha256, consent_id: consent.id, expected_session_revision: 3 }, response: { turn_id: preparation.turn_id, session_revision: 4, job: { id: preparation.job.id, status: 'queued' } }, path: '/api/v1/codex/sessions/codex_session_test/turns' }
++ const { response, path, ...fields } = part
++ const original = { version: 1, kind, workspace_id: workspace, actor_session_id: actor, command_id: `codexout_${crypto.randomUUID()}`, ...fields, ack: null, error: null } as unknown as OutboundCommand
++ try {
++  const fetch = vi.fn(async (actualPath: string, init: RequestInit) => {
++   expect(actualPath).toBe(path); expect(JSON.parse(init.body as string)).toEqual(fields.body)
++   expect(new Headers(init.headers).get('Idempotency-Key')).toBe(original.command_id)
++   expect(JSON.parse((await store.load(workspace))[original.command_id].text)).toEqual(original)
++   return new Response(JSON.stringify(response), { status: kind === 'start' ? 202 : 201 })
++  })
++  vi.stubGlobal('fetch', fetch)
++  const actual = await dispatchOutboundCommand(original, turnOutboundClient, store)
++  expect(actual.ack).toEqual(response); expect(fetch).toHaveBeenCalledOnce()
++  expect(JSON.parse((await store.load(workspace))[original.command_id].text)).toEqual(actual)
++ } finally { await store.close() }
++})
+diff --git a/apps/web/src/features/codex/useCodexOutbound.ts b/apps/web/src/features/codex/useCodexOutbound.ts
+new file mode 100644
+index 00000000..546ef659
+--- /dev/null
++++ b/apps/web/src/features/codex/useCodexOutbound.ts
+@@ -0,0 +1,181 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexConsentProposalView, CodexConsentView, CodexCurrentSessionView, CodexTurnControlView, CodexTurnResultView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
++import type { DraftStore, DraftWriteGuard } from '../../workbench/DraftStore'
++import { checkedProvider, sameValue } from '../providers/providerSchema'
++import { checkedBootstrap } from './bootstrapClient'
++import { checkedTurn } from './turnClient'
++import { checkedOutbound, outboundTime, turnOutboundClient, type TurnOutboundPort } from './turnOutboundClient'
++import { decodeOutboundCommand, dispatchOutboundCommand, makeOutboundCommand, outboundStore, persistOutboundCommand, readOutboundCommand, validateOutboundInput, type OutboundCommand, type OutboundCommandInput } from './turnOutboundCommands'
++import { decodeOutboundForm, emptyOutboundFields, outboundFormStore, persistOutboundForm, readOutboundForm, snapshotOutboundForm, type OutboundFields, type OutboundForm } from './turnOutboundForms'
++import { heldOutboundCommands, heldOutboundForms, outboundMemoryVersion, releaseOutboundCommand, releaseOutboundForm, retainOutboundCommand, retainOutboundForm, subscribeOutboundMemory } from './turnOutboundMemory'
++
++type PreviewBasis = Extract<OutboundCommand, { kind: 'preview' }>['basis']
++const academic = (s: SessionResponse) => s.role === 'author' && !s.active_independent_attempt_id && !s.active_open_book_attempt_id
++const denied = (e: unknown) => e instanceof ApiError && ([401, 403].includes(e.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(e.code ?? ''))
++export function useCodexOutbound(workspace: string, writeAdmitted: boolean, port: TurnOutboundPort = turnOutboundClient, store: DraftStore = outboundStore, formStore: DraftStore = outboundFormStore) {
++ const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++ useSyncExternalStore(subscribeOutboundMemory, outboundMemoryVersion, outboundMemoryVersion)
++ const admission = useRef(writeAdmitted), revocation = useRef(0)
++ if (admission.current && !writeAdmitted) ++revocation.current
++ admission.current = writeAdmitted
++ const owner = JSON.stringify([workspace, access, revocation.current]), scope = useRef({ owner, port, store, formStore }); scope.current = { owner, port, store, formStore }
++ const live = useRef(false), working = useRef(false), sequence = useRef(0), writers = useRef(new Set<AbortController>())
++ const [renderScope, setRenderScope] = useState({ owner, port, store, formStore }), [identity, setIdentity] = useState<SessionResponse | null>(null), actorRef = useRef<SessionResponse | null>(null)
++ const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
++ const [commands, setCommands] = useState<OutboundCommand[]>([]), [forms, setForms] = useState<OutboundForm[]>([])
++ const [form, setForm] = useState<OutboundForm | null>(null), formRef = useRef<OutboundForm | null>(null)
++ const [basis, setBasis] = useState<PreviewBasis | null>(null), [proposal, setProposal] = useState<CodexConsentProposalView | null>(null)
++ const [consent, setConsent] = useState<CodexConsentView | null>(null), [current, setCurrent] = useState<CodexCurrentSessionView | null>(null)
++ const [control, setControl] = useState<CodexTurnControlView | null>(null), [result, setResult] = useState<CodexTurnResultView | null>(null)
++ const currentScope = () => live.current && scope.current.owner === owner && scope.current.port === port && scope.current.store === store && scope.current.formStore === formStore && access === getSessionGeneration()
++ const valid = (token: number) => currentScope() && sequence.current === token
++ const visible = renderScope.owner === owner && renderScope.port === port && renderScope.store === store && renderScope.formStore === formStore
++ const ready = visible && identity !== null, allowed = ready && writeAdmitted && academic(identity)
++ const clearReads = () => { setBasis(null); setProposal(null); setConsent(null); setCurrent(null); setControl(null); setResult(null) }
++ const hide = () => { actorRef.current = null; setIdentity(null); clearReads(); setCommands([]); setForms([]) }
++ const begin = () => { if (!currentScope() || !workspace || working.current) return null; working.current = true; setBusy(true); setError(''); setMessage(''); return ++sequence.current }
++ const finish = (token: number) => { if (valid(token)) { working.current = false; setBusy(false) } }
++ const fail = (reason: unknown) => {
++  if (denied(reason)) hide()
++  setError(denied(reason) ? '外发操作的当前权限或原 actor 已变化；原命令与表单保留。'
++   : reason instanceof ApiError && reason.status === 412 ? '外发版本已变化（412）；原 key、完整 body 和只读基准保留，请独立 GET。'
++   : reason instanceof ApiError && reason.status === 409 ? '外发绑定冲突（409）；原命令保留，不自动换 key 或新建许可。'
++   : reason instanceof ApiError && ['CODEX_INPUT_PROOF_UNAVAILABLE', 'CODEX_RUNTIME_UNAVAILABLE'].includes(reason.code ?? '') ? `BLOCKED：${reason.code}；没有完整证明或可用执行器，未宣称已执行。原命令保留。`
++   : '外发结果或本机保存未知；原命令保留，只能显式回放原 key。')
++ }
++ async function fresh(token: number, subject: boolean, actor?: string) {
++  const value = checkedBootstrap<SessionResponse>('SessionResponse', await port.session())
++  if (!valid(token)) throw new Error('Scope changed')
++  if (value.workspace_id !== workspace || actor && value.actor_session_id !== actor || subject && (!writeAdmitted || !academic(value))) { hide(); throw new ApiError(403, 'Original outbound access changed') }
++  actorRef.current = value; setIdentity(value); return value
++ }
++ function writer(check: () => boolean) {
++  const c = new AbortController(); writers.current.add(c); const unsubscribe = subscribeSessionAccess(() => c.abort())
++  return { guard: { allowed: check, signal: c.signal } satisfies DraftWriteGuard, done: () => { unsubscribe(); writers.current.delete(c) } }
++ }
++ const loadCommands = async () => Object.values(await store.load(workspace)).map(v => readOutboundCommand(v, workspace))
++ const loadForms = async () => Object.values(await formStore.load(workspace)).map(v => readOutboundForm(v, workspace))
++ useEffect(() => {
++  live.current = true; ++sequence.current; working.current = false; setRenderScope({ owner, port, store, formStore }); hide(); setForm(null); formRef.current = null; setBusy(false); setError(''); setMessage('')
++  return () => { live.current = false; ++sequence.current; working.current = false; for (const value of writers.current) value.abort() }
++ }, [owner, port, store, formStore])
++ const refresh = async () => {
++  const token = begin(); if (token === null) return
++  hide()
++  try { const session = await fresh(token, false), values = await loadCommands(), drafts = await loadForms(); await fresh(token, false, session.actor_session_id)
++   if (valid(token)) { setCommands(values); setForms(drafts); setMessage('外发本机记录已读取；只恢复原事实，没有自动 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { finish(token) }
++ }
++ const edit = (patch: Partial<OutboundFields>) => {
++  if (!ready || !currentScope() || !allowed && Object.keys(patch).some(k => k !== 'turn_id')) return
++  const previous = formRef.current?.actor_session_id === identity.actor_session_id ? formRef.current : null
++  const next = snapshotOutboundForm(workspace, identity.actor_session_id, { ...(previous?.fields ?? emptyOutboundFields()), ...patch }, previous)
++  formRef.current = next; setForm(next); retainOutboundForm(next)
++  if (Object.keys(patch).some(k => ['preparation_id', 'proposal_id', 'consent_id', 'session_id', 'turn_id'].includes(k))) clearReads()
++  const saving = writer(() => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id)
++  const sameActor = () => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id
++  void persistOutboundForm(next, formStore, saving.guard).then(() => { releaseOutboundForm(next); if (sameActor()) setForms(v => [...v.filter(f => f.snapshot_id !== next.snapshot_id), next]) })
++   .catch(() => { if (sameActor()) setError('外发表单尚未落盘；原输入保留在隔离内存，离开前请仅保存本机事实。') }).finally(saving.done)
++ }
++ const restore = async (value: OutboundForm) => {
++  if (!allowed || value.workspace_id !== workspace || value.actor_session_id !== identity.actor_session_id) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  const prior = formRef.current?.snapshot_id, saving = writer(() => valid(token) && actorRef.current?.actor_session_id === actor && academic(actorRef.current) && writeAdmitted)
++  try {
++   const original = decodeOutboundForm(JSON.stringify(value), workspace); await fresh(token, true, actor)
++   const record = (await formStore.load(workspace))[original.snapshot_id]; if (!valid(token)) return
++   const held = heldOutboundForms(workspace).find(v => v.snapshot_id === original.snapshot_id), actual = record ? readOutboundForm(record, workspace) : held
++   if (!actual || !sameValue(actual, original) || held && !sameValue(held, original)) throw new Error('Original form changed')
++   await fresh(token, true, actor)
++   const next = snapshotOutboundForm(workspace, actor, original.fields, null); retainOutboundForm(next)
++   await persistOutboundForm(next, formStore, saving.guard); releaseOutboundForm(next); await fresh(token, true, actor)
++   if (valid(token)) { setForms(v => [...v, next]); if (formRef.current?.snapshot_id === prior) { formRef.current = next; setForm(next); clearReads() }; setMessage('原外发表单已核验并保存独立分支；较新的输入保持，没有 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { saving.done(); finish(token) }
++ }
++ const read = async (kind: 'basis' | 'proposal' | 'consent' | 'current' | 'control' | 'result') => {
++  if (!ready || kind !== 'control' && !allowed || !form || form.actor_session_id !== identity.actor_session_id) return
++  const captured = form, f = captured.fields, actor = identity.actor_session_id, subject = kind !== 'control', token = begin(); if (token === null) return
++  if (kind === 'basis') setBasis(null); if (kind === 'proposal') setProposal(null); if (kind === 'consent') setConsent(null); if (kind === 'current') setCurrent(null); if (kind === 'control') setControl(null); if (kind === 'result') setResult(null)
++  try {
++   await fresh(token, subject, actor)
++   let deliver: () => void
++   if (kind === 'basis') {
++    const p = checkedTurn('CodexTurnPreparationView', await port.preparation(f.preparation_id)), c = checkedTurn('CodexTurnControlView', await port.control(p.turn_id)), config = checkedProvider<PreviewBasis['provider']>('ProviderConfigView', await port.config(p.request.provider_id))
++    if (p.id !== f.preparation_id || c.id !== p.turn_id || c.session_id !== p.session_id || c.job.id !== p.job.id || config.id !== p.request.provider_id) throw new Error('Wrong preview basis')
++    deliver = () => setBasis({ preparation: p, control: c, provider: config })
++   } else if (kind === 'proposal') { const v = checkedOutbound('CodexConsentProposalView', await port.proposal(f.proposal_id)); if (v.id !== f.proposal_id) throw new Error('Wrong proposal'); deliver = () => setProposal(v) }
++   else if (kind === 'consent') { const v = checkedOutbound('CodexConsentView', await port.consent(f.consent_id)); if (v.id !== f.consent_id) throw new Error('Wrong consent'); deliver = () => setConsent(v) }
++   else if (kind === 'current') { const v = checkedBootstrap<CodexCurrentSessionView>('CodexCurrentSessionView', await port.current(f.session_id)); if (v.id !== f.session_id) throw new Error('Wrong current'); deliver = () => setCurrent(v) }
++   else if (kind === 'control') { const v = checkedTurn('CodexTurnControlView', await port.control(f.turn_id)); if (v.id !== f.turn_id) throw new Error('Wrong control'); deliver = () => setControl(v) }
++   else { if (!basis || basis.preparation.turn_id !== f.turn_id) throw new Error('Read original preparation before result')
++    const v = checkedOutbound('CodexTurnResultView', await port.result(f.turn_id)); if (v.control.id !== f.turn_id || v.preparation_id !== basis.preparation.id || v.control.session_id !== basis.preparation.session_id || v.control.job.id !== basis.preparation.job.id) throw new Error('Wrong result'); deliver = () => setResult(v) }
++   await fresh(token, subject, actor)
++   if (valid(token) && formRef.current?.snapshot_id === captured.snapshot_id) deliver()
++  } catch (e) { if (valid(token)) fail(e) } finally { finish(token) }
++ }
++ async function execute(command: OutboundCommand, existingToken?: number) {
++  if (!ready || command.workspace_id !== workspace || command.actor_session_id !== identity.actor_session_id || command.ack || command.kind !== 'revoke' && !allowed) return
++  const token = existingToken ?? begin(); if (token === null) return
++  const saving = writer(() => valid(token)), subject = command.kind !== 'revoke'
++  try {
++   await fresh(token, subject, command.actor_session_id); retainOutboundCommand(command)
++   const saved = await dispatchOutboundCommand(command, port, store, { guard: saving.guard,
++    beforePost: async () => { const values = await loadCommands(); await fresh(token, subject, command.actor_session_id); if (valid(token)) setCommands(values) },
++    onAck: retainOutboundCommand, beforeDelivery: async () => { await fresh(token, subject, command.actor_session_id) } })
++   releaseOutboundCommand(saved); const values = await loadCommands(); await fresh(token, subject, command.actor_session_id)
++   if (valid(token)) { setCommands(values); setMessage(`外发 ${command.kind} 原 ACK 已保存；不是当前 GET，也不证明模型或工具已完成。`) }
++  } catch (e) {
++   if (e instanceof ApiError && e.status >= 400 && e.status <= 599 && !heldOutboundCommands(workspace).some(v => v.command_id === command.command_id && v.ack)) {
++    const rejected = decodeOutboundCommand(JSON.stringify({ ...command, error: { status: e.status, code: /^[A-Z][A-Z0-9_]{0,79}$/.test(e.code ?? '') && e.code?.trim() === e.code ? e.code : null } }), workspace)
++    retainOutboundCommand(rejected)
++    if (valid(token) && !denied(e)) { try { const saved = await persistOutboundCommand(rejected, store, saving.guard); releaseOutboundCommand(saved); const values = await loadCommands(); if (valid(token)) setCommands(values) } catch { /* Keep original command isolated. */ } }
++   }
++   if (valid(token)) fail(e)
++  } finally { saving.done(); finish(token) }
++ }
++ const candidate = (kind: OutboundCommand['kind']): OutboundCommandInput => {
++  const f = form?.fields; if (!f || !ready || form.actor_session_id !== identity.actor_session_id) throw new Error('No original form')
++  if (kind === 'revoke') { if (!control?.consent_control || control.id !== f.turn_id) throw new Error('Read actual safe consent control'); return { kind, basis: control, body: { expected_revision: control.consent_control.revision } } }
++  if (!allowed || !basis || basis.preparation.id !== f.preparation_id || basis.preparation.actor_session_id !== identity.actor_session_id) throw new Error('Read own preparation')
++  const p = basis.preparation
++  if (kind === 'preview') {
++   if ([f.max_input_tokens, f.max_output_tokens, f.max_cost_usd].some(v => v.trim() !== v) || !/^[1-9][0-9]*$/.test(f.max_input_tokens) || !/^[1-9][0-9]*$/.test(f.max_output_tokens) || f.max_cost_usd !== '' && !/^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(f.max_cost_usd)) throw new Error('Explicit budget required')
++   const expires = outboundTime(f.expires_at), now = Date.now(); if (expires <= now || expires > now + 600000) throw new Error('Explicit expiry must be within ten minutes')
++   return { kind, basis, body: checkedOutbound('CodexOutboundPreviewWrite', { preparation_id: p.id, preparation_sha256: p.preparation_sha256, expected_job_revision: basis.control.job_revision, expected_provider_revision: basis.provider.revision,
++    budget: { max_input_tokens: Number(f.max_input_tokens), max_output_tokens: Number(f.max_output_tokens), max_provider_calls: 1, max_search_calls: 0, max_cost_usd: f.max_cost_usd === '' ? null : Number(f.max_cost_usd) }, expires_at: f.expires_at }) }
++  }
++  if (kind === 'grant') { if (!proposal || proposal.id !== f.proposal_id || outboundTime(proposal.summary.expires_at) <= Date.now()) throw new Error('Read current unexpired proposal'); return { kind, basis: { preparation: p, proposal }, body: { proposal_id: proposal.id, proposal_sha256: proposal.proposal_sha256 } } }
++  if (!consent || consent.id !== f.consent_id || !current || current.id !== f.session_id || outboundTime(consent.expires_at) <= Date.now()) throw new Error('Read current original consent and session')
++  return { kind, basis: { preparation: p, current, consent }, body: { preparation_id: p.id, preparation_sha256: p.preparation_sha256, consent_id: consent.id, expected_session_revision: current.revision } }
++ }
++ const submit = async (kind: OutboundCommand['kind']) => {
++  const token = begin(); if (token === null) return
++  try { if (!identity) throw new Error('Read permissions'); const command = makeOutboundCommand(workspace, identity.actor_session_id, candidate(kind)); await execute(command, token) }
++  catch (e) { if (valid(token)) fail(e); finish(token) }
++ }
++ const saveMemory = async () => {
++  if (!ready) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  const saving = writer(() => valid(token))
++  try { await fresh(token, false, actor)
++   for (const value of heldOutboundCommands(workspace)) { const saved = await persistOutboundCommand(value, store, saving.guard); releaseOutboundCommand(saved) }
++   for (const value of heldOutboundForms(workspace)) { await persistOutboundForm(value, formStore, saving.guard); releaseOutboundForm(value) }
++   const values = await loadCommands(), drafts = await loadForms(); await fresh(token, false, actor)
++   if (valid(token)) { setCommands(values); setForms(drafts); setMessage('仅保存外发原 actor 的本机事实和表单；未发送任何 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { saving.done(); finish(token) }
++ }
++ const held = heldOutboundCommands(workspace), heldForms = heldOutboundForms(workspace), all = new Map(commands.map(v => [v.command_id, v]))
++ for (const value of held) if (!all.get(value.command_id)?.ack || value.ack) all.set(value.command_id, value)
++ const allForms = new Map([...forms, ...heldForms].map(v => [v.snapshot_id, v])), latest = new Map<string, OutboundForm>()
++ for (const value of allForms.values()) if (allowed && value.actor_session_id === identity.actor_session_id && (!latest.has(value.draft_id) || latest.get(value.draft_id)!.sequence < value.sequence)) latest.set(value.draft_id, value)
++ const retained = held.length + heldForms.length
++ const can = (kind: OutboundCommand['kind']) => { try { if (!identity || working.current) return false; validateOutboundInput(workspace, identity.actor_session_id, candidate(kind)); return true } catch { return false } }
++ return { ready, allowed, busy: visible && busy, actor: ready ? identity.actor_session_id : null,
++  fields: ready && form?.actor_session_id === identity.actor_session_id ? form.fields : emptyOutboundFields(), forms: [...latest.values()], commands: ready ? [...all.values()].filter(v => v.kind === 'revoke' || allowed && v.actor_session_id === identity.actor_session_id) : [],
++  basis: allowed ? basis : null, proposal: allowed ? proposal : null, consent: allowed ? consent : null, current: allowed ? current : null, control: ready ? control : null, result: allowed ? result : null,
++  error: visible ? error : '', message: visible ? message : '', retained, dirty: retained > 0 || allForms.size > 0 || [...all.values()].some(v => !v.ack), safe: !working.current && retained === 0, isolated: !working.current && retained > 0,
++  can, canSave: ready && retained > 0, canReplay: (c: OutboundCommand) => ready && c.actor_session_id === identity.actor_session_id && (c.kind === 'revoke' || allowed) && !c.ack && !held.some(v => v.command_id === c.command_id && v.ack),
++  refresh, edit, restore, read, execute, submit, saveMemory }
++}

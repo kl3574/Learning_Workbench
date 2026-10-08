@@ -1,0 +1,25 @@
+# Provider-bound genuine retained memory owner (bounded partial verification)
+
+Candidate `44876a81e89e9d128a3f8a02442bb1d576e541b7` adds only three source paths to local frozen-six cherry `f955a0dc55a962f58b57b483b1a44a67cd6e3955` on engineering base `e7c5d3489cf4cb815f92e3481ffaac854e6d5e45`. No canonical or remote writes. All three final bytes equal the before-run snapshot, Git commit, index and live files; author full POSIX modes are 0664 and Git modes 100644. The sole specification and explicit 19 inherited source inputs (including six FFI engineering inputs, core replay and license/notice) are unchanged.
+
+Actual SQLite ownership/source/configuration reads and the named FileSecretStore capture precede the same genuine B03 core producer, single EncodedJson allocation, FinalBearer05 freeze and retained HTTP04 handle through real ctypes. No Synthetic PreparedCodexRequest body is converted to a genuine request. Bearer derives only from the captured private snapshot; resolver is never handed that snapshot or secret. The owner rechecks current source, actor, configuration, locator and secret bytes before FFI and again before returning. Changes refuse without refresh; post-freeze refusal releases the actual Rust handle and retains the existing process-local burned creation identity. Error translation emits only fixed safe codes/messages, including malicious resolver status text. Snapshot repr is redacted and frozen. No sender or ordinary auth/retry callback is exposed.
+
+Construction checks bind complete text messages in original order, system instructions, logical session/turn, actual provider ID/base URL/model, max output, source wall timeout and protocol output cap. Selected SQLite references are explicitly unsupported and refuse before resolver/FFI; they are not replaced by empty material. Complete-history order/drop testing is a pure explicit material fixture, not evidence of a newly owned completed SQLite turn. Remaining ModelInfo, native UUID/thread mapping, ResponsesMetadata, guardian/telemetry etc. are explicit fixture-only facts mechanically checked by frozen Rust, without proof of production source authenticity. The test resolver cannot be installed through an HTTP route; default owner has no resolver/foreign composition.
+
+Final manual scoped test: **27 PASS / 0 FAIL**, actual exit 0. Existing unchanged FinalAuth tests: **4 PASS / 0 FAIL / 34 deselected**, exit 0. Ruff, mypy, three-file staged publication scanner and diff check: exit 0. Real RED03 changed raw named secret during resolver and still returned a genuine same-allocation/auth-sensitive handle (foreign create 1), actual 1 FAIL; same negative function AST in GREEN04 and final now refuses PROVIDER_SECRET_UNAVAILABLE before FFI (create 0). The initial queue setup ERROR, first premature cherry failure, scoped05 15P/7F budget-key error and mypy07 four type errors remain original receipts. No assertion was weakened.
+
+The fixed owned readonly library is reused from the sealed engineering packet; this is **not a fresh Rust build**. The actual loader hashes the library on every fixture before invoking it. Current packet records only metadata for that large old binary and its exact expected SHA/source bindings. It includes no library, SQLite DB, secret version files or pytest private runtime directory. Tests are an explicit manual filename outside normal full-suite discovery, so they do not create additional ENV skips or an implicit private-binary dependency in the normal Python gate.
+
+Existing Provider `record_start` is a real durable ledger. It remains tied to the synthetic proposal request SHA, which the tests explicitly prove differs from this genuine body. Production ModelInfo/facts resolver, complete genuine InputProof, qualified loader/resource/network executor and genuine durable-start-to-send integration remain **NOT_IMPLEMENTED / NOT_ADMITTED**. Default empty ProofRegistry/executorNone/current unavailable profile are unchanged. No model, CLI, AppServer, real user key or external send is executed. No full Python/Rust suite is rerun by this task.
+
+Replay from the source candidate with an explicitly owned sealed library:
+
+```sh
+LW_OWNED_RETAINED_LIBRARY=/owned/private/libcodex_core.so \
+LW_OWNED_RETAINED_LIBRARY_SHA256=bb659ad72917b3f7a8d1b144c6078eb25f9c0b15fc3d71d2566b2016463424d4 \
+python -B -m pytest scripts/codex-turn/provider_retained_auth_checks.py -q --basetemp=/new/owned/temporary-test-directory
+```
+
+The library must be built/replayed from the inherited fixed 22-path retained-request source before substituting another owned path. Use its own new-build provenance; do not claim this packet's reuse test as a fresh build.
+
+Private artifacts: COMMIT-SOURCE-ONLY-READBACK.json, CANDIDATE-08-BEFORE-FINAL.json, STATUS.json, RED-GREEN-AND-FINAL-ASSERTION-BINDING.json, FIXED-RUST-REUSE-AND-NO-PRODUCTION.json, SOURCE-THREE.diff and explicit raw receipt files. Public-safe candidates are only the three committed source files; this private packet is not automatically published.

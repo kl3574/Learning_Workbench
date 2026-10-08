@@ -1,0 +1,11 @@
+# M6.3 public 4b terminal CI readback
+
+Public source 4b5516bd2a78d7b39f9b4a4c321a6d91ad4ca78f has two completed successful CI events: push37200167062 and pull_request37200168176, six jobs each. Actual12 terminal metadata and12 original job logs were independently read back. This receipt covers public4b only; newer local79ac and Artifact/Import owner branches have their own different gates.
+
+All six push job logs checked out4b. All six PR job logs checked out ff1b1c05e670fd622bd7daa48caa03d598a5374b, whose actual GitHub commit has parents e2877101d9c2bda0f793a460db63ef496350c6b4 and4b. Its real tree f3a8ddc56747368a0a155da31d1134ee59eaba3e equals the source4b tree. A synthetic PR merge checkout is thus qualified by real tree equality, not by matching head labels alone.
+
+For each event, original logs report contract953 PASS, unit/security888 PASS, integration2258 PASS/2 ENVskip/2warnings, Web1201 PASS/154files and native130 PASS. These job scopes overlap; counts are not added. Both integration logs explicitly skipped test_authoring_numeric_runtime and test_restore_numeric_actual_runtime because the real sealed numeric environment did not execute/return PASS. CI success does not establish physical numeric or publication success. Actual Codex/paid model/hosttools/academic quality and whole M6.3 remain unaccepted.
+
+The first direct API metadata read failed with a proxy connection reset; the original network failure observation is retained separately. The later bounded refresh and original log collector actually succeeded. A network read failure is separate from job conclusion and does not establish a permission blocker. No CI rerun, source push, GitHub merge, release or deployment occurred in this readback.
+
+The original full job logs stay private. SELECTED_LOG_EVIDENCE.json is an authored field-selected record containing original summary/ENVskip lines, job URLs, actual parsed checkout and full raw-log hashes/lengths. 12-terminal-jobs-raw-readback.json is the byte-identical root collector receipt, not a transformed job log. The explicit candidates exclude response metadata containing unrelated account data, full logs, credentials, cache and runtime directories. This is bounded publication review, not blanket directory approval.

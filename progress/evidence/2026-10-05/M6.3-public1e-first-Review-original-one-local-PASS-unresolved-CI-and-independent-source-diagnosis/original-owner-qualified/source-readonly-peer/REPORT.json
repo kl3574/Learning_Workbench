@@ -1,0 +1,283 @@
+{
+  "schema": "M63Fixed1eFirstReviewBoundedReadOnlyPeerReport/v1",
+  "sealed_utc": "2026-10-05T00:54:05.229972+00:00",
+  "fixed_head": "1e7ad7a8656c0dc8373d4181fa3002f385ed1847",
+  "status": "NO_REPRODUCIBLE_DEFECT_ESTABLISHED; OLD_TWO_CI_UNIQUE_CAUSE_UNKNOWN",
+  "scope": "Immutable Git source audit only. Seal re-hashes only the21 already-read enumerated files; no new diagnosis, source instrumentation, runtime audit or execution.",
+  "input_allowlist": "INPUT_ALLOWLIST.json",
+  "source_file_count": 21,
+  "confirmed_source_facts": [
+    {
+      "id": "F1",
+      "claim": "Material click waits serially for course, lesson, selected block metadata and body: four existing GETs. It validates parent chain, ETag/ref/body SHA before open; an owner or access-generation change suppresses open.",
+      "refs": [
+        {
+          "path": "apps/web/src/features/review/ReviewMaterialLinks.tsx",
+          "lines": [
+            8,
+            20
+          ],
+          "git_blob": "9be108b932bc7208de5071a88f55bfd6dc6e3887"
+        },
+        {
+          "path": "apps/web/src/features/reader/contentClient.ts",
+          "lines": [
+            9,
+            24
+          ],
+          "git_blob": "ab09dd53b3bb954999f17bdc8acec7cb080ccc59"
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "claim": "Shell writes reader query/hash URL only after canLeave, non-conflicting frozen references and an actual opened session update. useWorkbench.set synchronously evaluates its function against live.current; no async React-set opened-flag defect was established.",
+      "refs": [
+        {
+          "path": "apps/web/src/workbench/Shell.tsx",
+          "lines": [
+            120,
+            133
+          ],
+          "git_blob": "211ba6f5fd6b79bd9b72f6374ba4b3617415ece8"
+        },
+        {
+          "path": "apps/web/src/features/reader/navigation.ts",
+          "lines": [
+            10,
+            15
+          ],
+          "git_blob": "9e05bd0c299ab2c860d6ba5ccce3a74db5529045"
+        },
+        {
+          "path": "apps/web/src/features/reader/target.ts",
+          "lines": [
+            14,
+            16
+          ],
+          "git_blob": "4534b516ffca321f40cca2819585de690499c732"
+        },
+        {
+          "path": "apps/web/src/workbench/useWorkbench.ts",
+          "lines": [
+            29,
+            36
+          ],
+          "git_blob": "2afcc2b0a406430cedf285ab265e2ddd60cc1a20"
+        }
+      ]
+    },
+    {
+      "id": "F3",
+      "claim": "Reader URL-ready is separate from Reader-visible. ReaderDocument next reads course/lesson/current/progress in parallel, then serially reads every lesson block before visible data is set.",
+      "refs": [
+        {
+          "path": "apps/web/src/features/reader/ReaderDocument.tsx",
+          "lines": [
+            38,
+            54
+          ],
+          "git_blob": "716e45b9af8387befbf8c20ca551ac86d6352311"
+        }
+      ]
+    },
+    {
+      "id": "F4",
+      "claim": "Returning the preserved assessment Review tab retains view review and attempt-based tab identity, reactivating an existing same-identity tab. AssessmentView opens the Review tab explicitly pinned. openTab may replace an unrelated unpinned no-draft preview; that code rule is not an established defect in this case.",
+      "refs": [
+        {
+          "path": "apps/web/src/workbench/Shell.tsx",
+          "lines": [
+            142,
+            149
+          ],
+          "git_blob": "211ba6f5fd6b79bd9b72f6374ba4b3617415ece8"
+        },
+        {
+          "path": "apps/web/src/workbench/Shell.tsx",
+          "lines": [
+            204,
+            204
+          ],
+          "git_blob": "211ba6f5fd6b79bd9b72f6374ba4b3617415ece8"
+        },
+        {
+          "path": "apps/web/src/features/assessment/target.ts",
+          "lines": [
+            12,
+            20
+          ],
+          "git_blob": "b091887a17ed504ab3d8d89ddbcf9e6d1f7d172c"
+        },
+        {
+          "path": "apps/web/src/workbench/model.ts",
+          "lines": [
+            18,
+            28
+          ],
+          "git_blob": "281e25c9d6ee6f763032bf6cf4e650e8f213e827"
+        },
+        {
+          "path": "apps/web/src/features/assessment/AssessmentView.tsx",
+          "lines": [
+            42,
+            42
+          ],
+          "git_blob": "7ee27dbdaf086da147e71800b07f96fc036409fc"
+        }
+      ]
+    },
+    {
+      "id": "F5",
+      "claim": "Explicit selected grading revision is saved under a workspace/tab localStorage key. History remount uses workspace/tab/access and reads the same key. Missing selection defaults to latest, but invalid/unreadable stored revisions do not silently become latest. Write failure displays an alert and only retains the current component choice. Old CI storage success and tab identity were not captured here.",
+      "refs": [
+        {
+          "path": "apps/web/src/features/review/GradingHistory.tsx",
+          "lines": [
+            7,
+            16
+          ],
+          "git_blob": "36182656c74bbe42aded880f207a1fff0cf9e85b"
+        },
+        {
+          "path": "apps/web/src/features/grading/AssessmentResult.tsx",
+          "lines": [
+            40,
+            40
+          ],
+          "git_blob": "34b33a72d91dd25a1588d6ee4d180957887dccf6"
+        },
+        {
+          "path": "apps/web/src/workbench/uiCache.ts",
+          "lines": [
+            6,
+            7
+          ],
+          "git_blob": "195be792b02f102d7946c5bfdc1abf964d69879f"
+        }
+      ]
+    },
+    {
+      "id": "F6",
+      "claim": "Returning Review remounts its tab-keyed AssessmentView: attempt reads are reset to loading, then access/result are read. History heading needs a submitted, non-abandoned snapshot and review mode. Tab click or URL change alone does not prove those reads or rendering finished.",
+      "refs": [
+        {
+          "path": "apps/web/src/features/assessment/useAssessmentAttempt.ts",
+          "lines": [
+            57,
+            61
+          ],
+          "git_blob": "23ec8285cde0b0931df13ab3bc3858dc89715997"
+        },
+        {
+          "path": "apps/web/src/features/assessment/AssessmentView.tsx",
+          "lines": [
+            46,
+            49
+          ],
+          "git_blob": "7ee27dbdaf086da147e71800b07f96fc036409fc"
+        },
+        {
+          "path": "apps/web/src/features/grading/useGradingResult.ts",
+          "lines": [
+            28,
+            41
+          ],
+          "git_blob": "3fb2d912d6918c9a0ecea9ad437328c38e0d75be"
+        },
+        {
+          "path": "apps/web/src/features/grading/AssessmentResult.tsx",
+          "lines": [
+            40,
+            40
+          ],
+          "git_blob": "34b33a72d91dd25a1588d6ee4d180957887dccf6"
+        }
+      ]
+    },
+    {
+      "id": "F7",
+      "claim": "Resize changes width and closes drawers; main stays in the same grid-child position and AssessmentView retains active.id key. Mobile review CSS only reduces padding. This path has no direct page/browser close or selected-revision reset. PreserveReaderViewport ignores changed viewport for conflict-scroll correction. These static facts do not identify the old runtime failure cause.",
+      "refs": [
+        {
+          "path": "apps/web/src/workbench/Shell.tsx",
+          "lines": [
+            187,
+            190
+          ],
+          "git_blob": "211ba6f5fd6b79bd9b72f6374ba4b3617415ece8"
+        },
+        {
+          "path": "apps/web/src/workbench/Shell.tsx",
+          "lines": [
+            232,
+            237
+          ],
+          "git_blob": "211ba6f5fd6b79bd9b72f6374ba4b3617415ece8"
+        },
+        {
+          "path": "apps/web/src/features/review/review.css",
+          "lines": [
+            12,
+            12
+          ],
+          "git_blob": "ac7aed943514defec818f7517fd02c604b639375"
+        },
+        {
+          "path": "apps/web/src/workbench/PreserveReaderViewport.tsx",
+          "lines": [
+            25,
+            41
+          ],
+          "git_blob": "7ae0a5a82f928948343ce0a189e3bcc894b28cba"
+        }
+      ]
+    }
+  ],
+  "old_failures": {
+    "PR": "Parent-provided symptom: reader route poll false; old unique cause UNKNOWN. Original raw failure not reopened for this seal.",
+    "push": "Parent-provided symptom: returned Review/mobile history heading context closed; old unique cause UNKNOWN. Original raw failure not reopened for this seal.",
+    "original_fixture_page_request_body_JSON_React_boundary": "NOT_CAPTURED; cannot reconstruct or fill from current source/current passing run.",
+    "actual_old_runtime_branch": "NOT_CAPTURED: source cannot select unfinished proof / owner-generation cancel / canLeave reject / reference conflict / Review-remount wait.",
+    "old_storage_result_tab_identity_and_actual_CI_tree": "NOT_CAPTURED by this source audit"
+  },
+  "parent_reported_current_context": {
+    "provenance": "Received message only; current business command/log/receipt/timing not independently read here.",
+    "reported": "One-only fixed1e original-budget business PASS (1passed16.4s/suite19.0s,1541beforeafterexact; body12.850s/43phases315HTTP/drop0).",
+    "boundary": "This does not replace either old CI FAIL or close its missing evidence; it does not justify manufacturing a product repair."
+  },
+  "future_minimal_observation_candidate": {
+    "status": "NOT_RUN; no scheduling/instrumentation/measurement performed",
+    "candidate_only": [
+      "Existing fixture start/end and existing page.request/body-parse completion timestamps, with no extra requests.",
+      "Existing reader URL poll categorical false witness: reader parameter absent / JSON parse failed / exact reference predicate false; boolean/category/time only, no URL/ref/response/secret payload.",
+      "Distinguish URL-ready, Reader-visible, returned-Review/history-visible boundaries."
+    ],
+    "current_root_constraint": "Root requested no further fixture measurement or business rerun. This candidate remains NOT_RUN.",
+    "forbidden_inferences": [
+      "No retroactive original-CI fixture/JSON/React timings.",
+      "No unique root cause inferred from body or budget differences.",
+      "No mobile-close or history-reset defect manufactured from resize static code.",
+      "No storage-failure or preview-replacement branch promoted to the actual old cause."
+    ]
+  },
+  "actions": {
+    "source_modifications": 0,
+    "product_tests": 0,
+    "business_reruns": 0,
+    "API": 0,
+    "observer": 0,
+    "listener_owner_scans": 0,
+    "host_probes": 0,
+    "model": 0,
+    "remote_writes": 0,
+    "runtime_DB_profile_PNG_ZIP_secret_payload_reads": 0,
+    "new_outputs_only": [
+      "REPORT.json",
+      "REPORT.md",
+      "INPUT_ALLOWLIST.json"
+    ]
+  },
+  "HOME_only_boundary": "Only required HOME path reference represented as ~; no source copies or runtime payload. Not a general PII/privacy guarantee.",
+  "adoption": "Private finite3-file candidate; parent/root SAFE seal pending; no canonical/public adoption"
+}

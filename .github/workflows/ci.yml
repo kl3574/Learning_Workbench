@@ -127,6 +127,17 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
           include-hidden-files: false
+      # Fixed phases/status/durations from the original synthetic grading test;
+      # retain this single bounded metadata basename on either native outcome.
+      - name: Retain bounded synthetic grading timing
+        if: ${{ always() && (steps.native.outcome == 'success' || steps.native.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          name: grading-timing-${{ github.event_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/learning-workbench-e2e-results/**/grading-two-profile-timing.json
+          retention-days: 3
+          if-no-files-found: warn
+          include-hidden-files: false
       # Synthetic browser failures only; never upload the data directory or traces.
       - name: Retain synthetic browser failure diagnostics
         if: ${{ failure() && steps.native.outcome == 'failure' }}
@@ -140,6 +151,8 @@ jobs:
             ${{ runner.temp }}/learning-workbench-e2e-results/**/tutor-completion-diagnostic.json
             ${{ runner.temp }}/learning-workbench-e2e-results/**/authoring-prepare-diagnostic.json
             ${{ runner.temp }}/learning-workbench-e2e-results/**/review-form-memory-diagnostic.json
+            ${{ runner.temp }}/learning-workbench-e2e-results/**/review-history-timing.json
+            ${{ runner.temp }}/learning-workbench-e2e-results/**/review-history-setup-helper-timing.json
           retention-days: 3
           if-no-files-found: warn
           include-hidden-files: false

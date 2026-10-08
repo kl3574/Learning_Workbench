@@ -1,0 +1,9 @@
+# M6.3 tool/interrupt merge static review — ee76a13d
+
+Standards: no confirmed integration finding. Spec: no confirmed integration blocker. This is source-only review of the root's merge, not combined runtime acceptance; combined full gates remain NOT_RUN for this review. The reviewer authored the earlier interrupt slice; this is independent examination of the root's fusion, not a second independent audit of that earlier implementation.
+
+Fixed merge ee76a13d22728e31880ef1ac223b5f3572832893 has parents 7f3bbc4b2a7c0dd80499ea8c1a8a3038c4d0e587 and reviewed owner 83d7b9164968e314261a3d12f5fb3fc75d2e8c6d. The two-point nonprogress delta is exactly 15 paths. Thirteen non-shared paths exactly match the owner Git blobs. All 1449 existing non-changed engineering paths are retained; the final full engineering map has 1464 entries (prior 1454 plus ten new files). Progress documents are excluded explicitly.
+
+Shared integration: codex_turn.py:136 only supplies conn/approvals/history to the approved operation-control projection. All its other 34 methods, including interrupt, request_stop, cancel and delivery/replay-facing reads, retain exact original source segments. codex_turn_repository.py adds v5 operation binding alongside v4 interrupt; only _checked, _approval_bound and append method bodies change. Its other 17 method segments, including _interrupt, replay and both cancel-control reducers, remain exact.
+
+The normal merge's original exit1/conflict is preserved here as exact read-only copies of PREPARED/stdout/stderr, without calling it product failure. Only codex_turn_repository.py conflicted; codex_turn.py auto-merged. The final review uses fixed Git, not conflict-marker output or later work. No application, test, database, CLI, model, network or system probe executed. Owner 83d's 226 PASS and previous interrupt gates remain their own sources, not merged acceptance.

@@ -1,0 +1,42 @@
+
+== AGENTS.md @ 196b6a9a7da9be94a12eaf5d93f63fb6eb041edc ==
+1: Read PRODUCT_DESIGN.md completely and follow its implementation, recovery, verification, and publication workflow. It is the sole product and engineering specification.
+
+== PRODUCT_DESIGN.md @ 196b6a9a7da9be94a12eaf5d93f63fb6eb041edc ==
+350: ### 6.6 用 Codex 生成教材
+351: 
+352: 用户给主题、先修、目标和证明策略 → Authoring 建立受控任务 → CodexBroker 准备隔离工作目录 → 启动/恢复会话 → 转译工具审批 → 产生 Markdown、题包、计算验证产物 → 验收内容和来源 → 导入草稿 → 人工审阅 → 发布。
+353: 
+354: 普通 LLM 的结构化草稿生成和 Codex 的工具型文件生成是两个适配器，不共享“任意执行权限”。未安装或未授权 Codex 时，提供明确的任务导出/文件回导降级通道，并标注“未连接 Codex”。
+658: Broker 的最小职责：探测可用性与授权状态；维护产品 session 到 Codex thread 的映射；仅在隔离工作目录运行；转译命令/文件/网络审批；中断与清理；扫描产物；返回受控路径的文件引用；保留费用/状态证据。涉及权限提高、网络和文件变更要展示操作范围，不因工具名字叫“生成教材”就默认批准所有 shell 命令。
+1467: session r1/initializing 表示单次控制开始许可已登记，并不表示存在外部 thread。只有从该唯一实际控制实例取得完整、匹配、受检的成功响应，验证 root/profile/返回身份并持久保存外部 thread 映射及回执后，才变为 r2/ready 并产生原 201 ACK。ready 仅表示 bootstrap 映射已核验成功，不表示模型调用、真实账号授权、当前进程仍运行或整个 Broker 已完成；账号授权状态仍由已有能力读取独立观察。
+
+== apps/web/src/features/codex/codexClient.ts @ 196b6a9a7da9be94a12eaf5d93f63fb6eb041edc ==
+1: import type { CodexCapabilities, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+2: import { request } from '../../api/client'
+3: import { checkedProvider } from '../providers/providerSchema'
+4: 
+5: export type CodexCapabilityPort = {
+6:   session(): Promise<SessionResponse>
+7:   capabilities(): Promise<CodexCapabilities>
+8: }
+9: 
+10: /** Validate the generated wire contract before any connection status is shown. */
+11: export function checkedCodex<T>(name: 'CodexCapabilities' | 'SessionResponse', value: unknown): T {
+12:   try {
+13:     const checked = checkedProvider<T>(name, value)
+14:     if (name === 'CodexCapabilities') {
+15:       const view = checked as CodexCapabilities
+16:       if (!view.available && (view.authorized || view.sandbox_roots.length > 0 || Object.values(view.capabilities).some(Boolean))
+17:         || view.available && !view.adapter_version?.trim()
+18:         || new Set(view.sandbox_roots.map(root => root.id)).size !== view.sandbox_roots.length) throw new Error('Inconsistent capability observation')
+19:     }
+20:     return checked
+21:   }
+22:   catch { throw new Error('Codex 连接状态不符合当前契约，请重新检查。') }
+23: }
+24: 
+25: export const codexCapabilityClient: CodexCapabilityPort = {
+26:   session: async () => checkedCodex('SessionResponse', await request('GET /api/v1/session', undefined)),
+27:   capabilities: async () => checkedCodex('CodexCapabilities', await request('GET /api/v1/codex/capabilities', undefined)),
+28: }

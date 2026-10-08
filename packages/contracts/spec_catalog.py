@@ -97,6 +97,10 @@ def route_task(path: str) -> str:
         return "M4.1"
     if path.startswith("/practice"):
         return "M3.1"
+    # Codex result/control and its generic operation approvals are owned by
+    # M6.3, before generic grading-result and Tutor-run classifications.
+    if path.startswith("/codex") or path in {"/approvals/{id}", "/approvals/{id}/decision"}:
+        return "M6.3"
     if path.endswith(("/result", "/regrade")):
         return "M3.4"
     if path.startswith(("/assessments", "/attempts")):
@@ -118,8 +122,6 @@ def route_task(path: str) -> str:
         return "M6.1"
     if path.startswith(("/drafts", "/draft-edits", "/reviews")):
         return "M6.2"
-    if path.startswith("/codex"):
-        return "M6.3"
     if path.startswith("/connectors"):
         return "E1"
     if path.startswith("/feedback"):

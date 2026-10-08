@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+cachedir: $HOME/.cache/learning-workbench-acceptance/m63-legacy-review-backup-test-evidence-oct04/01-original-red/pytest-cache
+rootdir: $HOME/.cache/learning-workbench-acceptance/m63-legacy-review-backup-test-oct04
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 1 item
+
+tests/integration/test_review_storage_migration.py F                     [100%]
+
+=================================== FAILURES ===================================
+_ test_actual_backup_script_can_clear_legacy_session_without_changing_receipt __
+tests/integration/test_review_storage_migration.py:111: in test_actual_backup_script_can_clear_legacy_session_without_changing_receipt
+    assert connection.execute('SELECT receipt_json,reviewer_session_id FROM reviews').fetchone() == (original, None)
+E   assert ('{\n   "id":...iew_original') == ('{\n   "id":..."\n}\n', None)
+E     
+E     At index 1 diff: 'session_review_original' != None
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_storage_migration.py::test_actual_backup_script_can_clear_legacy_session_without_changing_receipt
+============================== 1 failed in 0.40s ===============================

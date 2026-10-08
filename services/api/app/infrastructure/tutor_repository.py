@@ -68,8 +68,8 @@ class TutorRepository:
     @contextmanager
     def _read_snapshot(self) -> Iterator[None]:
         # These synchronous read methods share one SQLite snapshot. Validate
-        # every owned Run fully once during this call, including nested thread
-        # and message checks. Never retain validation across calls/transactions,
+        # every owned Run fully once during one checked owner read scope, including
+        # nested thread and message checks. Never retain it beyond that scope/transaction,
         # nor reuse it for an untransactional read or after a local write.
         owns = self._checked_runs is None and self.connection.in_transaction
         if owns:

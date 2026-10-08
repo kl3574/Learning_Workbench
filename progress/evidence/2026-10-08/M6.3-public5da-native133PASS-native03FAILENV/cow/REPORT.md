@@ -1,0 +1,3 @@
+# Bounded one-file reflink probe: actual FAIL
+
+The existing owned06 target .rustc_info.json was a non-symlink regular1068B file, fullmode0664, SHA48976d56a9e8ad72db97ee0ff2064bd194f294190ebedbcc765ad9e9d1145d6e. Preflight actually returned0. cp --archive --reflink=always returned1; complete stderr reports Operation not supported. No fallback copy, hardlink, mutation of clone, whole target clone or Cargo followed. The original metadata bytes/hash/fullmode/inode remain unchanged. The failed destination is retained as evidence. This proves failure for the named file/command only; no global filesystem, available capacity, complete target cloning or Cargo cache reuse conclusion is inferred.

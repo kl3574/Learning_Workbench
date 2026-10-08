@@ -1,0 +1,63 @@
+from pathlib import Path
+import hashlib,json,subprocess,stat,datetime,re
+B=Path('$HOME/.cache/learning-workbench-acceptance')
+P=B/'m63-current93c-locked-complete-python-after-interruption-private-oct08'
+R=B/'m63-current93c-full-python-implementation-oct08'
+O=B/'m63-grading-snapshot-root-normal-integration-oct08/DETACHED-ORIGINAL-COMPLETE-PYTHON-ROOT-ADMISSION.json'
+assert not O.exists()
+H=lambda b:hashlib.sha256(b).hexdigest()
+load=lambda n:json.loads((P/n).read_bytes())
+m=load('MANIFEST.json'); assert len(m['finite_members'])==m['finite_member_count']==66
+names=[x['name'] for x in m['finite_members']]; assert len(set(names))==66
+for x in m['finite_members']:
+ p=P/x['name']; assert p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(P.resolve())
+ b=p.read_bytes(); assert (len(b),H(b))==(x['size'],x['sha256'])
+assert {str(p.relative_to(P)) for p in P.rglob('*') if p.is_file()}==set(names)|{'MANIFEST.json','SEAL-RECEIPT.json'}
+seal=load('SEAL-RECEIPT.json'); assert seal['manifest']=={'size':(P/'MANIFEST.json').stat().st_size,'sha256':H((P/'MANIFEST.json').read_bytes())}
+assert seal['manifest']['sha256']=='9c0b925382bc7e11c8eb776732e69c2644565cdf132fc388c6893ff68f16ed99'
+a=(P/'01-complete-python.before-map.json').read_bytes(); z=(P/'01-complete-python.after-map.json').read_bytes(); assert a==z and H(a)=='e97793e19953f9b6c41950cebadefc8fe2b27d9cb910565d9ad9fcd6b2144f71'
+d=json.loads(a); C='93c44303f9635067d2fae44a40986ba947e75e21'; assert d['head']==C and d['tracked_engineering_count']==1565 and d['excluded_literal_prefix']=='progress/'
+git=lambda *v:subprocess.check_output(['git',*v],cwd=R)
+assert git('rev-parse','HEAD').decode().strip()==C
+assert not git('status','--porcelain','-uall')
+tree={}
+for line in git('ls-tree','-rz',C).split(b'\0'):
+ if not line:continue
+ left,name=line.split(b'\t');mode,kind,blob=left.decode().split();name=name.decode()
+ if not name.startswith('progress/'):tree[name]={'mode':mode,'kind':kind,'blob':blob}
+assert tree==d['tree'] and len(tree)==1565
+ids=list(dict.fromkeys(x['blob'] for x in tree.values())); raw=subprocess.check_output(['git','cat-file','--batch'],cwd=R,input=('\n'.join(ids)+'\n').encode()); blobs={}; i=0
+for expected in ids:
+ j=raw.index(b'\n',i);blob,kind,size=raw[i:j].decode().split();size=int(size);assert blob==expected and kind=='blob'
+ b=raw[j+1:j+1+size];assert raw[j+1+size:j+2+size]==b'\n';blobs[blob]=b;i=j+2+size
+assert i==len(raw)
+for name,x in tree.items():
+ b=blobs[x['blob']]; live=d['live'][name]; index=d['index'][name]; p=R/name; q=p.lstat();assert stat.S_ISREG(q.st_mode)
+ assert index=={'mode':x['mode'],'blob':x['blob'],'stage':'0'}
+ assert live['git_blob_from_live']==x['blob'] and live['git_mode']==x['mode'] and (len(b),H(b))==(live['size'],live['sha256'])
+ assert p.read_bytes()==b and f'{stat.S_IMODE(q.st_mode):04o}'==live['full_permission_mode']
+assert H(blobs[tree['PRODUCT_DESIGN.md']['blob']])=='b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec'
+cmd=load('01-complete-python.command.json'); receipt=load('01-complete-python.receipt.json'); rb=load('READBACK.json')
+assert cmd['argv']==receipt['argv']==['uv','run','--frozen','--offline','--no-sync','pytest']
+assert receipt['actualexit']==0 and receipt['owned_child_waited_terminal'] and receipt['single_launch'] and not receipt['metadata_errors']
+assert cmd['environment_overrides']==receipt['environment_overrides']=={'TMPDIR':str(B/'m63-current93c-private-temp-for-storage-isolated-gates-oct08/python')}
+logs={}
+for n in ['stdout','stderr']:
+ b=(P/('01-complete-python.'+n)).read_bytes();assert {'size':len(b),'sha256':H(b)}==receipt[n];logs[n]={'size':len(b),'sha256':H(b)}
+b=(P/'01-complete-python.stdout').read_bytes(); lines=b.splitlines(keepends=True);text=b.decode()
+assert 'collected 4595 items' in text and re.search(r'^=+ 4593 passed, 2 skipped, 3 warnings in 3081\.36s \(0:51:21\) =+$',text,re.M)
+assert not re.search(r'^=+ (FAILURES|ERRORS)',text,re.M) and logs['stderr']['size']==0
+bindings=[];offset=0
+for num,line in enumerate(lines,1):
+ if b'SKIPPED [1]' in line or b'4593 passed, 2 skipped' in line or b'collected 4595 items' in line:
+  bindings.append({'line':num,'byte_start':offset,'byte_end':offset+len(line),'sha256':H(line),'text':line.decode().rstrip('\n')})
+ offset+=len(line)
+assert offset==len(b) and len(bindings)==4
+assert len(rb['actual_pytest_reported_skip_details'])==2
+for x in rb['actual_pytest_reported_skip_details']:
+ assert x['actual_stdout_line'] in text and x['actual_reason'].startswith('BLOCKED_ENVIRONMENT:')
+ src=blobs[tree[x['path']]['blob']].decode().splitlines();assert x['actual_reason'] in src[x['line']-1]
+for x in rb['owned_recorder_child_and_all_observed_descendants_final_process_observations']:
+ assert not x['active'] and not x['exists'] and not Path('/proc',str(x['pid'])).exists()
+result={'recorded_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'independent_root_admission':'PASS','finite_manifest_members':66,'manifest_sha256':H((P/'MANIFEST.json').read_bytes()),'actual_original_full_python_exit':0,'actual_counts':{'passed':4593,'skipped':2,'warnings':3,'collected':4595},'fixed_source':C,'all1565_original_Git_index_live_maps_and_current_live_bytes_exact':True,'log_bindings':bindings,'logs':logs,'source_map_sha256':H(a),'original_failures_interrupted_run_and_numeric_boundaries':'retained; numeric BLOCKED_ENVIRONMENT, native NOT_RUN, M6.3 NOT_ACCEPTED','model_calls_by_root':0,'scope':'runtime locked source 93c; ignored dependency file maps NOT_CAPTURED'}
+O.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'admission':'PASS','actual_full_python_exit':0,'counts':result['actual_counts'],'output':str(O),'sha256':H(O.read_bytes())}))

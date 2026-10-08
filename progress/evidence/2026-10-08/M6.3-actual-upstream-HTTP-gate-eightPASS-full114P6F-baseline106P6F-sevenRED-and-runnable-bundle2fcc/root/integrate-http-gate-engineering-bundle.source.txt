@@ -1,0 +1,15 @@
+from pathlib import Path
+import json,hashlib,subprocess,datetime
+B=Path('$HOME/.cache/learning-workbench-acceptance');P=B/'m63-grading-snapshot-root-normal-integration-oct08';R=B/'m62-public-safe-oct02';O=P/'http-gate-engineering-normal-ff-integration';O.mkdir(mode=0o700)
+H=lambda b:hashlib.sha256(b).hexdigest();old='cfb8ffe22355b8b4acc1ff8ef7ef74fc84fd7693';new='2fcc7b187314e6a7c9dedbf7c06cb1bd3bbf19cf';git=lambda *v:subprocess.check_output(['git',*v],cwd=R)
+assert git('rev-parse','HEAD').decode().strip()==old and not git('status','--porcelain','-uall')
+admit=json.loads((P/'HTTP-GATE-ENGINEERING-BUNDLE-ROOT-ADMISSION.json').read_bytes());assert admit['candidate_commit']==new and admit['independent_root_admission']=='PASS'
+review=B/'m63-http-gate-bundle-independent-review-oct08-9r_a9s4y/REPORT.md';assert H(review.read_bytes())=='f6d76b5d7c82c9efaf98efe7eeece1628a2dafc8da98e23c7f8c5b5e2a3aa90d'
+expected=sorted(x['path'] for x in admit['six_committed_tested_files_exact']);assert sorted(git('diff','--name-only',old,new).decode().splitlines())==expected and len(expected)==6
+argv=['git','merge','--ff-only',new];command={'argv':argv,'cwd':str(R),'started_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()};(O/'command.json').write_text(json.dumps(command,indent=2)+'\n');p=subprocess.run(argv,cwd=R,capture_output=True)
+(O/'stdout').write_bytes(p.stdout);(O/'stderr').write_bytes(p.stderr);receipt={'actual_exit':p.returncode,'finished_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'stdout_sha256':H(p.stdout),'stderr_sha256':H(p.stderr)};(O/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');assert p.returncode==0
+assert git('rev-parse','HEAD').decode().strip()==new and not git('status','--porcelain','-uall')
+assert git('diff','--name-only',old,new,'--','progress').decode().strip()==''
+for x in admit['six_committed_tested_files_exact']:assert H((R/x['path']).read_bytes())==x['sha256']
+assert H((R/'PRODUCT_DESIGN.md').read_bytes())=='b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec'
+value={'actual_ff_merge_exit':0,'old':old,'new':new,'new_files':expected,'old_all_tracked_Git_blobs_modes_unchanged':True,'all_prior_progress_Git_blobs_modes_unchanged':True,'spec_unchanged':True,'engineering_source_count_after':1571,'runtime_source_count':1565,'runtime_anchor':'93c44303f9635067d2fae44a40986ba947e75e21','canonical_runtime_delta':['.gitattributes',*expected],'qualification':'six unused engineering bundle files independentlytested; exact archive-only attributes rule; no wholecurrent1571 acceptance borrowed','production':'NOT_ADMITTED','remote_sourcepush_merge_release_deploy':False};(O/'READBACK.json').write_text(json.dumps(value,indent=2)+'\n');print(json.dumps(value))

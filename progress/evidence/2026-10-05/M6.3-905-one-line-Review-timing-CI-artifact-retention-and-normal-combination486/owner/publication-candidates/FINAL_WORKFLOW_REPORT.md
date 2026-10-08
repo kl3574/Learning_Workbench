@@ -1,0 +1,7 @@
+# Final workflow delivery delta
+
+Final clean905eccdd667001ec8e545cb534d5282ef6949836 extends testedc02e9e5c73d7da5e8e1617731fbefdf94f44f0e8 with one line only: the existing failure-artifact path whitelist now includes `${{ runner.temp }}/learning-workbench-e2e-results/**/review-history-timing.json`. All other workflow bytes, if condition, action pin, retention, retries/workers/budget, other paths and source are unchanged. Relative to35aebd, final owner scope is exactly2paths: tests/e2e/review.spec.ts and .github/workflows/ci.yml. SpecSHA remainsb140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec.
+
+The exact-line-removal static check and git diff check each exit0, bound to final905 with full1524 before/after inputs. Sealing rereads all1524 current files and Git blobs; source is clean. Native was not rerun on905. The actual Review test file is byte-identical to the one tested once on c02e (1PASS), and that original raw/static/native seal remains unchanged. This is qualified test-source continuity, not a new native execution result. Actual next CI failure upload and artifact retrieval remain NOT_RUN. Original CI cause is still UNKNOWN. No merge/push/canonical change was performed.
+
+Only exact listed candidates are admitted. No runtime body, screenshot, database/profile/key/cache or unspecified file is included. The original c02e64-candidate evidence is a separate retained package, hash-bound by PRIOR_C02E_SEAL_BINDING.json; no old report or receipt was rewritten.

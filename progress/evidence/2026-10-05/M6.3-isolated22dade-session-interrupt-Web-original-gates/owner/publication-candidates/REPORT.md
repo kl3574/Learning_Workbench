@@ -1,0 +1,9 @@
+# Session interrupt UI — fixed 22dade evidence
+
+Base 35aebd; final 22dade. Eight Web source/test paths only; specification/backend/config/lock unchanged. Explicit interruption uses the existing session endpoint, original CAS/body/key and actor-bound durable journal. Historical ACK remains distinct from fresh current-session/control GET. No implicit POST on reload, no rebuild of 412 commands, other actor commands remain read-only.
+
+First three attempted baseline stages failed before tests collected (toolchain/module/temp transform); these are not product RED. Fourth baseline actually failed four missing-button tests. The complete component test bytes at af20 and 684 are identical, then those original four passed. First strict check actually failed two TypeScript diagnostics; final22 repairs callback narrowing and unused helper and adds negative tests. Final component/wire/journal selection: 127 passed / four files. Complete Web: 1421 passed / 167 files. Strict/diff/build exit0. Original large-chunk build advisory retained.
+
+All 11 stages retain original receipts and both complete 1525-input maps. Each historical map is bound to mode/type/Git object/size/SHA, and final live source is exact and clean. Original four-failure raw synthetic DOM is private; only failure names/counts and its unchanged raw SHA are admitted. The current runner hash does not prove the historical runner bytes: original receipts did not capture runner SHA, and it changed to use private TMPDIR after early attempts. Do not retroactively infer it.
+
+Separate bounded real Chrome validation and complete native run have separate packets. This packet does not prove real Provider/model/physical Broker/numeric isolation, CI firstReview root cause, whole M6.3, or M7. Both public35ae original browser CI failures remain FAIL. No model calls, push, merge, or release by this sealer.

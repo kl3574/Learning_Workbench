@@ -58,14 +58,15 @@ class TutorService:
         with self.database.transaction(immediate=False) as connection:
             self.context.check_access(connection, identity)
             repo = TutorRepository(connection, identity.workspace_id)
-            if run_id is not None:
-                self._check_run(connection, identity, repo, run_id)
-                source = repo.source_state(run_id)
-                repo.messages(source.input.request.request.thread_id)
-            elif thread_id is not None:
-                thread = repo.thread(thread_id)
-                self.context.check_scope(connection, identity, thread.scope, thread.binding)
-                repo.messages(thread_id)
+            with repo._read_snapshot():
+                if run_id is not None:
+                    self._check_run(connection, identity, repo, run_id)
+                    source = repo.source_state(run_id)
+                    repo.messages(source.input.request.request.thread_id)
+                elif thread_id is not None:
+                    thread = repo.thread(thread_id)
+                    self.context.check_scope(connection, identity, thread.scope, thread.binding)
+                    repo.messages(thread_id)
 
     def create_thread(self, identity: SessionIdentity, body: TutorThreadCreate, key: str) -> TutorThreadView:
         with self.database.transaction() as connection:
@@ -107,24 +108,26 @@ class TutorService:
         with self.database.transaction(immediate=False) as connection:
             self.context.check_access(connection, identity)
             repo = TutorRepository(connection, identity.workspace_id)
-            self._check_run(connection, identity, repo, identifier)
-            source = repo.source_state(identifier)
-            repo.messages(source.input.request.request.thread_id)
-            return repo.view(identifier)
+            with repo._read_snapshot():
+                self._check_run(connection, identity, repo, identifier)
+                source = repo.source_state(identifier)
+                repo.messages(source.input.request.request.thread_id)
+                return repo.view(identifier)
 
     def events(self, identity: SessionIdentity, identifier: str, after_seq: int) -> list[TutorSSEEvent]:
         with self.database.transaction(immediate=False) as connection:
             self.context.check_access(connection, identity)
             repo = TutorRepository(connection, identity.workspace_id)
-            self._check_run(connection, identity, repo, identifier)
-            source = repo.source_state(identifier)
-            repo.messages(source.input.request.request.thread_id)
-            view = repo.view(identifier)
-            if type(after_seq) is not int or after_seq < 0:
-                raise ApiError(400, 'CURSOR_INVALID', '事件游标必须是非负整数。')
-            if after_seq > view.run.last_seq:
-                raise ApiError(409, 'CURSOR_AHEAD', '事件游标超过已持久记录。')
-            return repo.events_raw(identifier)[after_seq:after_seq + 200]
+            with repo._read_snapshot():
+                self._check_run(connection, identity, repo, identifier)
+                source = repo.source_state(identifier)
+                repo.messages(source.input.request.request.thread_id)
+                view = repo.view(identifier)
+                if type(after_seq) is not int or after_seq < 0:
+                    raise ApiError(400, 'CURSOR_INVALID', '事件游标必须是非负整数。')
+                if after_seq > view.run.last_seq:
+                    raise ApiError(409, 'CURSOR_AHEAD', '事件游标超过已持久记录。')
+                return repo.events_raw(identifier)[after_seq:after_seq + 200]
 
     def cancel(self, identity: SessionIdentity, identifier: str, body: TutorRunCancel, key: str) -> TutorRunControlView:
         # Pure control is allowed by workspace ownership even when subject output

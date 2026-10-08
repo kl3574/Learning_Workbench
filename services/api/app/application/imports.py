@@ -17,6 +17,7 @@ from packages.contracts.budgets import ImportBudgets
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
 from packages.contracts.validation import ENTITY_MODELS, PublishedModel
 
+from ..codex_turn_dto import CodexArtifactImportWrite
 from ..import_dto import (
     BlockDraftPayload, CandidateSummary, DownloadArtifact, ImportCancelRequest, ImportCancelResponse,
     ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged,
@@ -26,10 +27,13 @@ from ..infrastructure.blobs import BlobStore
 from ..infrastructure.content_repository import ContentRepository, damaged, missing, reference
 from ..infrastructure.database import Database, utc_now
 from ..infrastructure.idempotency import execute_idempotent
+from ..infrastructure.import_codex_repository import CodexImportRepository, codex_import_damaged
 from ..infrastructure.import_mapping import object_key, remap_import
 from ..infrastructure.import_repository import ImportRepository, identifier, json_object, json_text
 from ..infrastructure.provenance_repository import ProvenanceRepository
 from ..infrastructure.security import SessionIdentity, author_execution_identity, current_session_identity, guard_subject_access
+from .import_codex_models import (CodexArtifactSourcePort, CheckedCodexArtifactSource, CodexImportBinding,
+    CodexImportRecord, CheckedCodexImportStage, CODEX_SOURCE_RIGHTS, codex_source_warning)
 from .content import ContentService
 from .errors import ApiError
 from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
@@ -81,6 +85,7 @@ class ImportService:
             if set(original) != {'import_id', 'metadata'}:
                 raise damaged()
             source = repository.load(original['import_id'])
+            self.check_codex_source(connection, identity.workspace_id, source['id'])
             self._private(identity, source)
             self._guard_preview(repository, identity, source)
             preview = self._preview_data(source)
@@ -166,38 +171,220 @@ class ImportService:
                     if not isinstance(target_value, dm.Course):
                         raise invalid()
                     target = reference(target_value).model_dump(mode="json")
-                info = self.blobs.write(data, expected_sha256=digest)
-                repository.add_blob(info)
-                import_id, source_id, job_id, artifact_id = (identifier(prefix) for prefix in ("import", "source", "job", "artifact"))
-                from .import_parsing import detect_import_visibility
-                archive_detected = zipfile.is_zipfile(io.BytesIO(data))
-                raw_visibility = "author_private" if archive_detected or kind == "docx" else detect_import_visibility(data, kind, filename)
-                media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-                now = utc_now()
-                source_metadata = {"artifact_id": artifact_id, "filename": filename, "visibility": raw_visibility,
-                                   "visibility_verified": False, "warnings": [], "origin": "user_supplied"}
-                repository.connection.execute(
-                    "INSERT INTO sources(id,workspace_id,blob_sha256,media_type,title,rights,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
-                    (source_id, identity.workspace_id, digest, media_type, filename, "user_supplied; rights_not_verified", json_text(source_metadata), now),
-                )
-                job_input = {"source_id": source_id, "kind": kind, "filename": filename, "target_ref": target, "archive_detected": archive_detected, "budgets": asdict(self.database.settings.import_budgets)}
-                repository.connection.execute(
-                    "INSERT INTO jobs(id,workspace_id,kind,status,revision,input_sha256,input_json,created_at,updated_at) VALUES(?,?,'import','queued',1,?,?,?,?)",
-                    (job_id, identity.workspace_id, digest, json_text(job_input), now, now),
-                )
-                repository.artifact(info=info, filename=filename, media_type=media_type, visibility=raw_visibility,
-                                    profile="import_original", job_id=job_id, artifact_id=artifact_id)
-                repository.connection.execute(
-                    "INSERT INTO ingestion_imports(id,workspace_id,source_id,job_id,input_sha256,status,created_at) VALUES(?,?,?,?,?,'staged',?)",
-                    (import_id, identity.workspace_id, source_id, job_id, digest, now),
-                )
-                repository.event(job_id, "queued", {"status": "queued", "revision": 1})
-                repository.connection.execute("INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)",
-                                              (identifier("outbox"), "import.queued", json_text({"job_id": job_id, "workspace_id": identity.workspace_id})))
-                return ImportStaged(import_id=import_id, job=dm.JobRef(id=job_id, status="queued"), input_sha256=digest).model_dump(mode="json")
+                staged, _ = self._stage_one(repository, identity, data=data, filename=filename, kind=kind, target=target)
+                return staged.model_dump(mode='json')
             result = execute_idempotent(repository.connection, actor=identity.workspace_id, route="POST /imports", key=key,
                                         payload={"input_sha256": digest, "filename": filename, "kind": kind, "target_course_id": target_course_id}, operation=operation)
             return ImportStaged.model_validate(result)
+
+    def stage_codex_artifacts(self, conn: sqlite3.Connection, identity: SessionIdentity, *, session_id: str,
+                              body: CodexArtifactImportWrite, aggregate_job_id: str,
+                              source: CodexArtifactSourcePort) -> tuple[CodexImportBinding, ...]:
+        """Read checked Artifact bytes, then stage the complete selection in the caller TX."""
+        from .authoring_context import AuthoringContext
+
+        current = current_session_identity(conn, identity)
+        AuthoringContext.check_access(conn, current)
+        request = CodexArtifactImportWrite.model_validate(body.model_dump())
+        selected = source.read_selected_artifacts(conn, current, session_id, request)
+        AuthoringContext.check_access(conn, current_session_identity(conn, identity))
+        if (type(selected) is not tuple or len(selected) != len(request.artifact_ids)
+                or any(type(item) is not CheckedCodexArtifactSource for item in selected)):
+            raise codex_import_damaged()
+        bindings: list[CodexImportBinding] = []
+        for item, artifact_id in zip(selected, request.artifact_ids, strict=True):
+            if (item.workspace_id != current.workspace_id or item.actor_session_id != current.id
+                    or item.session_id != session_id or item.turn_id != request.turn_id
+                    or item.manifest_sha256 != request.expected_manifest_sha256 or item.artifact_id != artifact_id
+                    or type(item.import_kind) is not str or item.import_kind not in {'markdown', 'html', 'learnpack'}
+                    or type(item.data) is not bytes or type(item.artifact_size) is not int
+                    or item.artifact_size != len(item.data) or sha256_bytes(item.data) != item.artifact_sha256
+                    or type(item.filename) is not str or not item.filename or safe_filename(item.filename) != item.filename
+                    or type(item.media_type) is not str or not item.media_type
+                    or any(ord(char) < 32 for char in item.media_type)):
+                raise codex_import_damaged()
+            if not item.data or len(item.data) > self.database.settings.max_upload_bytes:
+                raise ApiError(413, 'IMPORT_SIZE_INVALID', '原件必须非空且不超过配置的大小预算。')
+            try:
+                bindings.append(CodexImportBinding(version='codex-import-binding-v1',
+                    workspace_id=item.workspace_id, actor_session_id=item.actor_session_id,
+                    session_id=item.session_id, turn_id=item.turn_id, source_job_id=item.source_job_id,
+                    terminal_receipt_sha256=item.terminal_receipt_sha256, manifest_id=item.manifest_id,
+                    manifest_sha256=item.manifest_sha256, artifact_id=item.artifact_id,
+                    artifact_sha256=item.artifact_sha256, artifact_size=item.artifact_size,
+                    aggregate_job_id=aggregate_job_id, import_id=identifier('import'),
+                    import_job_id=identifier('job'), source_id=identifier('source')))
+            except ValueError:
+                raise codex_import_damaged() from None
+        if len({(item.source_job_id, item.terminal_receipt_sha256, item.manifest_id) for item in selected}) != 1:
+            raise codex_import_damaged()
+        if sum(item.artifact_size for item in selected) > 16777216:
+            raise ApiError(413, 'IMPORT_SIZE_INVALID', '所选原件总量超过预算。')
+        repository = ImportRepository(conn, current.workspace_id)
+        records = []
+        conn.execute('SAVEPOINT codex_import_stage')
+        try:
+            for item, binding in zip(selected, bindings, strict=True):
+                _, record = self._stage_one(repository, current, data=item.data, filename=item.filename,
+                    kind=item.import_kind, target=None, codex_binding=binding, media_type=item.media_type)
+                assert record is not None
+                records.append(record)
+            CodexImportRepository(conn, current.workspace_id).register(aggregate_job_id, records)
+            self.check_codex_bindings(conn, current.workspace_id, tuple(bindings))
+            AuthoringContext.check_access(conn, current_session_identity(conn, identity))
+        except BaseException:
+            conn.execute('ROLLBACK TO codex_import_stage')
+            conn.execute('RELEASE codex_import_stage')
+            raise
+        conn.execute('RELEASE codex_import_stage')
+        return tuple(bindings)
+
+    def check_codex_bindings(self, conn: sqlite3.Connection, workspace_id: str,
+                             expected: tuple[CodexImportBinding, ...]) -> tuple[CheckedCodexImportStage, ...]:
+        """Integrity-only Import facts; this port grants no current material access."""
+        if not expected or any(item.workspace_id != workspace_id for item in expected):
+            raise codex_import_damaged()
+        batch = CodexImportRepository(conn, workspace_id).batch(expected[0].aggregate_job_id)
+        if tuple(item.binding for item in batch.records) != expected:
+            raise codex_import_damaged()
+        result = []
+        for item in expected:
+            row = ImportRepository(conn, workspace_id).load(item.import_id)
+            record = self.check_codex_source(conn, workspace_id, item.import_id)
+            if record is None:
+                raise codex_import_damaged()
+            receipt = CodexImportRepository(conn, workspace_id).preview_receipt(record, row)
+            result.append(CheckedCodexImportStage(item, row['status'],
+                dm.JobRef(id=item.import_job_id, status=row['job_status']), receipt is not None, receipt))
+        return tuple(result)
+
+    def codex_aggregate_members(self, conn: sqlite3.Connection, workspace_id: str) -> set[str]:
+        """Integrity-only complete Import membership for the aggregate owner."""
+        repository = CodexImportRepository(conn, workspace_id)
+        aggregates = repository.aggregate_members()
+        for aggregate in aggregates:
+            self.check_codex_bindings(conn, workspace_id, tuple(item.binding for item in repository.batch(aggregate).records))
+        return aggregates
+
+    def cancel_codex_imports(self, conn: sqlite3.Connection, workspace_id: str,
+                            expected: tuple[CodexImportBinding, ...]) -> tuple[CheckedCodexImportStage, ...]:
+        """Called only after the Jobs owner admits same-workspace safety control; no material delivery."""
+        checked = self.check_codex_bindings(conn, workspace_id, expected)
+        repository = ImportRepository(conn, workspace_id)
+        conn.execute('SAVEPOINT codex_import_cancel')
+        try:
+            for item in checked:
+                if item.status not in {'committed', 'failed', 'cancelled'}:
+                    self._cancel(repository, repository.load(item.binding.import_id))
+            result = self.check_codex_bindings(conn, workspace_id, expected)
+        except BaseException:
+            conn.execute('ROLLBACK TO codex_import_cancel')
+            conn.execute('RELEASE codex_import_cancel')
+            raise
+        conn.execute('RELEASE codex_import_cancel')
+        return result
+
+    def check_codex_source(self, conn: sqlite3.Connection, workspace_id: str,
+                           import_id: str) -> CodexImportRecord | None:
+        """Check new-origin frozen facts; legacy Import records receive no new defaults."""
+        repository = ImportRepository(conn, workspace_id)
+        row = repository.load(import_id)
+        metadata, options = json_object(row['source_metadata']), json_object(row['input_json'])
+        record = CodexImportRepository(conn, workspace_id).record(import_id)
+        if record is None:
+            if ('codex_import_binding' in metadata or 'codex_import_binding' in options
+                    or metadata.get('origin') == 'codex_user_selected_unreviewed' or row['rights'] == CODEX_SOURCE_RIGHTS):
+                raise codex_import_damaged()
+            return None
+        binding = record.binding
+        if not isinstance(metadata.get('warnings'), list):
+            raise codex_import_damaged()
+        marker = sha256_bytes(canonical_bytes(binding))
+        artifact = conn.execute('SELECT * FROM artifacts WHERE id=? AND workspace_id=?',
+            (record.original_artifact_id, workspace_id)).fetchone()
+        job = conn.execute('SELECT kind,workspace_id,input_sha256 FROM jobs WHERE id=?', (binding.import_job_id,)).fetchone()
+        source = conn.execute('SELECT workspace_id,created_at FROM sources WHERE id=?', (binding.source_id,)).fetchone()
+        if (row['source_id'] != binding.source_id or row['job_id'] != binding.import_job_id
+                or row['blob_sha256'] != binding.artifact_sha256 or row['input_sha256'] != binding.artifact_sha256
+                or row['input_json'] != record.job_input_json or row['media_type'] != record.media_type
+                or row['title'] != record.filename or row['rights'] != CODEX_SOURCE_RIGHTS
+                or source is None or tuple(source) != (workspace_id, record.created_at)
+                or job is None or tuple(job) != ('import', workspace_id, binding.artifact_sha256)
+                or metadata.get('codex_import_binding') != marker or options.get('codex_import_binding') != marker
+                or metadata.get('origin') != 'codex_user_selected_unreviewed'
+                or metadata.get('filename') != record.filename or metadata.get('artifact_id') != record.original_artifact_id
+                or artifact is None or artifact['job_id'] != binding.import_job_id
+                or artifact['profile'] != 'import_original' or artifact['blob_sha256'] != binding.artifact_sha256
+                or artifact['visibility'] != metadata.get('visibility')
+                or json_object(artifact['manifest_json']) != {'version': 1, 'filename': record.filename,
+                    'media_type': record.media_type, 'size': binding.artifact_size, 'sha256': binding.artifact_sha256}
+                or metadata.get('warnings', []).count(codex_source_warning().model_dump(mode='json')) != 1):
+            raise codex_import_damaged()
+        info = repository.blob(binding.artifact_sha256)
+        if info.size != binding.artifact_size:
+            raise codex_import_damaged()
+        self.frozen_store(row).read(info.sha256, expected_size=info.size)
+        frozen = CodexImportRepository(conn, workspace_id)
+        frozen.check_events(record, row)
+        frozen.preview_receipt(record, row)
+        if row['parser_version'] is not None:
+            for digest in json_object(row['preview_json'])['bodies'].values():
+                body = repository.blob(digest)
+                self.frozen_store(row).read(body.sha256, expected_size=body.size)
+        return record
+
+    def _stage_one(self, repository: ImportRepository, identity: SessionIdentity, *, data: bytes,
+                   filename: str, kind: str, target: dict[str, Any] | None,
+                   codex_binding: CodexImportBinding | None = None, media_type: str | None = None
+                   ) -> tuple[ImportStaged, CodexImportRecord | None]:
+        digest = sha256_bytes(data)
+        info = self.blobs.write(data, expected_sha256=digest)
+        repository.add_blob(info)
+        if codex_binding is None:
+            import_id, source_id, job_id, artifact_id = (identifier(prefix) for prefix in ("import", "source", "job", "artifact"))
+        else:
+            import_id, source_id, job_id = codex_binding.import_id, codex_binding.source_id, codex_binding.import_job_id
+            artifact_id = identifier('artifact')
+        from .import_parsing import detect_import_visibility
+        archive_detected = zipfile.is_zipfile(io.BytesIO(data))
+        raw_visibility = "author_private" if archive_detected or kind == "docx" else detect_import_visibility(data, kind, filename)
+        media_type = media_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        now = utc_now()
+        source_metadata = {"artifact_id": artifact_id, "filename": filename, "visibility": raw_visibility,
+                           "visibility_verified": False, "warnings": [], "origin": "user_supplied"}
+        rights = "user_supplied; rights_not_verified"
+        marker = sha256_bytes(canonical_bytes(codex_binding)) if codex_binding is not None else None
+        if marker is not None:
+            source_metadata.update(origin='codex_user_selected_unreviewed', codex_import_binding=marker,
+                warnings=[codex_source_warning().model_dump(mode='json')])
+            rights = CODEX_SOURCE_RIGHTS
+        repository.connection.execute(
+            "INSERT INTO sources(id,workspace_id,blob_sha256,media_type,title,rights,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
+            (source_id, identity.workspace_id, digest, media_type, filename, rights, json_text(source_metadata), now),
+        )
+        job_input = {"source_id": source_id, "kind": kind, "filename": filename, "target_ref": target, "archive_detected": archive_detected, "budgets": asdict(self.database.settings.import_budgets)}
+        if marker is not None:
+            job_input['codex_import_binding'] = marker
+        repository.connection.execute(
+            "INSERT INTO jobs(id,workspace_id,kind,status,revision,input_sha256,input_json,created_at,updated_at) VALUES(?,?,'import','queued',1,?,?,?,?)",
+            (job_id, identity.workspace_id, digest, json_text(job_input), now, now),
+        )
+        repository.artifact(info=info, filename=filename, media_type=media_type, visibility=raw_visibility,
+                            profile="import_original", job_id=job_id, artifact_id=artifact_id)
+        repository.connection.execute(
+            "INSERT INTO ingestion_imports(id,workspace_id,source_id,job_id,input_sha256,status,created_at) VALUES(?,?,?,?,?,'staged',?)",
+            (import_id, identity.workspace_id, source_id, job_id, digest, now),
+        )
+        repository.event(job_id, "queued", {"status": "queued", "revision": 1})
+        repository.connection.execute("INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)",
+                                      (identifier("outbox"), "import.queued", json_text({"job_id": job_id, "workspace_id": identity.workspace_id})))
+        staged = ImportStaged(import_id=import_id, job=dm.JobRef(id=job_id, status="queued"), input_sha256=digest)
+        record = None if codex_binding is None else CodexImportRecord(version='codex-import-record-v1',
+            binding=codex_binding, original_artifact_id=artifact_id, filename=filename, media_type=media_type,
+            job_input_json=json_text(job_input), created_at=now,
+            initial_event_json=json_text(dict(repository.connection.execute(
+                'SELECT * FROM job_events WHERE job_id=? AND seq=1', (job_id,)).fetchone())))
+        return staged, record
 
     @staticmethod
     def frozen_budgets(row: sqlite3.Row) -> ImportBudgets:
@@ -230,6 +417,7 @@ class ImportService:
     def preview(self, identity: SessionIdentity, id: str) -> ImportPreview:
         with self._access(identity) as repository:
             row = repository.load(id)
+            self.check_codex_source(repository.connection, identity.workspace_id, row['id'])
             self._private(identity, row, pending_ok=True)
             self._guard_preview(repository, identity, row)
             data = self._public_preview_data(identity, row)
@@ -262,6 +450,7 @@ class ImportService:
     def cancel(self, identity: SessionIdentity, id: str, request: ImportCancelRequest, key: str | None) -> ImportCancelResponse:
         with self._access(identity) as repository:
             row = repository.load(id)
+            self.check_codex_source(repository.connection, identity.workspace_id, row['id'])
             self._private(identity, row, pending_ok=True)
             self._input_matches(row, request.expected_input_sha256)
             def operation() -> dict[str, Any]:
@@ -273,6 +462,7 @@ class ImportService:
     def cancel_job(self, identity: SessionIdentity, id: str, request: JobCancelRequest, key: str | None) -> JobSnapshot:
         with self._access(identity) as repository:
             row = repository.from_job(id)
+            self.check_codex_source(repository.connection, identity.workspace_id, row['id'])
             self._private(identity, row, pending_ok=True)
             def operation() -> dict[str, Any]:
                 if row["job_revision"] != request.expected_revision:
@@ -295,6 +485,7 @@ class ImportService:
     def job(self, identity: SessionIdentity, id: str) -> JobSnapshot:
         with self._access(identity) as repository:
             row = repository.from_job(id)
+            self.check_codex_source(repository.connection, identity.workspace_id, row['id'])
             self._private(identity, row, pending_ok=True)
             self._guard_preview(repository, identity, row)
             return self._job_snapshot(repository, identity, row)
@@ -339,6 +530,7 @@ class ImportService:
             raise missing()
         candidate = json_object(draft["candidate_json"])
         row = repository.load(candidate["import_id"])
+        self.check_codex_source(repository.connection, identity.workspace_id, row["id"])
         self._private(identity, row)
         self._guard_preview(repository, identity, row)
         if id not in self._preview_data(row)["draft_ids"]:
@@ -392,6 +584,12 @@ class ImportService:
             if row is None:
                 raise missing()
             metadata = json_object(row["metadata_json"])
+            imported = repository.connection.execute('SELECT id FROM ingestion_imports WHERE source_id=? AND workspace_id=?',
+                (id, identity.workspace_id)).fetchone()
+            if imported is not None:
+                self.check_codex_source(repository.connection, identity.workspace_id, imported['id'])
+            elif 'codex_import_binding' in metadata or row['rights'] == CODEX_SOURCE_RIGHTS:
+                raise codex_import_damaged()
             _, artifact = self._artifact(repository, identity, metadata["artifact_id"])
             if row["blob_sha256"] != artifact.sha256:
                 raise damaged()
@@ -424,6 +622,7 @@ class ImportService:
                 repository.connection, identity.workspace_id, row['job_id']) != 'import':
             raise unavailable_owner()
         imported = repository.from_job(row['job_id'])
+        self.check_codex_source(repository.connection, identity.workspace_id, imported['id'])
         self._artifact_origin(repository, imported, row, artifact)
         return self.frozen_store(imported).read(artifact.sha256, expected_size=artifact.size), artifact
 
@@ -521,6 +720,7 @@ class ImportService:
     def commit(self, identity: SessionIdentity, id: str, request: ImportCommitRequest, key: str | None) -> ImportCommitResponse:
         with self._access(identity) as repository:
             row = repository.load(id)
+            self.check_codex_source(repository.connection, identity.workspace_id, row['id'])
             self._private(identity, row)
             self._guard_preview(repository, identity, row)
             self._input_matches(row, request.expected_input_sha256)

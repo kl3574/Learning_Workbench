@@ -1,0 +1,194 @@
+{
+  "schema": "M63AuthoringOwnedUiBindCollisionEngineering/v1",
+  "observed_at": "2026-10-05T00:03:08.844992+00:00",
+  "status": "FIXED_SOURCE_AND_BOUNDED_OWNED_PROCESS_TESTS_READY_FOR_ROOT_REVIEW; NOT_ADOPTED",
+  "source": {
+    "worktree": "$HOME/.cache/learning-workbench-acceptance/m63-authoring-owned-bind-collision-oct05",
+    "branch": "fix/m63-authoring-owned-bind-collision-oct05",
+    "base": "68a280b9cf251bbf79c2ca188ac8b4aefe7562e0",
+    "head": "5fbfd5dff0fe37df61ac53d9a9a596cdd112b24b",
+    "tree": "4d75d37886f3ff4ef2f9446df9b9d420628f2fe1",
+    "clean_status": "",
+    "changed_paths": [
+      "tests/e2e/authoringRuntime.ts",
+      "tests/e2e/ownedStartup.node.ts",
+      "tests/e2e/ownedStartup.ts",
+      "tests/e2e/ownedStartupBounds.node.ts"
+    ],
+    "source": [
+      {
+        "path": "tests/e2e/authoringRuntime.ts",
+        "size": 6899,
+        "sha256": "0e849d013d88687baaa975de71aa922381aad264c2b3fd2fbed31500f1ce2b48",
+        "git_blob": "4943322930fe7fa8d0b080ec167e6c3b95367fb5"
+      },
+      {
+        "path": "tests/e2e/ownedStartup.ts",
+        "size": 5872,
+        "sha256": "82815ab16dac80e9985f8a1bff74534506482f678ed0e92b4296b3b96346d082",
+        "git_blob": "9d4f1f5a63ee5b619a5ed8eb568226bc0b9393ee"
+      },
+      {
+        "path": "tests/e2e/ownedStartup.node.ts",
+        "size": 1991,
+        "sha256": "426c92c9a668e94e40c95b0bf445f49dbfe4aee382a6dc382dcf1029123c53b3",
+        "git_blob": "900b0277af9c33dcfad051a43b0d7515ee20c096"
+      },
+      {
+        "path": "tests/e2e/ownedStartupBounds.node.ts",
+        "size": 8865,
+        "sha256": "abf9f7fba61ba11ccd8d061b5b7ca1d81d7d3ff09e39df58741b1e8ed3d28606",
+        "git_blob": "736e5569fb5b970c65b363a283513d6462e0a661"
+      }
+    ],
+    "patch_size": 24579,
+    "patch_sha256": "e150facd351527d8caa4437cd42da6dd21a05c2fcf38c5f3f8927dd47b77478e",
+    "frozen_source_authoring_sha256": "510baf66444824e0c63b53e4b846303f50ac447f25b45d423f3f8f1d4eb53cd9",
+    "same_red_test_bytes_exact": true,
+    "scope": "Four harness files only; products/DTO/API/dependencies/CI/specs unchanged by this commit; no canonical merge or remote write."
+  },
+  "confirmed_original_cause": {
+    "original_event": "pull_request",
+    "original_run_id": 37241158099,
+    "original_job_id": 111549989024,
+    "original_log_sha256": "038485bcec030dfa638bc1eabd90a596c8e3188896120aa88c9edf6ddde05c8c",
+    "original_failure_case": "tests/e2e/authoring.spec.ts:7:1 actual Authoring preparation diagnoses missing proof without dispatch and learner can recover safe cancellation",
+    "original_error_line": 838,
+    "confirmed": "Vite exited before owned readiness with Port 40581 is already in use.",
+    "competitor_identity": "UNKNOWN; no scan or process lookup performed",
+    "static_harness_risk": "availablePort releases an ephemeral port before child bind; selected UI port is not reserved while API startup proceeds. This permits a race window but does not identify which competitor took original port.",
+    "scope": "Test harness startup only; other Review/grading failures and original full-gate results remain separate.",
+    "original_case_timeout_ms": 30000,
+    "original_readiness_budget_ms": 20000,
+    "authorized_maximum_attempts": 2,
+    "retry_admission": "Actual nonzero exited UI child plus explicit target-port EADDRINUSE/Vite bind-collision diagnostic; no retry on API/general startup failure, unknown live result or HTTP readiness failure."
+  },
+  "behavior": {
+    "retry": "Exactly one retry, admitted only by a private typed collision from the already closed, nonzero, nonsignaled UI child and an explicit diagnostic for its selected port.",
+    "accepted_diagnostics": [
+      "Node EADDRINUSE identifying 127.0.0.1 and selected port",
+      "Vite exact Error: Port <selected port> is already in use line"
+    ],
+    "startup_deadline": "One original 20_000ms deadline shared by initial API/UI readiness and retry; fetch/pause bounded by remaining time. No per-attempt reset and no global case timeout changes.",
+    "owned_ui_readiness": "The owned Vite Local: http://127.0.0.1:<selected port>/ marker, with ANSI normalization, must be present before HTTP readiness is accepted; a live owned child must remain live when the response succeeds.",
+    "nonretry_failures": [
+      "API-stage failure including API EADDRINUSE",
+      "general startup exit",
+      "signal/zero exit or unknown live outcome",
+      "HTTP readiness error/nonready",
+      "different-port collision diagnostic"
+    ],
+    "cleanup": "AuthoringRuntime startup catches failures and closes only its retained owned API/UI/context before returning the original error; closed-child state is recorded after close/drained streams; process signals use only recorded groups created by owned().",
+    "port_race_scope": "The reserve-then-close allocation window still exists; bounded handling mitigates a proven bind collision without identifying or stopping a competitor. No collision-free allocation claim."
+  },
+  "validation": {
+    "RED": {
+      "status": "EXPECTED_FAIL",
+      "tests": 1,
+      "passed": 0,
+      "failed": 1,
+      "receipt": {
+        "exit_code": 1,
+        "elapsed_seconds": 0.20565131699549966,
+        "finished_at": "2026-10-04T23:49:37.296579+00:00",
+        "stdout_size": 1459,
+        "stdout_sha256": "a1273b8dd9ca4428d9ec72a0e3e899dcb770a6ae7111dcf223f8dbde091e244f",
+        "stderr_size": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "scope": "A necessary helper exposes the copied original readiness/ownership behavior and one startup attempt, while the AuthoringRuntime target is still unchanged at RED. This is a deterministic real-owned-process behavior reproduction, not a test/CI run of an unmodified 68a whole checkout.",
+      "source_snapshot": "red-source/"
+    },
+    "SAME_TEST_GREEN": {
+      "status": "PASS",
+      "tests": 1,
+      "passed": 1,
+      "failed": 0,
+      "receipt": {
+        "exit_code": 0,
+        "elapsed_seconds": 0.25741228699916974,
+        "finished_at": "2026-10-04T23:53:15.613622+00:00",
+        "same_test_bytes_exact": true,
+        "stdout_size": 224,
+        "stdout_sha256": "b5a60ddc490a99688594bcba946ee44245ca73b3fb9157f71063f8986812a201",
+        "stderr_size": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "same_test_file_sha256": "426c92c9a668e94e40c95b0bf445f49dbfe4aee382a6dc382dcf1029123c53b3",
+      "same_test_file_bytes_exact": true,
+      "note": "The first fix passed the exact RED test file. Final bounded run below also includes that unchanged test against the final source."
+    },
+    "FINAL_BOUNDS_GREEN": {
+      "status": "PASS",
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "receipt": {
+        "exit_code": 0,
+        "elapsed_seconds": 2.2000355580239557,
+        "finished_at": "2026-10-04T23:57:15.693819+00:00",
+        "stdout_size": 1152,
+        "stdout_sha256": "c22ceb3435f8d7b5fd638928aa8212cabcea6f3748d2b077d28b8b707817882a",
+        "stderr_size": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "coverage": [
+        "actual owned EADDRINUSE then successful reselection while collider remains listening",
+        "second collision stops after two total attempts with exactly shared deadline",
+        "actual bind error in Vite diagnostic format",
+        "general exit7 retains original error and cleanup without retry",
+        "API-stage EADDRINUSE cannot retry",
+        "live child printing collision remains nonready and is cleaned up without retry",
+        "another owner HTTP200 is not readiness for owned child without marker",
+        "owned HTTP503 remains failure with cleanup and no retry",
+        "wrong-port collision does not retry",
+        "selected-port colored Vite-format marker plus actual HTTP readiness, despite another owner HTTP200"
+      ],
+      "scope": "Pinned Node24 built-in tests using actual owned child processes and simple loopback servers; Vite-format output is generated by the ordinary Node test server, not a real Vite/product run."
+    },
+    "diff_check": {
+      "status": "PASS",
+      "tracked_tool_chunk": "323770",
+      "staged_tool_chunk": "4295c7",
+      "exit_code": 0
+    },
+    "commit_scope": {
+      "status": "PASS",
+      "clean_worktree": true,
+      "base_direct_parent": true,
+      "changed_paths_exact": [
+        "tests/e2e/authoringRuntime.ts",
+        "tests/e2e/ownedStartup.node.ts",
+        "tests/e2e/ownedStartup.ts",
+        "tests/e2e/ownedStartupBounds.node.ts"
+      ]
+    },
+    "actual_vite_authoring_runtime_product_api_browser": "NOT_RUN",
+    "full_gate_or_old_ci_rerun": "NOT_RUN",
+    "semantic_typescript_typecheck": "NOT_RUN"
+  },
+  "risk_and_limits": [
+    "Actual Vite output and AuthoringRuntime full API/UI startup were not executed in this task; root should review/integrate before such acceptance.",
+    "The original competitor process identity remains unknown; no scan, unknown-process signal, port-owner lookup, or host probe was used.",
+    "Only the Authoring owned UI bind-collision path is addressed; the three original unique browser cases/four failure occurrences remain historical facts, and Review/grading failure causes are not fixed or reclassified.",
+    "No global case budget was increased.",
+    "Product files, public DTO/API, dependencies, CI and specifications are not changed in the four-file commit.",
+    "No canonical/frozen/full-gate source tree was modified, merged, or remotely published; fixed source exists only on the new local branch/worktree.",
+    "Physical numeric, whole M6.3, M7 and full CI acceptance are not established."
+  ],
+  "execution_boundary": {
+    "node_executable": "$HOME/.cache/learning-workbench-acceptance/m62-public-safe-oct02/.toolchain/node-v24.21.0-linux-x64/bin/node",
+    "test_environment": "empty env",
+    "ordinary_owned_node_test_runs": 3,
+    "real_model_calls": 0,
+    "new_api_calls": 0,
+    "observer_invocations": 0,
+    "host_security_probes": 0,
+    "old_ci_reruns": 0,
+    "unknown_process_scans_or_kills": 0,
+    "source_fullgate_environment_reads": 0,
+    "remote_writes": 0,
+    "canonical_changes": 0
+  },
+  "root_adoption": "PENDING_ROOT_INDEPENDENT_REVIEW"
+}

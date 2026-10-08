@@ -1,0 +1,48 @@
+[WebServer] INFO:     Started server process [4045034]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:4045070) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:4045129) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/codex-bootstrap.spec.ts:91:1 › actual local bootstrap keeps explicit approval, original commands and current metadata across restart (7.6s)
+
+
+  1) tests/e2e/codex-bootstrap.spec.ts:91:1 › actual local bootstrap keeps explicit approval, original commands and current metadata across restart 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByRole('dialog', { name: '创作', exact: true }).getByRole('region', { name: '本地控制会话', exact: true }).getByText('尚未读取当前会话与本机原命令。', { exact: true })
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" getByRole('dialog', { name: '创作', exact: true }).getByRole('region', { name: '本地控制会话', exact: true }).getByText('尚未读取当前会话与本机原命令。', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '创作', exact: true }).getByRole('region', { name: '本地控制会话', exact: true }).getByText('尚未读取当前会话与本机原命令。', { exact: true })
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      40 |   await expect(panel.getByText('尚未读取当前会话与本机原命令。', { exact: true })).toBeVisible()
+      41 |   await panel.getByRole('button', { name: '读取本地会话记录', exact: true }).click()
+    > 42 |   await expect(panel.getByText('尚未读取当前会话与本机原命令。', { exact: true })).toHaveCount(0)
+         |                                                                     ^
+      43 |   return { dialog, panel }
+      44 | }
+      45 |
+        at openPanel ($HOME/.cache/learning-workbench-acceptance/m63-local-session-bootstrap-ui-oct03/tests/e2e/codex-bootstrap.spec.ts:42:69)
+        at $HOME/.cache/learning-workbench-acceptance/m63-local-session-bootstrap-ui-oct03/tests/e2e/codex-bootstrap.spec.ts:105:21
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m63-bootstrap-native-a2d9-oct03/native-output/codex-bootstrap-actual-loc-ae767-ent-metadata-across-restart/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m63-bootstrap-native-a2d9-oct03/native-output/codex-bootstrap-actual-loc-ae767-ent-metadata-across-restart/error-context.md
+
+  1 failed
+    tests/e2e/codex-bootstrap.spec.ts:91:1 › actual local bootstrap keeps explicit approval, original commands and current metadata across restart 

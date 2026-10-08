@@ -1,0 +1,9 @@
+# Spec axis
+
+P2 OPEN_STATIC, partial direct closure only. The actual called serialization globals and project model-validator bodies are not represented by the current profile identity. Exact locators and counterpaths are in REVIEW.md. This follows PRODUCT_DESIGN:1742 fixed runtime, :1744 complete frozen operation and executable identity. The shell-specific portion of :1744 is not imposed on the shell=None memory profile.
+
+Old/new separation: LiteralOperationProfile accepts v1/v2 without adding old-record fields; current() emits v2, so a v1 registration cannot satisfy available() equality. The old projection code is byte-identical. Operation envelope, reducer, decision/ACK models and historical owner read code are unchanged by this delta. The checked-in legacy fixture tests profile/closure/projection/result byte roundtrip; it is not a full old SQLite history or raw HTTP ACK oracle. No cross-database legacy execution test was performed here.
+
+Claim and result: codex_operation_execution.py:70-82 stores a local bound callable after current admission and invokes it only after committing started. The original method rechecks availability/closure; unknown results keep the started debit and cannot be reexecuted. This limits the former post-claim method-lookup substitution, without claiming protection against an arbitrary hostile process mutating memory.
+
+Source-only regression coverage inspected: class/instance replacement before claim, same original ACK after unavailable, no new start/debit, post-claim replacement not invoked, unknown recovery, late role change, schema/helper variation and old v1 denial. The escaped-surrogate hypothesis was not confirmed and is not a finding. Author test outcomes remain separately attributable and do not establish this review's runtime result.

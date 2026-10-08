@@ -1,0 +1,1341 @@
+diff --git a/services/api/app/application/codex_approvals.py b/services/api/app/application/codex_approvals.py
+index 28af1c89..92320cac 100644
+--- a/services/api/app/application/codex_approvals.py
++++ b/services/api/app/application/codex_approvals.py
+@@ -25,9 +25,15 @@ from .errors import ApiError
+ from .providers import validate_key
+ 
+ 
+-class CodexApprovalsService:
+-    def __init__(self, turns):
++from .codex_operation_models import SupportedOperation, SupportedCreated, OperationFinished
++from .codex_operation_profile import CodexOperationRegistry
++from .codex_operation_execution import CodexOperationExecution
++
++
++class CodexApprovalsService(CodexOperationExecution):
++    def __init__(self, turns, operations=None):
+         self.turns, self.database = turns, turns.database
++        self.operations = operations if operations is not None else CodexOperationRegistry()
+ 
+     def verify_history(self, conn, workspace, history):
+         if self.turns.outbound_owner is None:
+@@ -36,8 +42,7 @@ class CodexApprovalsService:
+         bootstrap = self.turns.bootstrap.checked_owned_sessions(conn, workspace)
+         return CodexApprovalRepository(conn, workspace).checked(history, provider, bootstrap)
+ 
+-    @staticmethod
+-    def control(state: CheckedApproval, turn):
++    def control(self, state: CheckedApproval, turn, conn=None, states=None, history=None):
+         value = state.control
+         validity = value.validity
+         if validity != 'closed':
+@@ -45,6 +50,14 @@ class CodexApprovalsService:
+                 validity = 'closed'
+             elif instant(utc_now()) >= instant(state.operation.expires_at):
+                 validity = 'expired'
++            elif state.supported and conn is not None:
++                try:
++                    self.admit_operation(conn, state.operation.workspace_id, state, states, history)
++                except ApiError as error:
++                    if error.code == 'CODEX_HISTORY_DAMAGED':
++                        raise
++                    validity = ('unavailable' if error.code == 'CODEX_RUNTIME_UNAVAILABLE' else
++                        'expired' if error.code in {'CODEX_TIMEOUT', 'CODEX_CONSENT_EXPIRED'} else 'changed')
+         return value.model_copy(update={'validity': validity})
+ 
+     def read_pending_operation(self, conn, identity, identifier):
+@@ -59,10 +72,13 @@ class CodexApprovalsService:
+             session_id=operation.session_id, turn_id=operation.turn_id, run_id=operation.job_id,
+             job=turn.control.job, job_revision=turn.control.job_revision, operation=operation.operation,
+             operation_sha256=content_sha256(operation), created_at=operation.created_at, expires_at=operation.expires_at,
+-            decision=state.control.decision, validity=self.control(state, turn).validity, execution='not_started',
++            decision=state.control.decision, validity=self.control(state, turn, conn, states, history).validity,
++            execution=state.finished.outcome if state.finished else 'started' if state.started else 'not_started',
+             decided_at=state.events[1].occurred_at if state.decided else None,
+-            started_at=None, finished_at=None, result_sha256=None,
+-            error_code=state.closed.reason if state.closed else None)
++            started_at=state.events[2].occurred_at if state.started else None,
++            finished_at=state.events[3].occurred_at if state.finished else None,
++            result_sha256=content_sha256(state.finished.result) if state.finished and state.finished.result else None,
++            error_code=state.finished.error_code if state.finished else state.closed.reason if state.closed else None)
+ 
+     def read(self, identity, identifier):
+         with self.database.transaction(immediate=False) as conn:
+@@ -95,23 +111,27 @@ class CodexApprovalsService:
+         if body.decision == 'approve_once':
+             if current.id != state.operation.actor_session_id:
+                 raise ApiError(403, 'POLICY_DENIED', '新操作者不能接管原操作批准。')
+-            raise ApiError(409, 'CODEX_OPERATION_UNSUPPORTED', '该回调缺少可核的完整执行闭包，只能拒绝。')
++            self.admit_operation(conn, current.workspace_id, state, states, history)
+         if state.decided is not None or state.closed is not None:
+             raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作已经决定或关闭。')
+         session, turn = self.turns._find(history, state.operation.turn_id)
+         if turn.control.execution != 'active' or session.active_turn_id != turn.control.id:
+             raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作已不在活跃任务中。')
+         ack = GenericApprovalDecisionAck(id=identifier, revision=2, actor_session_id=current.id,
+-            operation_sha256=body.operation_sha256, decision='decline', applied=True,
++            operation_sha256=body.operation_sha256, decision=body.decision, applied=True,
+             session_id=state.operation.session_id, turn_id=state.operation.turn_id,
+             run_id=state.operation.job_id, job=turn.control.job)
+         event = ApprovalDecided(kind='decided', command=ApprovalCommand(actor_session_id=current.id,
+             key=key, body=body, ack=ack))
+-        self._append(conn, current.workspace_id, history, state, event, utc_now())
++        now = utc_now()
++        if body.decision == 'approve_once' and instant(now) >= instant(state.operation.expires_at):
++            raise ApiError(409, 'CODEX_TIMEOUT', '原工具期限已过。')
++        self._append(conn, current.workspace_id, history, state, event, now)
+         # The ordinary Jobs owner records a request; this does not claim a
+         # remote cancellation or tool completion. The worker owns convergence.
+-        self.turns.request_stop(conn, current, turn.control.job.id,
+-            JobCancelRequest(expected_revision=turn.control.job_revision), 'approval-stop-'+identifier)
++        if body.decision == 'decline':
++            self.turns.request_stop(conn, current, turn.control.job.id,
++                JobCancelRequest(expected_revision=turn.control.job_revision), 'approval-stop-'+identifier)
+         self.turns._state(conn, current)
+         current_control_access(conn, current, write=False)
+         return ack
+@@ -173,7 +193,16 @@ class CodexApprovalsService:
+                 created_at=now, expires_at=expiry.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z'))
+             if conn.execute('SELECT 1 FROM approvals WHERE id=?', (operation.approval_id,)).fetchone() is not None:
+                 raise ApiError(409, 'CODEX_BINDING_INVALID', '新审批标识与既有事实冲突。')
+-            self._append(conn, workspace, history, None, ApprovalCreated(kind='created', operation=operation), now)
++            prepared = self.operations.prepare(workspace, turn_id, callback.request_text) if callback.method == 'command/requestApproval' else None
++            if prepared is not None:
++                closure, projected = prepared
++                supported = SupportedOperation.model_validate({**operation.model_dump(mode='json'),
++                    'version':'codex-supported-memory-operation-v1', 'operation':projected.model_dump(mode='json'),
++                    'closure':closure.model_dump(mode='json')})
++                event: ApprovalCreated | SupportedCreated = SupportedCreated(kind='created', operation=supported)
++            else:
++                event = ApprovalCreated(kind='created', operation=operation)
++            self._append(conn, workspace, history, None, event, now)
+             _, _, latest = self.turns._owned_state(conn, workspace)
+             self.verify_history(conn, workspace, latest)
+             return operation.approval_id
+@@ -190,5 +219,10 @@ class CodexApprovalsService:
+         states = self.verify_history(conn, workspace, history)
+         for state in states.values():
+             _, turn = self.turns._find(history, state.operation.turn_id)
+-            if state.operation.turn_id == turn_id and turn.control.execution == 'active' and state.decided is None and state.closed is None:
++            if state.operation.turn_id != turn_id or turn.control.execution != 'active' or state.closed or state.finished:
++                continue
++            if state.started is not None:
++                self._append(conn, workspace, history, state, OperationFinished(kind='finished',
++                    outcome='unknown', result=None, error_code='CODEX_OUTCOME_UNKNOWN'), utc_now())
++            elif state.decided is None or state.status == 'approved':
+                 self._append(conn, workspace, history, state, ApprovalClosed(kind='closed', reason=reason), utc_now())
+diff --git a/services/api/app/application/codex_operation_execution.py b/services/api/app/application/codex_operation_execution.py
+new file mode 100644
+index 00000000..bc226ee2
+--- /dev/null
++++ b/services/api/app/application/codex_operation_execution.py
+@@ -0,0 +1,109 @@
++"""Single owned memory-operation consumption; no HTTP execution entry point."""
++from abc import ABC, abstractmethod
++from typing import TYPE_CHECKING
++from .codex_operation_profile import CodexOperationRegistry
++if TYPE_CHECKING:
++    from .codex_turn import CodexTurnService
++    from ..infrastructure.database import Database
++
++from ..infrastructure.consent_repository import instant
++from ..infrastructure.database import utc_now
++from ..serialization import content_sha256
++from .codex_operation_models import SupportedOperation, OperationStarted, OperationFinished
++from .codex_operation_profile import LiteralOperationResult
++from .errors import ApiError
++
++
++class CodexOperationExecution(ABC):
++    turns: "CodexTurnService"
++    database: "Database"
++    operations: CodexOperationRegistry
++
++    @abstractmethod
++    def verify_history(self, conn, workspace, history): ...
++
++    @abstractmethod
++    def _append(self, conn, workspace, history, state, event, now): ...
++
++    def admit_operation(self, conn, workspace, state, states, history):
++        operation = state.operation
++        if not isinstance(operation, SupportedOperation):
++            raise ApiError(409, 'CODEX_OPERATION_UNSUPPORTED', '原操作没有受检执行闭包。')
++        session, turn = self.turns._find(history, operation.turn_id)
++        if state.closed or state.started or state.status == 'declined':
++            raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作已经关闭或消费。')
++        if (session.active_turn_id != operation.turn_id or turn.control.execution != 'active'
++                or turn.control.cancel_requested):
++            raise ApiError(409, 'CODEX_CANCELLED', '原任务已不再允许工具执行。')
++        if instant(utc_now()) >= instant(operation.expires_at):
++            raise ApiError(409, 'CODEX_TIMEOUT', '原工具期限已过。')
++        if not self.operations.available(operation.closure.profile):
++            raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '原内存操作解释器不可用。')
++        if self.turns.outbound_owner is None:
++            raise ApiError(409, 'CODEX_HISTORY_DAMAGED', '原外发 owner 不可用。')
++        provider, _, _ = self.turns.outbound_owner.admit_execution(conn, workspace, operation.turn_id, already_started=True)
++        if provider.started is None or provider.started.execution_owner_id != operation.execution_owner_id or provider.started.lease != operation.lease:
++            raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作执行实例不匹配。')
++        self.turns.verify_dispatch_lease(conn, workspace, operation.job_id, operation.lease)
++        used = sum(item.started is not None for item in states.values() if item.operation.turn_id == operation.turn_id)
++        if used >= operation.tools.max_tool_calls:
++            raise ApiError(409, 'CODEX_BUDGET_EXCEEDED', '原任务工具额度已消费。')
++        return used + 1
++
++    def execute_owned_operation(self, workspace, turn_id, owner, identifier):
++        # Private live-worker callback context is checked by the caller. Claim
++        # commits before the interpreter. A crash here can never justify replay.
++        with self.database.transaction() as conn:
++            _, _, history = self.turns._owned_state(conn, workspace)
++            states = self.verify_history(conn, workspace, history)
++            state = states.get(identifier)
++            if state is None or state.operation.turn_id != turn_id or state.operation.execution_owner_id != owner:
++                raise ApiError(409, 'CODEX_BINDING_INVALID', '操作不属于原回调实例。')
++            if state.finished is not None:
++                if state.finished.result is not None:
++                    return state.finished.result
++                raise ApiError(409, 'CODEX_OUTCOME_UNKNOWN', '原操作没有可重放的完成结果。')
++            if state.started is not None:
++                raise ApiError(409, 'CODEX_OUTCOME_UNKNOWN', '原操作已有开始事实，不能再执行。')
++            if state.decided is None or state.status != 'approved':
++                raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作尚未批准。')
++            ordinal = self.admit_operation(conn, workspace, state, states, history)
++            operation = state.operation
++            now = utc_now()
++            if instant(now) >= instant(operation.expires_at):
++                raise ApiError(409, 'CODEX_TIMEOUT', '原工具期限已过。')
++            self._append(conn, workspace, history, state, OperationStarted(kind='started',
++                execution_owner_id=owner, lease=operation.lease,
++                operation_sha256=content_sha256(operation), budget_ordinal=ordinal), now)
++            _, _, checked = self.turns._owned_state(conn, workspace)
++            self.verify_history(conn, workspace, checked)
++        try:
++            result = self.operations.execute(operation.closure, content_sha256(operation))
++            result = LiteralOperationResult.model_validate(result.model_dump(mode='json'))
++            if result.operation_sha256 != content_sha256(operation) or result.text != operation.closure.command.text:
++                raise ValueError('Invalid interpreter receipt')
++            event = OperationFinished(kind='finished', outcome='completed', result=result, error_code=None)
++        except Exception:
++            # No checked receipt, including crash-adjacent adapter errors. The
++            # debit remains and the original operation is never re-executed.
++            event = OperationFinished(kind='finished', outcome='unknown', result=None, error_code='CODEX_OUTCOME_UNKNOWN')
++        self.record_operation_outcome(workspace, turn_id, owner, identifier, event)
++        if event.result is None:
++            raise ApiError(409, 'CODEX_OUTCOME_UNKNOWN', '原操作结果未知。')
++        return event.result
++
++    def record_operation_outcome(self, workspace, turn_id, owner, identifier, event):
++        # Integrity-only original-owner receipt port, not a new permission. Late
++        # true facts survive logout, revocation and Policy changes.
++        with self.database.transaction() as conn:
++            _, _, history = self.turns._owned_state(conn, workspace)
++            state = self.verify_history(conn, workspace, history).get(identifier)
++            if state is None or state.operation.turn_id != turn_id or state.operation.execution_owner_id != owner or state.started is None:
++                raise ApiError(409, 'CODEX_BINDING_INVALID', '结果没有原开始许可。')
++            if state.finished is not None:
++                if state.finished != event:
++                    raise ApiError(409, 'CODEX_BINDING_INVALID', '原结果不可更换。')
++                return
++            self._append(conn, workspace, history, state, event, utc_now())
++            _, _, checked = self.turns._owned_state(conn, workspace)
++            self.verify_history(conn, workspace, checked)
+diff --git a/services/api/app/application/codex_operation_models.py b/services/api/app/application/codex_operation_models.py
+new file mode 100644
+index 00000000..5b78219f
+--- /dev/null
++++ b/services/api/app/application/codex_operation_models.py
+@@ -0,0 +1,81 @@
++"""Versioned memory-operation facts; v1 denied callback records stay unchanged."""
++from typing import Annotated, Literal
++from pydantic import Field
++from packages.contracts import domain_models as dm
++from ..codex_turn_dto import CodexApprovalControl, CodexCommandOperation, CodexLocalToolBudget, SafeCode
++from .codex_approval_models import SyntheticOperationCallback, ApprovalDecided, ApprovalClosed
++from .codex_operation_profile import LiteralOperationClosure, LiteralOperationResult
++from .provider_models import DispatchLease
++
++
++class SupportedOperation(dm.StrictModel):
++    version: Literal['codex-supported-memory-operation-v1']
++    workspace_id: dm.Id
++    approval_id: dm.Id
++    actor_session_id: dm.Id
++    session_id: dm.Id
++    turn_id: dm.Id
++    job_id: dm.Id
++    job_input_sha256: dm.Sha256
++    dispatch_id: dm.Id
++    execution_owner_id: dm.Id
++    lease: DispatchLease
++    profile_sha256: dm.Sha256
++    input_proof_sha256: dm.Sha256
++    request_sha256: dm.Sha256
++    callback_json: Annotated[str, Field(min_length=2, max_length=131072, repr=False)]
++    callback_sha256: dm.Sha256
++    callback: SyntheticOperationCallback
++    tools: CodexLocalToolBudget
++    operation: CodexCommandOperation
++    closure: LiteralOperationClosure
++    created_at: dm.UTC
++    expires_at: dm.UTC
++
++
++class SupportedCreated(dm.StrictModel):
++    kind: Literal['created']
++    operation: SupportedOperation
++
++
++class OperationStarted(dm.StrictModel):
++    kind: Literal['started']
++    execution_owner_id: dm.Id
++    lease: DispatchLease
++    operation_sha256: dm.Sha256
++    budget_ordinal: Annotated[int, Field(strict=True, ge=1, le=32)]
++
++
++class OperationFinished(dm.StrictModel):
++    kind: Literal['finished']
++    outcome: Literal['completed', 'failed', 'unknown']
++    result: LiteralOperationResult | None
++    error_code: SafeCode | None
++
++
++class OperationEnvelope(dm.StrictModel):
++    version: Literal['codex-generic-approval-event-v2']
++    workspace_id: dm.Id
++    approval_id: dm.Id
++    seq: dm.Revision
++    previous_sha256: dm.Sha256 | None
++    occurred_at: dm.UTC
++    event: Annotated[SupportedCreated | ApprovalDecided | ApprovalClosed | OperationStarted | OperationFinished, Field(discriminator='kind')]
++
++
++class TurnOperationBound(dm.StrictModel):
++    kind: Literal['approval_operation_bound']
++    turn_id: dm.Id
++    approval_seq: dm.Revision
++    approval_sha256: dm.Sha256
++    control: CodexApprovalControl
++
++
++class OperationControlEnvelope(dm.StrictModel):
++    version: Literal['codex-turn-event-v5']
++    workspace_id: dm.Id
++    session_id: dm.Id
++    seq: dm.Revision
++    previous_sha256: dm.Sha256 | None
++    occurred_at: dm.UTC
++    event: TurnOperationBound
+diff --git a/services/api/app/application/codex_operation_profile.py b/services/api/app/application/codex_operation_profile.py
+new file mode 100644
+index 00000000..6b9b7bd4
+--- /dev/null
++++ b/services/api/app/application/codex_operation_profile.py
+@@ -0,0 +1,132 @@
++"""An opt-in literal-only memory interpreter, never a host command sandbox.
++
++Production construction registers nothing. This explicit synthetic language can
++return at most 256 characters and has no file/process/network operation. Its
++entire executable function has one argument and returns that argument unchanged.
++The original model-request profile/bytes remain a separate immutable contract.
++"""
++from collections.abc import Iterable
++from typing import Annotated, Literal
++
++from pydantic import Field
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
++from ..codex_turn_dto import CodexCommandOperation
++from ..serialization import content_sha256
++from .errors import ApiError
++
++
++class LiteralCommand(dm.StrictModel):
++    version: Literal['codex-synthetic-literal-command-v1']
++    text: Annotated[str, Field(max_length=256)]
++
++
++def _literal(text: str) -> str:
++    return text
++
++
++def executable_closure() -> dict:
++    """Actual checked code object; no source path, binary read or hidden input."""
++    code = _literal.__code__
++    if (code.co_argcount != 1 or code.co_kwonlyargcount != 0 or code.co_names
++            or code.co_freevars or code.co_cellvars or code.co_consts != (None,)):
++        raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '固定内存解释器不可用。')
++    return {'version': 'codex-literal-code-closure-v1', 'bytecode_hex': code.co_code.hex(),
++        'argument_count': code.co_argcount, 'constants': [None], 'names': [], 'freevars': [],
++        'semantics': 'return the same exact str; no calls, imports, loops or effects'}
++
++
++class LiteralOperationProfile(dm.StrictModel):
++    version: Literal['codex-synthetic-literal-profile-v1']
++    executable_sha256: dm.Sha256
++    command_schema_sha256: dm.Sha256
++    max_characters: Literal[256]
++    shell: None
++    environment: dict[Literal['no_environment_variables'], Literal[True]]
++    filesystem: Literal['no_host_files; private in-memory turn_outputs namespace only']
++    network: Literal['denied']
++    subprocesses: Literal[0]
++    actual_cli_claim: Literal[False]
++
++    @classmethod
++    def current(cls):
++        return cls(version='codex-synthetic-literal-profile-v1', executable_sha256=content_sha256(executable_closure()),
++            command_schema_sha256=content_sha256(LiteralCommand.model_json_schema()), max_characters=256,
++            shell=None, environment={'no_environment_variables': True},
++            filesystem='no_host_files; private in-memory turn_outputs namespace only', network='denied',
++            subprocesses=0, actual_cli_claim=False)
++
++
++class LiteralOperationClosure(dm.StrictModel):
++    version: Literal['codex-synthetic-literal-operation-v1']
++    profile: LiteralOperationProfile
++    argv: Annotated[list[str], Field(min_length=2, max_length=2)]
++    environment: dict[str, str]
++    workspace_id: dm.Id
++    turn_id: dm.Id
++    output_namespace: Literal['turn_outputs']
++    command: LiteralCommand
++
++
++class LiteralOperationResult(dm.StrictModel):
++    version: Literal['codex-synthetic-literal-result-v1']
++    operation_sha256: dm.Sha256
++    text: Annotated[str, Field(max_length=256)]
++    host_actions: Literal[0]
++    provider_requests: Literal[0]
++    files_written: Literal[0]
++
++
++class CodexOperationRegistry:
++    """Trusted composition only. No HTTP registration or ambient default."""
++    def __init__(self, registrations: Iterable[LiteralOperationProfile] = ()):
++        self._profiles = tuple(canonical_bytes(item) for item in registrations)
++        if len(self._profiles) != len(set(self._profiles)):
++            raise ValueError('Duplicate fixed operation profile')
++
++    def available(self, profile: LiteralOperationProfile) -> bool:
++        return canonical_bytes(profile) in self._profiles and profile == LiteralOperationProfile.current()
++
++    def prepare(self, workspace: str, turn: str, text: str):
++        if not self._profiles:
++            return None
++        profile = LiteralOperationProfile.current()
++        if not self.available(profile):
++            return None
++        try:
++            command = LiteralCommand.model_validate(strict_json(text))
++        except (ValueError, TypeError, RecursionError):
++            return None
++        if canonical_bytes(command).decode() != text:
++            return None
++        closure = LiteralOperationClosure(version='codex-synthetic-literal-operation-v1', profile=profile,
++            argv=['synthetic-memory-literal-v1', command.text], environment={}, workspace_id=workspace,
++            turn_id=turn, output_namespace='turn_outputs', command=command)
++        return closure, self.projection(closure)
++
++    @staticmethod
++    def projection(closure: LiteralOperationClosure):
++        operation = CodexCommandOperation(kind='command', command_text=canonical_bytes(closure.command).decode(), cwd='turn_outputs',
++            executable_sha256=closure.profile.executable_sha256, environment_sha256=content_sha256({}), read_files=[],
++            writable_area='turn_outputs', filesystem_scope_sha256=content_sha256({
++                'version': 'codex-literal-namespace-v1', 'workspace_id': closure.workspace_id, 'turn_id': closure.turn_id,
++                'namespace': 'turn_outputs', 'host_paths': [], 'files_read': [], 'files_written': []}),
++            network='denied', operation_profile_sha256=content_sha256(closure.profile))
++        return operation
++
++    def execute(self, closure: LiteralOperationClosure, operation_sha256: str) -> LiteralOperationResult:
++        if not self.available(closure.profile):
++            raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '原内存解释器已不可用。')
++        original = self.prepare(closure.workspace_id, closure.turn_id, canonical_bytes(closure.command).decode())
++        if original is None or original[0] != closure:
++            raise ApiError(409, 'CODEX_BINDING_INVALID', '原完整内存操作绑定不一致。')
++        # This is the whole interpreter. Never eval/exec/shell user input.
++        text = _literal(closure.command.text)
++        if type(text) is not str or text != closure.command.text:
++            raise ApiError(409, 'CODEX_OUTCOME_UNKNOWN', '内存操作结果不符合固定解释语义。')
++        return LiteralOperationResult(version='codex-synthetic-literal-result-v1',
++            operation_sha256=operation_sha256, text=text, host_actions=0, provider_requests=0, files_written=0)
++
++
++def result_digest(result: LiteralOperationResult) -> str:
++    return sha256_bytes(canonical_bytes(result))
+diff --git a/services/api/app/application/codex_turn.py b/services/api/app/application/codex_turn.py
+index a032e4a7..82bd741f 100644
+--- a/services/api/app/application/codex_turn.py
++++ b/services/api/app/application/codex_turn.py
+@@ -105,7 +105,7 @@ class CodexTurnService:
+                 consent = controls.get(turn.control.id, turn.control.consent_control)
+                 result[turn.control.id] = CodexTurnControlView.model_validate({**turn.control.model_dump(),
+                     'consent_control':consent.model_dump() if consent else None,
+-                    'approval_controls':[self.approvals.control(approvals[item.id],turn) for item in turn.control.approval_controls] if self.approvals else []})
++                    'approval_controls':[self.approvals.control(approvals[item.id],turn,conn,approvals,history) for item in turn.control.approval_controls] if self.approvals else []})
+         return result
+ 
+     def _base_state(self, conn, identity, *, subject=False):
+diff --git a/services/api/app/application/codex_turn_worker.py b/services/api/app/application/codex_turn_worker.py
+index c47c1b75..8e263061 100644
+--- a/services/api/app/application/codex_turn_worker.py
++++ b/services/api/app/application/codex_turn_worker.py
+@@ -107,8 +107,16 @@ class CodexTurnWorker:
+             _, _, full_history = self.turns._owned_state(conn, workspace)
+             approvals = self.turns.approvals.verify_history(conn, workspace, full_history)
+             pending = [value for value in approvals.values() if value.operation.turn_id == turn.control.id
+-                and value.decided is None and value.closed is None]
+-            if pending and outcome == 'completed':
++                and value.closed is None and value.finished is None
++                and (value.decided is None or value.status == 'approved')]
++            owned = [value for value in approvals.values() if value.operation.turn_id == turn.control.id]
++            uncertain = any(value.started is not None and (value.finished is None or value.finished.outcome == 'unknown') for value in owned)
++            failed = next((value.finished for value in owned if value.finished and value.finished.outcome == 'failed'), None)
++            if uncertain:
++                outcome, code = 'unknown', 'CODEX_OUTCOME_UNKNOWN'
++            elif failed is not None:
++                outcome, code = 'failed', failed.error_code
++            elif pending and outcome == 'completed':
+                 outcome, code = 'failed', 'CODEX_OPERATION_UNSUPPORTED'
+             _, _, full_history = self.turns._owned_state(conn, workspace)
+             self.turns.approvals.close_pending(conn, workspace, full_history, turn.control.id,
+@@ -264,6 +272,13 @@ class CodexTurnWorker:
+             raise ApiError(409, 'CODEX_BINDING_INVALID', '没有受检的活跃回调实例。')
+         return self.turns.approvals.receive(context[0], context[1], context[2], raw)
+ 
++    def execute_operation(self, identifier: str):
++        context = self._callback_context
++        if (context is None or context[3] != threading.get_ident()
++                or type(self.executor) is not SyntheticCodexExecutor or self.turns.approvals is None):
++            raise ApiError(409, 'CODEX_BINDING_INVALID', '没有受检的活跃回调实例。')
++        return self.turns.approvals.execute_owned_operation(context[0], context[1], context[2], identifier)
++
+     def recover(self) -> int:
+         workspace=self.database.workspace_id()
+         with self.database.transaction(immediate=False) as conn:
+diff --git a/services/api/app/infrastructure/codex_approval_repository.py b/services/api/app/infrastructure/codex_approval_repository.py
+index 4c10bbb1..d381ef27 100644
+--- a/services/api/app/infrastructure/codex_approval_repository.py
++++ b/services/api/app/infrastructure/codex_approval_repository.py
+@@ -6,6 +6,9 @@ from ..application.codex_approval_models import (
+     ApprovalEnvelope, ApprovalCreated, ApprovalDecided, ApprovalClosed, ApprovalOperation,
+     SyntheticOperationCallback, TurnApprovalBound,
+ )
++from ..application.codex_operation_models import (SupportedOperation, SupportedCreated, OperationStarted, OperationFinished, OperationEnvelope, TurnOperationBound)
++from ..application.codex_operation_profile import CodexOperationRegistry
++from ..infrastructure.consent_repository import instant
+ from ..application.codex_turn_context import damaged
+ from ..codex_turn_dto import CodexApprovalControl
+ from ..serialization import canonical_json, content_sha256
+@@ -15,11 +18,24 @@ from .security import historical_session_belongs_to
+ 
+ @dataclass
+ class CheckedApproval:
+-    operation: ApprovalOperation
+-    events: list[ApprovalEnvelope]
++    operation: ApprovalOperation | SupportedOperation
++    events: list[ApprovalEnvelope | OperationEnvelope]
+     decided: ApprovalDecided | None = None
+     closed: ApprovalClosed | None = None
+ 
++    started: OperationStarted | None = None
++    finished: OperationFinished | None = None
++
++    @property
++    def supported(self):
++        return isinstance(self.operation, SupportedOperation)
++
++    @property
++    def status(self):
++        if self.decided is not None:
++            return "approved" if self.decided.command.body.decision == "approve_once" else "declined"
++        return "expired" if self.closed else "pending"
++
+     @property
+     def revision(self):
+         return len(self.events)
+@@ -29,7 +45,7 @@ class CheckedApproval:
+         return CodexApprovalControl(id=self.operation.approval_id, revision=self.revision,
+             operation_sha256=content_sha256(self.operation),
+             decision=self.decided.command.body.decision if self.decided else 'pending',
+-            validity='closed' if self.decided or self.closed else 'unavailable')
++            validity='closed' if self.closed or self.started or self.decided and self.status == 'declined' else 'current' if self.supported else 'unavailable')
+ 
+ 
+ class CodexApprovalRepository:
+@@ -51,7 +67,7 @@ class CodexApprovalRepository:
+         turns = {turn.control.id: (state, turn) for state in history.values() for turn in state.turns.values()}
+         witnesses = {item.control.id for _, turn in turns.values() for item in turn.approval_bindings}
+         heads, events, members, commands = (self.rows(part) for part in ('heads', 'events', 'members', 'commands'))
+-        core = self.conn.execute("SELECT a.* FROM approvals a JOIN jobs j ON j.id=a.job_id WHERE j.workspace_id=? AND json_extract(a.scope_json,'$.version')='codex-unsupported-operation-v1'", (self.workspace,)).fetchall()
++        core = self.conn.execute("SELECT a.* FROM approvals a JOIN jobs j ON j.id=a.job_id WHERE j.workspace_id=? AND json_extract(a.scope_json,'$.version') IN ('codex-unsupported-operation-v1','codex-supported-memory-operation-v1')", (self.workspace,)).fetchall()
+         if (witnesses != {row['approval_id'] for row in heads}
+                 or witnesses != {row['approval_id'] for row in events}
+                 or witnesses != {row['id'] for row in core}
+@@ -67,13 +83,16 @@ class CodexApprovalRepository:
+             state = None
+             previous = None
+             for seq, row in enumerate(selected, 1):
+-                envelope = decode(ApprovalEnvelope, row['record_json'])
++                raw = strict_json(row['record_json'])
++                if not isinstance(raw, dict):
++                    raise damaged()
++                envelope = decode(OperationEnvelope if raw.get('version') == 'codex-generic-approval-event-v2' else ApprovalEnvelope, row['record_json'])
+                 if (row['seq'] != seq or envelope.seq != seq or envelope.approval_id != identifier
+                         or envelope.workspace_id != self.workspace or envelope.previous_sha256 != previous
+                         or content_sha256(envelope) != row['record_sha256']):
+                     raise damaged()
+                 event = envelope.event
+-                if isinstance(event, ApprovalCreated):
++                if isinstance(event, (ApprovalCreated, SupportedCreated)):
+                     if state is not None or seq != 1:
+                         raise damaged()
+                     operation = event.operation
+@@ -109,15 +128,18 @@ class CodexApprovalRepository:
+                         raise damaged()
+                     callbacks.add(callback_key)
+                     state = CheckedApproval(operation, [])
+-                elif state is None or state.closed is not None or state.decided is not None:
++                    self.check_supported(operation)
++                elif state is None or state.closed is not None or state.finished is not None:
+                     raise damaged()
+                 elif isinstance(event, ApprovalDecided):
+                     command, operation = event.command, state.operation
+                     ack = command.ack
+                     expected = dm.JobRef(id=operation.job_id, status='running')
+-                    if (seq != 2 or command.body.expected_revision != 1 or command.body.decision != 'decline'
++                    if (seq != 2 or state.decided is not None or command.body.expected_revision != 1
++                            or command.body.decision != 'decline' and not state.supported
++                            or command.body.decision == 'approve_once' and command.actor_session_id != operation.actor_session_id
+                             or command.body.operation_sha256 != content_sha256(operation)
+-                            or ack.id != identifier or ack.revision != 2 or ack.decision != 'decline'
++                            or ack.id != identifier or ack.revision != 2 or ack.decision != command.body.decision
+                             or ack.actor_session_id != command.actor_session_id or ack.operation_sha256 != content_sha256(operation)
+                             or ack.session_id != operation.session_id or ack.turn_id != operation.turn_id
+                             or ack.run_id != operation.job_id or ack.job != expected
+@@ -130,21 +152,42 @@ class CodexApprovalRepository:
+                     seen_commands.add((identifier, seq))
+                     state.decided = event
+                 elif isinstance(event, ApprovalClosed):
+-                    if seq != 2:
++                    if state.started is not None or seq != (3 if state.decided and state.status == 'approved' else 2) or state.status == 'declined':
+                         raise damaged()
+                     state.closed = event
++                elif isinstance(event, OperationStarted):
++                    operation = state.operation
++                    if (not state.supported or seq != 3 or state.status != 'approved' or state.started is not None
++                            or event.execution_owner_id != operation.execution_owner_id or event.lease != operation.lease
++                            or event.operation_sha256 != content_sha256(operation)
++                            or event.budget_ordinal > operation.tools.max_tool_calls
++                            or instant(envelope.occurred_at) >= instant(operation.expires_at)):
++                        raise damaged()
++                    state.started = event
++                elif isinstance(event, OperationFinished):
++                    if not state.supported or seq != 4 or state.started is None:
++                        raise damaged()
++                    if (event.outcome == 'completed') != (event.result is not None) or (event.outcome == 'completed') != (event.error_code is None):
++                        raise damaged()
++                    if event.result is not None and (event.result.operation_sha256 != content_sha256(state.operation)
++                            or not isinstance(state.operation, SupportedOperation) or event.result.text != state.operation.closure.command.text):
++                        raise damaged()
++                    state.finished = event
+                 if state is None:
+                     raise damaged()
++                if (isinstance(envelope, OperationEnvelope) != state.supported
++                        or state.events and instant(envelope.occurred_at) < instant(state.events[-1].occurred_at)):
++                    raise damaged()
+                 state.events.append(envelope)
+                 bound = next((item for item in turns[state.operation.turn_id][1].approval_bindings
+                     if item.control.id == identifier and item.approval_seq == seq), None)
+-                if bound is None or bound.approval_sha256 != row['record_sha256'] or bound.control != state.control:
++                if bound is None or isinstance(bound, TurnOperationBound) != state.supported or bound.approval_sha256 != row['record_sha256'] or bound.control != state.control:
+                     raise damaged()
+                 previous = row['record_sha256']
+             if state is None or head['head_sha256'] != previous:
+                 raise damaged()
+             actual = next(item for item in core if item['id'] == identifier)
+-            status = 'declined' if state.decided else 'expired' if state.closed else 'pending'
++            status = state.status
+             if tuple(actual) != (identifier, state.operation.job_id, state.revision,
+                     content_sha256(state.operation), status, canonical_json(state.operation),
+                     state.operation.actor_session_id, state.operation.expires_at):
+@@ -154,14 +197,36 @@ class CodexApprovalRepository:
+             result[identifier] = state
+         if seen_commands != {(row['approval_id'], row['seq']) for row in commands}:
+             raise damaged()
++        # The Codex event order is the independent witness for conservative tool debits.
++        for _, turn in turns.values():
++            started = [result[b.control.id].started for b in turn.approval_bindings
++                if b.approval_seq == 3 and result[b.control.id].started is not None]
++            if [item.budget_ordinal for item in started if item is not None] != list(range(1, len(started)+1)):
++                raise damaged()
+         return result
+ 
++    @staticmethod
++    def check_supported(operation):
++        if not isinstance(operation, SupportedOperation):
++            return
++        closure = operation.closure
++        if (closure.workspace_id != operation.workspace_id or closure.turn_id != operation.turn_id
++                or closure.argv != ['synthetic-memory-literal-v1', closure.command.text] or closure.environment != {}
++                or canonical_json(closure.command) != operation.callback.request_text
++                or operation.callback.method != 'command/requestApproval'
++                or operation.operation != CodexOperationRegistry.projection(closure)):
++            raise damaged()
++
+     def append(self, state, event, now):
+-        operation = event.operation if isinstance(event, ApprovalCreated) else state.operation
++        operation = event.operation if isinstance(event, (ApprovalCreated, SupportedCreated)) else state.operation
+         seq = 1 if state is None else state.revision + 1
+-        envelope = ApprovalEnvelope(version='codex-generic-approval-event-v1', workspace_id=self.workspace,
++        supported = isinstance(operation, SupportedOperation)
++        envelope = (OperationEnvelope(version='codex-generic-approval-event-v2', workspace_id=self.workspace,
++            approval_id=operation.approval_id, seq=seq,
++            previous_sha256=content_sha256(state.events[-1]) if state else None, occurred_at=now, event=event) if supported else
++            ApprovalEnvelope(version='codex-generic-approval-event-v1', workspace_id=self.workspace,
+             approval_id=operation.approval_id, seq=seq,
+-            previous_sha256=content_sha256(state.events[-1]) if state else None, occurred_at=now, event=event)
++            previous_sha256=content_sha256(state.events[-1]) if state else None, occurred_at=now, event=event))
+         digest = content_sha256(envelope)
+         identifier = operation.approval_id
+         self.conn.execute('INSERT INTO codex_approval_events VALUES(?,?,?,?,?)',
+@@ -184,8 +249,15 @@ class CodexApprovalRepository:
+                     (self.workspace, command.actor_session_id, command.key, identifier, seq, content_sha256(command)))
+             elif isinstance(event, ApprovalClosed):
+                 state.closed = event
++            elif isinstance(event, OperationStarted):
++                state.started = event
++            elif isinstance(event, OperationFinished):
++                state.finished = event
+             self.conn.execute('UPDATE approvals SET revision=?,status=? WHERE id=?',
+-                (seq, 'declined' if state.decided else 'expired', identifier))
++                (seq, state.status, identifier))
+         state.events.append(envelope)
++        if supported:
++            return TurnOperationBound(kind='approval_operation_bound', turn_id=operation.turn_id, approval_seq=seq,
++                approval_sha256=digest, control=state.control)
+         return TurnApprovalBound(kind='approval_bound', turn_id=operation.turn_id, approval_seq=seq,
+             approval_sha256=digest, control=state.control)
+diff --git a/services/api/app/infrastructure/codex_turn_repository.py b/services/api/app/infrastructure/codex_turn_repository.py
+index 321cb7a8..294a533a 100644
+--- a/services/api/app/infrastructure/codex_turn_repository.py
++++ b/services/api/app/infrastructure/codex_turn_repository.py
+@@ -12,6 +12,7 @@ from ..application.codex_turn_models import (
+ )
+ from ..application.codex_turn_execution_models import ControlEventEnvelope, RunnableTurnPrepared
+ from ..application.codex_approval_models import ApprovalControlEnvelope, TurnApprovalBound
++from ..application.codex_operation_models import OperationControlEnvelope, TurnOperationBound
+ from ..application.errors import ApiError
+ from ..application.providers import retained_provider_configuration
+ from ..codex_turn_dto import CodexTurnControlView, CodexConsentControl
+@@ -28,7 +29,7 @@ class CheckedTurn:
+     provider_bindings: list[TurnProviderBound] = field(default_factory=list)
+     start: TurnStarted | None = None
+     lifecycle: list[TurnLifecycle] = field(default_factory=list)
+-    approval_bindings: list[TurnApprovalBound] = field(default_factory=list)
++    approval_bindings: list[TurnApprovalBound | TurnOperationBound] = field(default_factory=list)
+ 
+ 
+ @dataclass
+@@ -36,7 +37,7 @@ class CheckedSession:
+     anchor: SessionAnchor
+     revision: int
+     active_turn_id: str | None
+-    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope] = field(default_factory=list)
++    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope] = field(default_factory=list)
+     turns: dict[str, CheckedTurn] = field(default_factory=dict)
+ 
+ 
+@@ -132,7 +133,7 @@ class CodexTurnRepository:
+                 raw = strict_json(stored['record_json'])
+                 if not isinstance(raw, dict):
+                     raise damaged()
+-                model = (ApprovalControlEnvelope if raw.get('version') == 'codex-turn-event-v3' else
++                model = (OperationControlEnvelope if raw.get('version') == 'codex-turn-event-v5' else ApprovalControlEnvelope if raw.get('version') == 'codex-turn-event-v3' else
+                     ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope)
+                 envelope = decode(model, stored['record_json'])
+                 if (envelope.session_id != anchor.session_id or envelope.workspace_id != self.workspace
+@@ -153,7 +154,7 @@ class CodexTurnRepository:
+                     seen_members.add(event.input.turn_id)
+                 elif isinstance(event, TurnProviderBound):
+                     self._provider_bound(state, event)
+-                elif isinstance(event, TurnApprovalBound):
++                elif isinstance(event, (TurnApprovalBound, TurnOperationBound)):
+                     self._approval_bound(state, event)
+                 elif isinstance(event, TurnStarted):
+                     turn = state.turns.get(event.turn_id)
+@@ -351,7 +352,7 @@ class CodexTurnRepository:
+             raise damaged()
+ 
+     @staticmethod
+-    def _approval_bound(state: CheckedSession, event: TurnApprovalBound) -> None:
++    def _approval_bound(state: CheckedSession, event: TurnApprovalBound | TurnOperationBound) -> None:
+         turn = state.turns.get(event.turn_id)
+         if turn is None or turn.start is None or turn.control.execution != 'active':
+             raise damaged()
+@@ -359,8 +360,11 @@ class CodexTurnRepository:
+         if (event.approval_seq != (previous.approval_seq + 1 if previous else 1)
+                 or event.control.revision != event.approval_seq
+                 or previous is not None and previous.control.operation_sha256 != event.control.operation_sha256
+-                or previous is None and (event.control.decision != 'pending' or event.control.validity != 'unavailable')
+-                or previous is not None and previous.control.validity == 'closed'
++                or previous is None and (event.control.decision != 'pending' or event.control.validity != ('current' if isinstance(event, TurnOperationBound) else 'unavailable'))
++                or previous is not None and previous.control.validity == 'closed' and not (
++                    isinstance(event, TurnOperationBound) and isinstance(previous, TurnOperationBound)
++                    and previous.approval_seq == 3 and previous.control.decision == 'approve_once' and event.approval_seq == 4)
++                or previous is not None and type(previous) is not type(event)
+                 or previous is None and any(event.control.id in other.control.approval_ids for other in state.turns.values())):
+             raise damaged()
+         controls = list(turn.control.approval_controls)
+@@ -386,12 +390,15 @@ class CodexTurnRepository:
+         self.conn.execute('INSERT INTO codex_turn_heads VALUES(?,?,2,0,?,NULL)', (anchor.session_id, self.workspace, digest))
+         return CheckedSession(anchor, 2, None)
+ 
+-    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope:
++    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope:
+         seq = len(state.envelopes) + 1
+         previous = content_sha256(state.envelopes[-1]) if state.envelopes else content_sha256(state.anchor)
+         extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested))
+-        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope
+-        if isinstance(event, TurnApprovalBound):
++        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope
++        if isinstance(event, TurnOperationBound):
++            envelope = OperationControlEnvelope(version='codex-turn-event-v5', workspace_id=self.workspace,
++                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
++        elif isinstance(event, TurnApprovalBound):
+             envelope = ApprovalControlEnvelope(version='codex-turn-event-v3', workspace_id=self.workspace,
+                 session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
+         elif extended:
+@@ -442,7 +449,7 @@ class CodexTurnRepository:
+             control = state.turns[event.turn_id].control
+             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+             revision, active = state.revision, state.active_turn_id
+-        elif isinstance(event, TurnApprovalBound):
++        elif isinstance(event, (TurnApprovalBound, TurnOperationBound)):
+             self._approval_bound(state, event)
+             control = state.turns[event.turn_id].control
+             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+diff --git a/tests/integration/test_codex_approved_operation_http.py b/tests/integration/test_codex_approved_operation_http.py
+new file mode 100644
+index 00000000..04f1b055
+--- /dev/null
++++ b/tests/integration/test_codex_approved_operation_http.py
+@@ -0,0 +1,49 @@
++"""Explicit synthetic interpreter; real owners/HTTP and exactly one model request."""
++import json
++
++from packages.contracts.canonical import canonical_bytes
++from services.api.app.application.codex_operation_profile import (
++    CodexOperationRegistry, LiteralCommand, LiteralOperationProfile,
++)
++from tests.integration.test_codex_generic_approval_http import callback_turn
++from tests.integration.test_codex_turn_dispatch_http import consent_case, base_consent_case
++
++__all__ = ['consent_case', 'base_consent_case']
++
++
++def test_registered_complete_operation_approve_claim_and_result(consent_case):
++    case, prepared, request, original_frame = callback_turn(consent_case)
++    # Explicit trusted composition only. The production registry remains empty.
++    case.app.state.codex_turn_service.approvals.operations = CodexOperationRegistry([LiteralOperationProfile.current()])
++    command = LiteralCommand(version='codex-synthetic-literal-command-v1', text='Synthetic bounded result α')
++    raw = canonical_bytes({**json.loads(original_frame), 'request_text': canonical_bytes(command).decode()})
++    worker, executor = case.app.state.codex_turn_worker, case.app.state.synthetic_executor
++    kinds, receipts = [], []
++    def peer(gate):
++        gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
++        identifier = worker.receive_operation(raw)
++        view = case.client.get('/api/v1/approvals/'+identifier).json()
++        kinds.append(view['operation']['kind'])
++        assert view['operation']['kind'] == 'command' and view['validity'] == 'current'
++        body = {'operation_sha256': view['operation_sha256'], 'expected_revision': 1, 'decision': 'approve_once'}
++        ack = case.client.post('/api/v1/approvals/'+identifier+'/decision', json=body,
++            headers={**case.headers, 'Idempotency-Key': 'approve-original'})
++        assert ack.status_code == 200 and ack.json()['revision'] == 2
++        assert case.client.get('/api/v1/approvals/'+identifier).json()['execution'] == 'not_started'
++        result = worker.execute_operation(identifier)
++        assert result.text == command.text
++        assert result.host_actions == result.provider_requests == result.files_written == 0
++        receipts.append((identifier, body, ack.content))
++    executor.peer = peer
++    assert worker.run_once() is True
++    assert kinds == ['command'], 'only the registered complete interpreter may produce an approvable operation'
++    assert len(receipts) == 1
++    identifier, body, original_ack = receipts[0]
++    view = case.client.get('/api/v1/approvals/'+identifier).json()
++    assert view['revision'] == 4 and view['execution'] == 'completed' and view['result_sha256'] is not None
++    before = case.dump()
++    assert case.client.post('/api/v1/approvals/'+identifier+'/decision', json=body,
++        headers={**case.headers, 'Idempotency-Key': 'approve-original'}).content == original_ack
++    assert case.get('turns/'+prepared['turn_id']).json()['approval_controls'][0]['revision'] == 4
++    unchanged = case.dump() == before
++    assert unchanged and len(case.app.state.synthetic_transport_calls) == 1
+diff --git a/tests/integration/test_codex_operation_execution_boundaries.py b/tests/integration/test_codex_operation_execution_boundaries.py
+new file mode 100644
+index 00000000..c5cb0e80
+--- /dev/null
++++ b/tests/integration/test_codex_operation_execution_boundaries.py
+@@ -0,0 +1,405 @@
++"""Real owner lifecycle around an explicitly registered, memory-only interpreter."""
++import json
++from concurrent.futures import ThreadPoolExecutor
++
++import pytest
++from packages.contracts.canonical import canonical_bytes
++from services.api.app.application.errors import ApiError
++from services.api.app.application.codex_operation_profile import CodexOperationRegistry, LiteralOperationProfile, LiteralCommand
++from tests.integration.test_codex_generic_approval_http import callback_turn
++from tests.integration.test_codex_generic_approval_boundaries import decision
++from tests.integration.test_codex_turn_dispatch_http import consent_case, base_consent_case
++
++__all__ = ['consent_case', 'base_consent_case']
++
++
++def exercise(values, observe, monkeypatch):
++    case, prepared, request, old = callback_turn(values)
++    owner, worker = case.app.state.codex_turn_service.approvals, case.app.state.codex_turn_worker
++    owner.operations = CodexOperationRegistry([LiteralOperationProfile.current()])
++    raw = canonical_bytes({**json.loads(old), 'request_text': canonical_bytes(LiteralCommand(
++        version='codex-synthetic-literal-command-v1', text='Actual synthetic memory result')).decode()})
++    executions, identifiers, errors = [], [], []
++    actual = owner.operations.execute
++    def counted(*args):
++        executions.append(args[1])
++        return actual(*args)
++    monkeypatch.setattr(owner.operations, 'execute', counted)
++    def peer(gate):
++        try:
++            gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
++            identifier = worker.receive_operation(raw)
++            identifiers.append(identifier)
++            view = case.client.get('/api/v1/approvals/'+identifier).json()
++            assert view['operation']['kind'] == 'command' and view['validity'] == 'current'
++            body = {'expected_revision': 1, 'operation_sha256': view['operation_sha256'], 'decision': 'approve_once'}
++            observe(case, prepared, worker, owner, identifier, body, raw, gate, request, executions)
++        except Exception as error:
++            errors.append(error)
++            raise
++    case.app.state.synthetic_executor.peer = peer
++    assert worker.run_once() is True
++    if errors:
++        raise errors[0]
++    assert len(identifiers) == 1
++    assert len(case.app.state.synthetic_transport_calls) == 1
++    return case, prepared, identifiers[0], executions
++
++
++def test_original_result_and_callback_replay_never_execute_again(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, raw, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        first = worker.execute_operation(identifier)
++        before = case.dump()
++        assert worker.receive_operation(raw) == identifier
++        assert worker.execute_operation(identifier) == first
++        assert case.dump() == before
++    case, _, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    assert len(calls) == 1
++    assert case.client.get('/api/v1/approvals/'+identifier).json()['execution'] == 'completed'
++    with pytest.raises(ApiError):
++        case.app.state.codex_turn_worker.execute_operation(identifier)
++
++
++@pytest.mark.parametrize('decline', [False, True])
++def test_no_approval_or_decline_has_zero_execution(consent_case, monkeypatch, decline):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        if decline:
++            assert decision(case, identifier, {**body, 'decision': 'decline'}).status_code == 200
++        before = case.dump()
++        with pytest.raises(ApiError):
++            worker.execute_operation(identifier)
++        assert case.dump() == before
++    case, _, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    assert calls == []
++    view = case.client.get('/api/v1/approvals/'+identifier).json()
++    assert view['execution'] == 'not_started' and view['validity'] == 'closed'
++
++
++def test_approved_but_never_started_has_separate_close_and_original_ack(consent_case, monkeypatch):
++    receipts = []
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        ack = decision(case, identifier, body)
++        assert ack.status_code == 200
++        receipts.append((body, ack.content))
++    case, _, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    view = case.client.get('/api/v1/approvals/'+identifier).json()
++    assert view['revision'] == 3 and view['execution'] == 'not_started' and view['started_at'] is None
++    assert view['validity'] == 'closed' and view['decision'] == 'approve_once' and calls == []
++    before = case.dump()
++    assert decision(case, identifier, receipts[0][0]).content == receipts[0][1]
++    assert case.dump() == before
++
++
++@pytest.mark.parametrize('change,code', [('profile','CODEX_RUNTIME_UNAVAILABLE'), ('role','POLICY_DENIED'),
++    ('revoke','CODEX_CONSENT_REVOKED'), ('cancel','CODEX_CANCELLED'), ('expiry','CODEX_TIMEOUT')])
++def test_approval_does_not_grant_future_execution_permission(consent_case, monkeypatch, change, code):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        if change == 'profile':
++            monkeypatch.setattr(owner.operations, '_profiles', ())
++        elif change == 'role':
++            assert case.client.post('/api/v1/session/role', json={'role':'learner'},
++                headers={**case.headers, 'Idempotency-Key':'withdraw'}).status_code == 200
++        elif change == 'revoke':
++            consent = case.get('turns/'+prep['turn_id']).json()['consent_control']
++            assert case.post('consents/'+consent['id']+'/revoke', {'expected_revision':consent['revision']}, 'revoke').status_code == 200
++        elif change == 'cancel':
++            job = case.client.get('/api/v1/jobs/'+prep['job']['id']).json()
++            assert case.client.post('/api/v1/jobs/'+job['id']+'/cancel', json={'expected_revision':job['revision']},
++                headers={**case.headers, 'Idempotency-Key':'cancel'}).status_code == 200
++        else:
++            expiry = case.client.get('/api/v1/approvals/'+identifier).json()['expires_at']
++            monkeypatch.setattr('services.api.app.application.codex_operation_execution.utc_now', lambda:expiry)
++        before = case.dump()
++        with pytest.raises(ApiError) as error:
++            worker.execute_operation(identifier)
++        assert error.value.code == code and case.dump() == before
++    case, prepared, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    assert calls == []
++    assert case.get('turns/'+prepared['turn_id']).json()['approval_controls'][0]['revision'] == 3
++
++
++def test_profile_withdrawal_blocks_approval_but_not_original_read(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        monkeypatch.setattr(owner.operations, '_profiles', ())
++        before = case.dump()
++        view = case.client.get('/api/v1/approvals/'+identifier)
++        assert view.status_code == 200 and view.json()['validity'] == 'unavailable'
++        assert decision(case, identifier, body).status_code == 503
++        assert case.dump() == before
++    _, _, _, calls = exercise(consent_case, observe, monkeypatch)
++    assert calls == []
++
++
++def test_tool_budget_debits_once_and_rejects_another_operation(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, raw, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        worker.execute_operation(identifier)
++        next_id = worker.receive_operation(canonical_bytes({**json.loads(raw), 'rpc_id':'second_rpc', 'item_id':'second_item'}))
++        view = case.client.get('/api/v1/approvals/'+next_id).json()
++        assert view['validity'] == 'changed'
++        before = case.dump()
++        denied = decision(case, next_id, {**body, 'operation_sha256':view['operation_sha256']}, 'second')
++        assert denied.status_code == 409 and denied.json()['error']['code'] == 'CODEX_BUDGET_EXCEEDED'
++        assert case.dump() == before
++    _, _, _, calls = exercise(consent_case, observe, monkeypatch)
++    assert len(calls) == 1
++
++
++def test_unknown_execution_consumes_once_and_never_replays(consent_case, monkeypatch):
++    attempts = []
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        def crash(*args):
++            attempts.append(True)
++            raise ValueError('Synthetic missing execution receipt')
++        monkeypatch.setattr(owner.operations, 'execute', crash)
++        for _ in range(2):
++            with pytest.raises(ApiError) as error:
++                worker.execute_operation(identifier)
++            assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
++    case, prepared, identifier, _ = exercise(consent_case, observe, monkeypatch)
++    assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'unknown'
++    view = case.client.get('/api/v1/approvals/'+identifier).json()
++    assert attempts == [True] and view['revision'] == 4 and view['execution'] == 'unknown'
++    assert view['started_at'] is not None and view['finished_at'] is not None and view['result_sha256'] is None
++
++
++def test_late_actual_result_survives_actor_loss_without_subject_delivery(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        actual = owner.operations.execute
++        def withdraw(*args):
++            result = actual(*args)
++            assert case.client.post('/api/v1/session/role', json={'role':'learner'},
++                headers={**case.headers, 'Idempotency-Key':'late-role'}).status_code == 200
++            return result
++        monkeypatch.setattr(owner.operations, 'execute', withdraw)
++        worker.execute_operation(identifier)
++        before = case.dump()
++        assert case.client.get('/api/v1/approvals/'+identifier).status_code == 403
++        assert case.get('turns/'+prep['turn_id']).json()['approval_controls'][0]['revision'] == 4
++        assert case.dump() == before
++    case, prepared, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    assert len(calls) == 1
++    assert case.get('turns/'+prepared['turn_id']).json()['error_code'] == 'POLICY_DENIED'
++    with case.app.state.database.transaction(immediate=False) as conn:
++        owner = case.app.state.codex_turn_service.approvals
++        _, _, history = owner.turns._owned_state(conn, case.app.state.database.workspace_id())
++        state = owner.verify_history(conn, case.app.state.database.workspace_id(), history)[identifier]
++        assert state.finished.outcome == 'completed' and state.finished.result.text == 'Actual synthetic memory result'
++
++
++def test_tool_result_never_authorizes_another_model_request(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, raw, gate, request, executions):
++        assert decision(case, identifier, body).status_code == 200
++        worker.execute_operation(identifier)
++        with pytest.raises(ApiError):
++            gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
++    case, prepared, _, calls = exercise(consent_case, observe, monkeypatch)
++    assert len(calls) == 1
++    assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'failed'
++
++
++def test_begin_transaction_failure_never_invokes_interpreter(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        actual = owner._append
++        def fail(*args):
++            actual(*args)
++            if args[4].kind == 'started':
++                raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', 'Synthetic start transaction rollback')
++        monkeypatch.setattr(owner, '_append', fail)
++        before = case.dump()
++        with pytest.raises(ApiError):
++            worker.execute_operation(identifier)
++        assert case.dump() == before
++        monkeypatch.setattr(owner, '_append', actual)
++    _, _, _, calls = exercise(consent_case, observe, monkeypatch)
++    assert calls == []
++
++
++def test_wrong_thread_cannot_claim_original_operation(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        before = case.dump()
++        with ThreadPoolExecutor(max_workers=1) as pool:
++            attempt = pool.submit(worker.execute_operation, identifier)
++            with pytest.raises(ApiError):
++                attempt.result(timeout=10)
++        assert case.dump() == before
++    _, _, _, calls = exercise(consent_case, observe, monkeypatch)
++    assert calls == []
++
++
++def test_committed_start_without_receipt_recovers_unknown_in_new_application(consent_case, monkeypatch):
++    from datetime import datetime, timedelta, timezone
++    from services.api.app.main import create_app
++    class Interrupted(BaseException):
++        pass
++    receipts = []
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        ack = decision(case, identifier, body)
++        assert ack.status_code == 200
++        receipts.append((body, ack.content))
++        def interrupted(*args):
++            raise Interrupted()
++        monkeypatch.setattr(owner.operations, 'execute', interrupted)
++        with pytest.raises(Interrupted):
++            worker.execute_operation(identifier)
++        view = case.client.get('/api/v1/approvals/'+identifier).json()
++        assert view['execution'] == 'started' and view['revision'] == 3
++        with pytest.raises(ApiError) as error:
++            worker.execute_operation(identifier)
++        assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
++        # A lost owner can leave the already committed permit, not a fake
++        # zero-execution assertion. This seam suppresses only final convergence.
++        monkeypatch.setattr(worker, '_finish', lambda *args:None)
++    case, prepared, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    _, runtime, _, proofs, _, _ = consent_case
++    app = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime, codex_proofs=proofs)
++    worker = app.state.codex_turn_worker
++    assert worker.recover() == 0
++    later = (datetime.now(timezone.utc)+timedelta(minutes=2)).isoformat().replace('+00:00','Z')
++    monkeypatch.setattr('services.api.app.application.codex_turn_worker.utc_now', lambda:later)
++    assert worker.recover() == 1
++    view = case.client.get('/api/v1/approvals/'+identifier).json()
++    assert view['revision'] == 4 and view['execution'] == 'unknown'
++    assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'unknown'
++    before = case.dump()
++    assert worker.recover() == 0 and worker.run_once() is False
++    assert decision(case, identifier, receipts[0][0]).content == receipts[0][1]
++    assert case.dump() == before and calls == []
++
++
++def test_result_transaction_failure_retains_started_and_unknown_without_reexecution(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        actual = owner._append
++        def fail(*args):
++            actual(*args)
++            if args[4].kind == 'finished':
++                raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', 'Synthetic receipt transaction failure')
++        monkeypatch.setattr(owner, '_append', fail)
++        with pytest.raises(ApiError):
++            worker.execute_operation(identifier)
++        monkeypatch.setattr(owner, '_append', actual)
++        view = case.client.get('/api/v1/approvals/'+identifier).json()
++        assert view['execution'] == 'started' and view['revision'] == 3
++        with pytest.raises(ApiError) as error:
++            worker.execute_operation(identifier)
++        assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
++    case, prepared, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    assert len(calls) == 1
++    assert case.client.get('/api/v1/approvals/'+identifier).json()['execution'] == 'unknown'
++    assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'unknown'
++
++
++@pytest.mark.parametrize('damage', ['start_tail', 'finish_tail', 'member', 'core', 'shape', 'whole_family'])
++def test_supported_history_damage_rejects_safe_full_and_original_ack(consent_case, monkeypatch, damage):
++    receipts = []
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        ack = decision(case, identifier, body)
++        assert ack.status_code == 200
++        receipts.append(body)
++        worker.execute_operation(identifier)
++    case, prepared, identifier, _ = exercise(consent_case, observe, monkeypatch)
++    with case.app.state.database.transaction() as conn:
++        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'codex_approval_%'"):
++            conn.execute('DROP TRIGGER '+row[0])
++        if damage.endswith('_tail'):
++            conn.execute('DELETE FROM codex_approval_events WHERE approval_id=? AND seq=?',
++                (identifier, 3 if damage == 'start_tail' else 4))
++        elif damage == 'member':
++            conn.execute('DELETE FROM codex_approval_members WHERE approval_id=? AND seq=3', (identifier,))
++        elif damage == 'core':
++            conn.execute('DELETE FROM approvals WHERE id=?', (identifier,))
++        elif damage == 'shape':
++            conn.execute("UPDATE codex_approval_events SET record_json='[]' WHERE approval_id=? AND seq=4", (identifier,))
++        else:
++            for table in ('events','members','commands','heads'):
++                conn.execute('DELETE FROM codex_approval_'+table+' WHERE approval_id=?', (identifier,))
++            conn.execute('DELETE FROM approvals WHERE id=?', (identifier,))
++    before = case.dump()
++    responses = [case.client.get('/api/v1/approvals/'+identifier), case.get('turns/'+prepared['turn_id']),
++        decision(case, identifier, receipts[0])]
++    assert [item.status_code for item in responses] == [409,409,409]
++    assert all(item.json()['error']['code'] == 'CODEX_HISTORY_DAMAGED' for item in responses)
++    unchanged = case.dump() == before
++    assert unchanged
++
++
++def test_completed_history_and_ack_survive_new_application_empty_registry(consent_case, monkeypatch):
++    from fastapi.testclient import TestClient
++    from services.api.app.main import create_app
++    receipts = []
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        ack = decision(case, identifier, body)
++        assert ack.status_code == 200
++        receipts.append((body,ack.content))
++        worker.execute_operation(identifier)
++    case, prepared, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    _, runtime, _, proofs, _, _ = consent_case
++    app = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime, codex_proofs=proofs)
++    client = TestClient(app, base_url=case.app.state.settings.origin)
++    client.cookies.update(case.client.cookies)
++    before = case.dump()
++    try:
++        assert app.state.codex_turn_worker.recover() == 0
++        assert app.state.codex_turn_worker.run_once() is False
++        view = client.get('/api/v1/approvals/'+identifier).json()
++        assert view['execution'] == 'completed' and view['revision'] == 4
++        assert client.post('/api/v1/approvals/'+identifier+'/decision', json=receipts[0][0],
++            headers={**case.headers,'Idempotency-Key':'decision'}).content == receipts[0][1]
++        assert client.get('/api/v1/codex/turns/'+prepared['turn_id']).json()['approval_ids'] == [identifier]
++        unchanged = case.dump() == before
++        assert unchanged and len(calls) == 1
++    finally:
++        client.close()
++
++
++def test_concurrent_same_key_approval_has_one_command_and_one_execution(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        with ThreadPoolExecutor(max_workers=2) as pool:
++            responses = list(pool.map(lambda _:decision(case, identifier, body), range(2)))
++        assert [response.status_code for response in responses] == [200,200]
++        assert responses[0].content == responses[1].content
++        with case.app.state.database.transaction(immediate=False) as conn:
++            assert conn.execute('SELECT COUNT(*) FROM codex_approval_commands WHERE approval_id=?', (identifier,)).fetchone()[0] == 1
++        worker.execute_operation(identifier)
++    _, _, _, calls = exercise(consent_case, observe, monkeypatch)
++    assert len(calls) == 1
++
++
++def test_multiple_approvals_do_not_reserve_extra_tool_calls(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, raw, *rest):
++        next_id = worker.receive_operation(canonical_bytes({**json.loads(raw), 'rpc_id':'rpc_two', 'item_id':'item_two'}))
++        second = case.client.get('/api/v1/approvals/'+next_id).json()
++        assert decision(case, identifier, body).status_code == 200
++        assert decision(case, next_id, {**body,'operation_sha256':second['operation_sha256']}, 'second').status_code == 200
++        worker.execute_operation(identifier)
++        before = case.dump()
++        with pytest.raises(ApiError) as error:
++            worker.execute_operation(next_id)
++        assert error.value.code == 'CODEX_BUDGET_EXCEEDED' and case.dump() == before
++    case, prep, _, calls = exercise(consent_case, observe, monkeypatch)
++    controls = case.get('turns/'+prep['turn_id']).json()['approval_controls']
++    assert len(calls) == 1 and [item['revision'] for item in controls] == [4,3]
++
++
++def test_start_is_committed_before_interpreter_and_cannot_be_reentered(consent_case, monkeypatch):
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        assert decision(case, identifier, body).status_code == 200
++        actual = owner.operations.execute
++        def checked(*args):
++            view = case.client.get('/api/v1/approvals/'+identifier).json()
++            assert view['revision'] == 3 and view['execution'] == 'started'
++            with pytest.raises(ApiError) as error:
++                worker.execute_operation(identifier)
++            assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
++            return actual(*args)
++        monkeypatch.setattr(owner.operations, 'execute', checked)
++        worker.execute_operation(identifier)
++    _, _, _, calls = exercise(consent_case, observe, monkeypatch)
++    assert len(calls) == 1
+diff --git a/tests/unit/test_codex_operation_profile.py b/tests/unit/test_codex_operation_profile.py
+new file mode 100644
+index 00000000..9a55ad3b
+--- /dev/null
++++ b/tests/unit/test_codex_operation_profile.py
+@@ -0,0 +1,50 @@
++"""Pure bounded language tests; no process, filesystem or network probe."""
++import pytest
++
++from packages.contracts.canonical import canonical_bytes
++from services.api.app.application.codex_operation_profile import (
++    CodexOperationRegistry, LiteralCommand, LiteralOperationProfile,
++)
++from services.api.app.application.errors import ApiError
++
++
++def test_production_registry_is_empty_and_never_infers_support():
++    registry = CodexOperationRegistry()
++    body = canonical_bytes(LiteralCommand(version='codex-synthetic-literal-command-v1', text='Synthetic α')).decode()
++    assert registry.prepare('workspace_one', 'turn_one', body) is None
++
++
++def test_complete_operation_is_derived_from_exact_registered_interpreter_and_owner():
++    profile = LiteralOperationProfile.current()
++    registry = CodexOperationRegistry([profile])
++    text = 'Synthetic α\nno model continuation'
++    body = canonical_bytes(LiteralCommand(version='codex-synthetic-literal-command-v1', text=text)).decode()
++    closure, operation = registry.prepare('workspace_one', 'turn_one', body)
++    assert operation.command_text == body and operation.read_files == []
++    assert closure.argv == ['synthetic-memory-literal-v1', text] and closure.environment == {}
++    result = registry.execute(closure, 'a'*64)
++    assert result.text == text
++    assert result.host_actions == result.provider_requests == result.files_written == 0
++    other = registry.prepare('workspace_one', 'turn_two', body)
++    assert other[1].filesystem_scope_sha256 != operation.filesystem_scope_sha256
++
++
++@pytest.mark.parametrize('raw', ['[]', '{}', '{"version":"shell","text":"echo unsafe"}',
++    '{"version":"codex-synthetic-literal-command-v1","text":"x","shell":true}',
++    '{ "version":"codex-synthetic-literal-command-v1","text":"x"}',
++    '{"version":"codex-synthetic-literal-command-v1","text":"'+'x'*257+'"}'])
++def test_no_unknown_fields_shell_fallback_or_noncanonical_input(raw):
++    registry = CodexOperationRegistry([LiteralOperationProfile.current()])
++    assert registry.prepare('workspace_one', 'turn_one', raw) is None
++
++
++def test_withdrawn_or_changed_closure_cannot_execute():
++    registry = CodexOperationRegistry([LiteralOperationProfile.current()])
++    closure, _ = registry.prepare('workspace_one', 'turn_one', canonical_bytes(
++        LiteralCommand(version='codex-synthetic-literal-command-v1', text='Synthetic')).decode())
++    with pytest.raises(ApiError) as unavailable:
++        CodexOperationRegistry().execute(closure, 'a'*64)
++    assert unavailable.value.code == 'CODEX_RUNTIME_UNAVAILABLE'
++    with pytest.raises(ApiError) as altered:
++        registry.execute(closure.model_copy(update={'argv': ['different', 'Synthetic']}), 'a'*64)
++    assert altered.value.code == 'CODEX_BINDING_INVALID'

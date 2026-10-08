@@ -1,0 +1,32 @@
+# Independent static review: unsupported GenericApproval owner
+
+Fixed `fdd3a949fc9bc6edb2d136b912f3d8d1cdba4b81`, baseline `351f7afa5bd1554696f4a8e3cb1683c24f98deac`; sole v3.0.15 unchanged. Exact two-endpoint delta: 16 paths (9 production including migration0030, 4 generated, 3 tests). One peer, separately assessed Standards and Spec. **No confirmed static blocker in this bounded slice.** No product/tests were executed.
+
+## Standards
+
+No confirmed finding. Internal callback, operation, event and witness models are closed and versioned (`codex_approval_models.py:14–95`). The application owns decisions; its repository owns the approval ledger/core projection; Jobs stopping is delegated through the named transaction-aware `CodexTurnService.request_stop`, not a second Job state machine. The added v3 witness decoder preserves existing v1/v2 definitions byte-for-byte. Migration0030 is forward-only; baseline0001 and old bootstrap/ordinary Provider DTOs are unchanged.
+
+The existing synthetic request profile/execution code is byte-identical. The new callback intake explicitly requires the actual `SyntheticCodexExecutor` instance type and live calling worker thread; it does not silently turn a protocol profile into host execution. Generated OpenAPI adds exactly two approval paths and seven named schemas; no existing path definition or schema changes structurally. This review does not endorse a future executable operation profile.
+
+## Spec
+
+The implementation follows the currently reviewed unsupported-operation subset of §20.17.4/7, not the entire approved future capability.
+
+- **Original callback and admission.** `codex_turn_worker.py:234–268` captures workspace/turn/owner/thread only during its held execution and clears the context afterward. `codex_approvals.py:125–179` bounds and strictly decodes original UTF-8 bytes, binds thread/turn/item/RPC to the actual original bootstrap, started dispatch, live lease, profile, input proof, full request and tool budget. It creates only `CodexDeniedOperation`. Duplicate same-owner/RPC requires exact original callback text and turn; it returns the existing ID without new admission or execution. This historical read does not grant new permissions. No HTTP intake creates an operation.
+- **Complete ledger association.** `codex_approval_repository.py:50–157` compares turn witness membership against approval heads/events/core projection, exact event-member pairs, contiguous sequence/hash chain, original callback and cross-owner bindings, command registration, final head and core bytes. Each event must match its v3 turn witness and control. Missing tail/member/core/family is not rebuilt as an empty approval list. `codex_turn_repository.py:354–375` checks per-approval sequence, stable operation hash, first unavailable/pending control and all original members in order.
+- **Permissions and replay.** `codex_approvals.py:67–117` uses current workspace/session/Policy before history and replay. Full GET is author/subject access with fresh delivery after the original read transaction; decline is same-workspace safe control and records the actual cancelling actor. Same actor/key/full body returns its immutable ACK before new-command CAS; changed body409, revision412, operation binding409. Unsupported approve_once is rejected; original actor cannot turn an unsupported description into authority. Spec references: `PRODUCT_DESIGN.md:1680–1684,1740–1750,1826–1832`.
+- **Atomic decline and stop.** Decision append and `request_stop` use the same caller transaction (`codex_approvals.py:104–116`, `codex_turn.py:376–424`). The returned decision ACK is the original decision fact with the pre-stop running JobRef, not proof the remote has stopped. A stop failure rolls back the decision and all owner changes. Delivery performs another current access check; a committed fact is not undone by subsequent lost access.
+- **Current versus historical projection.** Derived expiry/closed validity lives in responses (`codex_approvals.py:39–48`). GET uses query_only and does not create events or rewrite ACKs. Safe control includes all actual approval IDs/controls, not only pending members (`codex_turn.py:97–108`). Full details retain the original operation actor; decline ACK retains the actual deciding actor.
+- **Terminal closure and recovery.** Worker `:104–129` checks approval history and closes pending unsupported objects before final owner outcome in the same transaction; pending unsupported operations prevent a completed outcome. Claim/guard validate prior approval history before further request admission. Recovery retains the existing no-resend owner/lease path. This does not implement a protocol accept/decline response to a real external CLI or prove actual tool execution safety.
+
+## Read test coverage and limits
+
+The new test source covers actual owner/HTTP composition with synthetic callbacks, strict identity and shape failures, original callback replay after decline, new-actor learner decline, hash/CAS, atomic rollback, delivery-time role loss, tail/family/core/member/shape corruption, damaged prior approval blocking later claim, collision rejection, wrong-thread/after-execution callback rejection, application reconstruction with original ACK, two same-key writers, cross-workspace access and independent/open-book safe controls. Original callback tests expose no host operation. These are source observations; the author's 171 subset PASS and six static gates are not this reviewer's executions.
+
+Production has no supported operation registry: approve_once, operation claim/accept and actual command/file tools remain unimplemented. Capability flags are not promoted here; supported variants in the strict public DTO are not proof of runtime availability. No full GenericApproval, physical CLI/model, host-resource, mathematical/source/pedagogy or whole M6.3 acceptance follows from this report.
+
+A preliminary baseline migration lookup used a nonexistent filename and was corrected by fixed Git inventory; the original observation is retained in GENERATED_READBACK.json. No source or prior sealed evidence was changed.
+
+## Sharing
+
+The full raw manifest describes this review's original deliverables; the complete non-progress Git inventory binds immutable source, not a test input run. Only explicit SAFE_SHARE candidates and outer metadata may be copied, with exact original bytes and no transform. No DB, archive, credential, account, raw header or runtime response artifacts are included.

@@ -1,0 +1,5 @@
+## Standards
+
+No confirmed Standards finding in the fixed 11-path delta. AGENTS.md names the sole specification; this pass used v3.0.15 and its owner/versioning conventions. The named operation models and registry separate trusted composition from HTTP authority; the actual execution port commits the start before interpreting and retains the conservative debit on failure. Existing v1 models remain byte-identical; v2 Generic/v5 Codex records avoid silently reinterpreting the old callback records. The repeated envelope cases reflect those versioned persistence boundaries, so they are not reported as a duplication smell merely because their field lists resemble each other.
+
+This is one peer's independent static pass, not a separate subagent or a tools gate. The related code/profile tests were read, not executed. No unregistered production capability is inferred from the explicit test composition, and no host sandbox, account or real CLI security claim is made. The incomplete runtime binding concern is reported separately under Spec.

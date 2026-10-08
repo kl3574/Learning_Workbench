@@ -1,0 +1,1040 @@
+diff --git a/services/api/app/application/codex_turn.py b/services/api/app/application/codex_turn.py
+index 966f202d..b6c7a1cd 100644
+--- a/services/api/app/application/codex_turn.py
++++ b/services/api/app/application/codex_turn.py
+@@ -4,6 +4,7 @@ import hashlib
+ import hmac
+ import secrets
+ from uuid import uuid4
++from typing import TypeVar
+ 
+ from packages.contracts import domain_models as dm
+ from packages.contracts.canonical import strict_json
+@@ -26,6 +27,9 @@ from .errors import ApiError
+ from .providers import checked_provider_configuration, validate_key
+ 
+ 
++Delivery = TypeVar("Delivery")
++
++
+ def missing() -> ApiError:
+     return ApiError(404, 'REFERENCE_MISSING', '本工作区没有此本地任务记录。')
+ 
+@@ -36,6 +40,36 @@ class CodexTurnService:
+         self.context = CodexTurnContext(database)
+         self._cursor_key = secrets.token_bytes(32)
+ 
++    def _deliver(self, identity: SessionIdentity, value: Delivery, *, subject: bool) -> Delivery:
++        # A prior WAL read snapshot cannot observe a concurrently committed
++        # logout/role/Policy change. Check delivery in a new read transaction.
++        with self.database.transaction(immediate=False) as conn:
++            conn.execute('PRAGMA query_only=ON')
++            current_control_access(conn, identity, write=subject)
++        return value
++
++    def prepare_turn(self, identity: SessionIdentity, session_id: str,
++                     body: CodexTurnPrepareWrite, key: str) -> CodexTurnPreparationView:
++        return self._deliver(identity, self._prepare_turn(identity, session_id, body, key), subject=True)
++
++    def read_preparation(self, identity: SessionIdentity, identifier: str) -> CodexTurnPreparationView:
++        return self._deliver(identity, self._read_preparation(identity, identifier), subject=True)
++
++    def read_control(self, identity: SessionIdentity, identifier: str) -> CodexTurnControlView:
++        return self._deliver(identity, self._read_control(identity, identifier), subject=False)
++
++    def read_session(self, identity: SessionIdentity, identifier: str) -> CodexCurrentSessionView:
++        return self._deliver(identity, self._read_session(identity, identifier), subject=False)
++
++    def job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
++        return self._deliver(identity, self._job(identity, identifier), subject=False)
++
++    def cancel_job(self, identity: SessionIdentity, identifier: str, body: JobCancelRequest, key: str) -> JobSnapshot:
++        return self._deliver(identity, self._cancel_job(identity, identifier, body, key), subject=False)
++
++    def turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:
++        return self._deliver(identity, self._turns(identity, session_id, cursor, limit), subject=False)
++
+     def _state(self, conn, identity, *, subject=False):
+         current = current_control_access(conn, identity, write=subject)
+         original = self.bootstrap.checked_sessions(conn, current)
+@@ -52,7 +86,7 @@ class CodexTurnService:
+                     return state, turn
+         raise missing()
+ 
+-    def prepare_turn(self, identity: SessionIdentity, session_id: str,
++    def _prepare_turn(self, identity: SessionIdentity, session_id: str,
+                      body: CodexTurnPrepareWrite, key: str) -> CodexTurnPreparationView:
+         key = validate_key(key)
+         body = CodexTurnPrepareWrite.model_validate(body.model_dump(mode='json'))
+@@ -95,7 +129,7 @@ class CodexTurnService:
+                 turn_id=value.turn_id, job=dm.JobRef(id=value.job_id, status='awaiting_approval'), request=body,
+                 summary=summary, created_at=now, proposal_id=None, consent_id=None, validity='unavailable')
+             ack.preparation_sha256 = preparation_digest(current.workspace_id, ack)
+-            event = TurnPrepared(kind='prepared', input=value, command=PrepareCommand(workspace_id=current.workspace_id,
++            event = TurnPrepared(kind='prepared', creation_sequence=repo.next_creation_sequence(), input=value, command=PrepareCommand(workspace_id=current.workspace_id,
+                 actor_session_id=current.id, route='prepare', target_id=session_id, key=key, body=body, ack=ack))
+             repo.append(state, event, now)
+             # Verify the actual graph before committing: Job/Run/context and
+@@ -104,7 +138,7 @@ class CodexTurnService:
+             current_control_access(conn, current, write=True)
+             return ack
+ 
+-    def read_preparation(self, identity: SessionIdentity, identifier: str) -> CodexTurnPreparationView:
++    def _read_preparation(self, identity: SessionIdentity, identifier: str) -> CodexTurnPreparationView:
+         with self.database.transaction(immediate=False) as conn:
+             conn.execute('PRAGMA query_only=ON')
+             current, _, _, history = self._state(conn, identity, subject=True)
+@@ -112,20 +146,20 @@ class CodexTurnService:
+             ack, value = turn.prepared.command.ack, turn.prepared.input
+             validity = 'closed' if turn.control.execution == 'terminal' else 'unavailable'
+             if validity != 'closed':
+-                context = self.context.verify_turn(conn, value, ack.summary)
++                context = self.context.verify_turn(conn, current, value, ack.summary)
+                 provider = checked_provider_configuration(conn, current, value.provider.id)
+                 if provider != value.provider or not self.context.current(conn, current, context):
+                     validity = 'changed'
+             return CodexTurnPreparationView.model_validate({**ack.model_dump(), 'job': turn.control.job.model_dump(),
+                 'validity': validity})
+ 
+-    def read_control(self, identity: SessionIdentity, identifier: str) -> CodexTurnControlView:
++    def _read_control(self, identity: SessionIdentity, identifier: str) -> CodexTurnControlView:
+         with self.database.transaction(immediate=False) as conn:
+             conn.execute('PRAGMA query_only=ON')
+             _, _, _, history = self._state(conn, identity)
+             return self._find(history, identifier)[1].control
+ 
+-    def read_session(self, identity: SessionIdentity, identifier: str) -> CodexCurrentSessionView:
++    def _read_session(self, identity: SessionIdentity, identifier: str) -> CodexCurrentSessionView:
+         with self.database.transaction(immediate=False) as conn:
+             conn.execute('PRAGMA query_only=ON')
+             _, original, _, history = self._state(conn, identity)
+@@ -138,14 +172,14 @@ class CodexTurnService:
+                 value.update(revision=state.revision, active_turn_id=state.active_turn_id)
+             return CodexCurrentSessionView.model_validate(value)
+ 
+-    def job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
++    def _job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
+         with self.database.transaction(immediate=False) as conn:
+             conn.execute('PRAGMA query_only=ON')
+             _, _, repo, history = self._state(conn, identity)
+             self._find(history, identifier, job=True)
+             return repo.jobs.snapshot(identifier)
+ 
+-    def cancel_job(self, identity: SessionIdentity, identifier: str, body: JobCancelRequest, key: str) -> JobSnapshot:
++    def _cancel_job(self, identity: SessionIdentity, identifier: str, body: JobCancelRequest, key: str) -> JobSnapshot:
+         key = validate_key(key)
+         body = JobCancelRequest.model_validate(body.model_dump())
+         with self.database.transaction() as conn:
+@@ -163,6 +197,8 @@ class CodexTurnService:
+                 repo.jobs.cancel(identifier, body.expected_revision)
+             ack = repo.jobs.snapshot(identifier)
+             event = TurnCancelled(kind='cancel_observed' if terminal else 'cancelled', turn_id=turn.control.id,
++                requested_session_revision=None if terminal else state.revision + 1,
++                terminal_session_revision=None if terminal else state.revision + 2,
+                 command=CancelCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='cancel',
+                     target_id=identifier, key=key, body=body, ack=ack))
+             repo.append(state, event, ack.updated_at if not terminal else utc_now())
+@@ -170,7 +206,7 @@ class CodexTurnService:
+             current_control_access(conn, current, write=False)
+             return ack
+ 
+-    def turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:
++    def _turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:
+         if type(limit) is not int or not 1 <= limit <= 100:
+             raise ApiError(422, 'SCHEMA_INVALID', '分页数量须为1至100。')
+         with self.database.transaction(immediate=False) as conn:
+diff --git a/services/api/app/application/codex_turn_context.py b/services/api/app/application/codex_turn_context.py
+index 301f4238..043be7a4 100644
+--- a/services/api/app/application/codex_turn_context.py
++++ b/services/api/app/application/codex_turn_context.py
+@@ -4,7 +4,7 @@ from uuid import uuid4
+ 
+ from packages.contracts import domain_models as dm
+ from packages.contracts.canonical import strict_json, sha256_bytes
+-from ..codex_turn_dto import CodexTurnPreparationSummary, CodexTurnRuntimeSummary
++from ..codex_turn_dto import CodexTurnPreparationSummary, CodexTurnRuntimeSummary, CodexTurnWarning
+ from ..provider_dto import ReferenceSummary
+ from ..serialization import canonical_json, content_sha256
+ from ..infrastructure.database import Database
+@@ -35,7 +35,7 @@ class CodexTurnContext:
+         messages = [dm.GenerationMessage(role='system', content=TEMPLATE),
+                     dm.GenerationMessage(role='user', content=value.request.message)]
+         size = sum(len(item.content) for item in messages)
+-        scopes, materials, evidence, omitted = [], [], [], []
++        scopes, materials, evidence, omitted, omitted_scopes = [], [], [], [], []
+         for selected in value.request.context_refs:
+             ref = dm.ContentRef.model_validate(selected.model_dump())
+             scope = self.content.resolve_scope(conn, identity, [ref])
+@@ -44,15 +44,18 @@ class CodexTurnContext:
+             block = scope.descriptor.blocks[0]
+             # Resolve every selection through Content even when it cannot fit;
+             # omit only whole materials and record the omission explicitly.
++            actual = self.content.read_material(conn, identity, scope, ref)
++            self.content.verify_retained_block(conn, identity, scope)
+             if block.body_bytes > 48000:
+                 omitted.append(ref)
++                omitted_scopes.append(scope)
+                 continue
+-            actual = self.content.read_material(conn, identity, scope, ref)
+             text = actual.body.decode('utf-8')
+             locator = f'block:{ref.id}@r{ref.revision};body:{actual.body_sha256};cp:0-{len(text)}'
+             item = dm.EvidenceChunk(ref=ref, locator=locator, text=text)
+             if size + len(wrapped(item)) > 12000:
+                 omitted.append(ref)
++                omitted_scopes.append(scope)
+                 continue
+             size += len(wrapped(item))
+             scopes.append(scope)
+@@ -68,13 +71,13 @@ class CodexTurnContext:
+             request_sha256=content_sha256(value.request), resolved_refs=[item.ref for item in evidence],
+             character_count=size, snapshot_sha256='0' * 64)
+         context = TurnContext(version='codex-turn-context-v1', input=value, snapshot=snapshot,
+-            messages=messages, evidence=evidence, scopes=scopes, materials=materials, omitted_refs=omitted, warnings=warnings)
++            messages=messages, evidence=evidence, scopes=scopes, materials=materials, omitted_refs=omitted, omitted_scopes=omitted_scopes, warnings=warnings)
+         context.snapshot.snapshot_sha256 = context_digest(context)
+         conn.execute('INSERT INTO context_snapshots(id,workspace_id,snapshot_sha256,envelope_json,created_at) VALUES(?,?,?,?,?)',
+             (snapshot.id, identity.workspace_id, context.snapshot.snapshot_sha256, canonical_json(context), now))
+         return context
+ 
+-    def verify_turn(self, conn: sqlite3.Connection, value: TurnInput, summary: CodexTurnPreparationSummary) -> TurnContext:
++    def verify_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput, summary: CodexTurnPreparationSummary) -> TurnContext:
+         if not conn.in_transaction:
+             raise damaged()
+         row = conn.execute('SELECT * FROM context_snapshots WHERE id=? AND workspace_id=?',
+@@ -95,6 +98,10 @@ class CodexTurnContext:
+             if not len(result.evidence) == len(result.materials) == len(result.scopes):
+                 raise damaged()
+             retained = []
++            if [scope.descriptor.scope_refs for scope in result.omitted_scopes] != [[ref] for ref in result.omitted_refs]:
++                raise damaged()
++            for scope in [*result.scopes, *result.omitted_scopes]:
++                self.content.verify_retained_block(conn, identity, scope)
+             for item, material, scope in zip(result.evidence, result.materials, result.scopes, strict=True):
+                 if len(scope.descriptor.blocks) != 1:
+                     raise damaged()
+@@ -131,12 +138,13 @@ class CodexTurnContext:
+             prepared_input_sha256=prepared,
+             runtime=CodexTurnRuntimeSummary(profile_sha256=content_sha256(runtime), **limits),
+             character_count=value.snapshot.character_count, materials=value.materials,
+-            history_turn_ids=[], tools=runtime.tools, warnings=[item.model_dump(mode="json") for item in value.warnings])
++            history_turn_ids=[], tools=runtime.tools, warnings=[CodexTurnWarning.model_validate(item.model_dump(mode="json")) for item in value.warnings])
+ 
+     def current(self, conn: sqlite3.Connection, identity: SessionIdentity, context: TurnContext) -> bool:
+         try:
+-            for scope, item in zip(context.scopes, context.evidence, strict=True):
++            for scope in [*context.scopes, *context.omitted_scopes]:
+                 self.content.revalidate_scope(conn, identity, scope)
++            for scope, item in zip(context.scopes, context.evidence, strict=True):
+                 actual = self.content.read_material(conn, identity, scope, item.ref)
+                 if actual.body != item.text.encode('utf-8'):
+                     return False
+diff --git a/services/api/app/application/codex_turn_models.py b/services/api/app/application/codex_turn_models.py
+index 0c295dff..99377479 100644
+--- a/services/api/app/application/codex_turn_models.py
++++ b/services/api/app/application/codex_turn_models.py
+@@ -48,6 +48,7 @@ class TurnContext(dm.StrictModel):
+     scopes: Annotated[list[RetrievalScopeSnapshot], Field(max_length=8)]
+     materials: Annotated[list[ReferenceSummary], Field(max_length=8)]
+     omitted_refs: Annotated[list[dm.ContentRef], Field(max_length=8)]
++    omitted_scopes: Annotated[list[RetrievalScopeSnapshot], Field(max_length=8)]
+     warnings: Annotated[list[dm.Warning], Field(max_length=32)]
+ 
+ 
+@@ -89,6 +90,7 @@ class CancelCommand(dm.StrictModel):
+ 
+ class TurnPrepared(dm.StrictModel):
+     kind: Literal['prepared']
++    creation_sequence: dm.Revision
+     input: TurnInput
+     command: PrepareCommand
+ 
+@@ -96,6 +98,8 @@ class TurnPrepared(dm.StrictModel):
+ class TurnCancelled(dm.StrictModel):
+     kind: Literal['cancelled', 'cancel_observed']
+     turn_id: dm.Id
++    requested_session_revision: dm.Revision | None
++    terminal_session_revision: dm.Revision | None
+     command: CancelCommand
+ 
+ 
+diff --git a/services/api/app/application/content_retrieval.py b/services/api/app/application/content_retrieval.py
+index ebd21bd2..d1ee375d 100644
+--- a/services/api/app/application/content_retrieval.py
++++ b/services/api/app/application/content_retrieval.py
+@@ -265,6 +265,7 @@ class _ScopeReader:
+ class ContentRetrievalSource:
+     def __init__(self, database: Database):
+         self.blobs = BlobStore(database.settings.data_dir, max_bytes=SCOPE_BYTE_BUDGET)
++        self.retained_blobs = BlobStore(database.settings.data_dir, max_bytes=database.settings.max_upload_bytes)
+ 
+     @staticmethod
+     @contextmanager
+@@ -317,6 +318,41 @@ class ContentRetrievalSource:
+                 ref=block.ref, body_sha256=block.body_sha256, body=body,
+             )
+ 
++    def verify_retained_block(self, conn: sqlite3.Connection, identity: SessionIdentity,
++                              scope: RetrievalScopeSnapshot) -> None:
++        """Content-owned integrity only; never return subject bytes or permission.
++
++        Safe task control may run under learner/testing Policy. Verify exact
++        original public metadata/body/provenance without resolving to later
++        current refs, and without creating or repairing any owner record.
++        """
++        from ..infrastructure.security import current_session_identity
++        if not conn.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '原材料核验需要当前事务。')
++        current_session_identity(conn, identity)
++        try:
++            scope = RetrievalScopeSnapshot.model_validate(scope.model_dump(mode='json'))
++            if scope.descriptor.workspace_id != identity.workspace_id or len(scope.descriptor.blocks) != 1:
++                raise damaged()
++            original = scope.descriptor.blocks[0]
++            if scope.descriptor.scope_refs != [original.ref]:
++                raise damaged()
++            reader = _ScopeReader(conn, identity, [original.ref])
++            block = reader.load('block', original.ref.id, original.ref.revision).value
++            if (not isinstance(block, dm.ContentBlock) or reference(block) != original.ref
++                    or block.body_path.startswith('private/') or block.title != original.title):
++                raise damaged()
++            info = reader.repository.body_info(block)
++            if info.sha256 != original.body_sha256 or info.size != original.body_bytes:
++                raise damaged()
++            self.blobs.read(info.sha256, expected_size=info.size)
++            reader.provenance.verified_original(block, self.retained_blobs.read)
++            provenance, digest = reader.source(block)
++            if provenance != original.provenance or digest != original.source_descriptor_sha256:
++                raise damaged()
++        except (ValueError, TypeError, KeyError, UnicodeError):
++            raise damaged() from None
++
+     def revalidate_scope(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                          scope: RetrievalScopeSnapshot) -> None:
+         with self._access(conn, identity):
+diff --git a/services/api/app/application/providers.py b/services/api/app/application/providers.py
+index 9f24614d..844e4a33 100644
+--- a/services/api/app/application/providers.py
++++ b/services/api/app/application/providers.py
+@@ -55,7 +55,9 @@ def checked_provider_configuration(connection: sqlite3.Connection, identity: Ses
+         raise ApiError(409, 'TRANSACTION_REQUIRED', '提供商核验需要当前事务。')
+     current_session_identity(connection, identity)
+     identifier(provider_id)
+-    return ProviderRepository(connection, identity.workspace_id).config(provider_id, revision)
++    repository = ProviderRepository(connection, identity.workspace_id)
++    current = repository.config(provider_id)
++    return current if revision is None else repository.config(provider_id, revision)
+ 
+ 
+ class ProviderService:
+diff --git a/services/api/app/codex_turn_dto.py b/services/api/app/codex_turn_dto.py
+index 6300871f..b53f1572 100644
+--- a/services/api/app/codex_turn_dto.py
++++ b/services/api/app/codex_turn_dto.py
+@@ -693,6 +693,10 @@ class GenericApprovalView(CodexTurnModel):
+             raise ValueError('Only actual decisions have a decision time')
+         if self.decision != 'pending' and self.revision < 2:
+             raise ValueError('A decision advances the approval revision')
++        if self.execution == 'started' and self.revision < 3:
++            raise ValueError('Actual start must advance the original decision revision')
++        if self.execution in {'completed', 'failed', 'unknown'} and self.revision < 4:
++            raise ValueError('Actual finish must advance the actual start revision')
+         if isinstance(self.operation, CodexDeniedOperation) and self.decision == 'approve_once':
+             raise ValueError('An unsupported operation can never be approved')
+         if self.execution != 'not_started' and self.decision != 'approve_once':
+diff --git a/services/api/app/infrastructure/codex_turn_repository.py b/services/api/app/infrastructure/codex_turn_repository.py
+index 5051af50..fee105e6 100644
+--- a/services/api/app/infrastructure/codex_turn_repository.py
++++ b/services/api/app/infrastructure/codex_turn_repository.py
+@@ -10,6 +10,7 @@ from ..application.codex_turn_context import CodexTurnContext, damaged
+ from ..application.codex_turn_models import (
+     SessionAnchor, EventEnvelope, TurnPrepared, CancelCommand, preparation_digest,
+ )
++from ..application.errors import ApiError
+ from ..application.providers import checked_provider_configuration
+ from ..codex_turn_dto import CodexTurnControlView
+ from ..serialization import canonical_json, content_sha256
+@@ -74,6 +75,10 @@ class CodexTurnRepository:
+     def checked(self, bootstrap: dict[str, BootstrapSnapshot]) -> dict[str, CheckedSession]:
+         try:
+             return self._checked(bootstrap)
++        except ApiError as error:
++            if error.code in {"PROVIDER_INTEGRITY_INVALID", "PROVIDER_MISSING", "AUTHORING_INTEGRITY_ERROR", "JOB_MISSING"}:
++                raise damaged() from None
++            raise
+         except (ValueError, TypeError, KeyError, IndexError, RecursionError):
+             raise damaged() from None
+ 
+@@ -143,9 +148,13 @@ class CodexTurnRepository:
+                         if state.active_turn_id != event.turn_id or turn.control.execution != 'not_started':
+                             raise damaged()
+                         turn.control = turn_control(turn.prepared, envelope.occurred_at)
+-                        state.revision += 1
++                        if (event.requested_session_revision != state.revision + 1
++                                or event.terminal_session_revision != state.revision + 2):
++                            raise damaged()
++                        state.revision += 2
+                         state.active_turn_id = None
+-                    elif turn.control.execution != 'terminal':
++                    elif (turn.control.execution != 'terminal' or event.requested_session_revision is not None
++                          or event.terminal_session_revision is not None):
+                         raise damaged()
+                     if command.ack != self.jobs.snapshot(turn.control.job.id, turn.control.job_revision):
+                         raise damaged()
+@@ -181,19 +190,19 @@ class CodexTurnRepository:
+                 or ack.created_at != envelope.occurred_at or preparation_digest(self.workspace, ack) != ack.preparation_sha256
+                 or member['session_id'] != value.session_id or member['job_id'] != value.job_id
+                 or member['preparation_id'] != ack.id or member['preparation_sha256'] != ack.preparation_sha256
+-                or member['prepared_seq'] != envelope.seq):
++                or member['prepared_seq'] != envelope.seq or member['sequence'] != event.creation_sequence):
+             raise damaged()
+         row = self.jobs.load(value.job_id)
+         if row['input_json'] != canonical_json(value) or row['input_sha256'] != ack.summary.job_input_sha256:
+             raise damaged()
+         if checked_provider_configuration(self.conn, self.identity, value.provider.id, value.provider.revision) != value.provider:
+             raise damaged()
+-        context = self.context.verify_turn(self.conn, value, ack.summary)
++        context = self.context.verify_turn(self.conn, self.identity, value, ack.summary)
+         if context.snapshot.created_at != ack.created_at:
+             raise damaged()
+         state.revision += 1
+         state.active_turn_id = value.turn_id
+-        state.turns[value.turn_id] = CheckedTurn(event, turn_control(event), member['sequence'])
++        state.turns[value.turn_id] = CheckedTurn(event, turn_control(event), envelope.seq)
+ 
+     def _run(self, anchor, turn):
+         row = self.jobs.load(turn.control.job.id)
+@@ -211,6 +220,11 @@ class CodexTurnRepository:
+         if actual_runs != actual_jobs:
+             raise damaged()
+ 
++    def next_creation_sequence(self) -> int:
++        # The allocating writer owns BEGIN IMMEDIATE. Freeze the real sequence
++        # into the immutable event; the surrogate is never pagination authority.
++        return self.conn.execute('SELECT COALESCE(MAX(sequence),0)+1 FROM codex_turn_members').fetchone()[0]
++
+     def establish(self, anchor: SessionAnchor) -> CheckedSession:
+         raw, digest = canonical_json(anchor), content_sha256(anchor)
+         self.conn.execute('INSERT INTO threads(id,workspace_id,scope_json,title,created_at) VALUES(?,?,?,?,?)',
+@@ -235,15 +249,15 @@ class CodexTurnRepository:
+              state.anchor.session_id, seq, content_sha256(command)))
+         if isinstance(event, TurnPrepared):
+             view = command.ack
+-            self.conn.execute('INSERT INTO codex_turn_members(turn_id,session_id,workspace_id,job_id,preparation_id,preparation_sha256,prepared_seq) VALUES(?,?,?,?,?,?,?)',
+-                (view.turn_id, view.session_id, self.workspace, view.job.id, view.id, view.preparation_sha256, seq))
++            self.conn.execute('INSERT INTO codex_turn_members(sequence,turn_id,session_id,workspace_id,job_id,preparation_id,preparation_sha256,prepared_seq) VALUES(?,?,?,?,?,?,?,?)',
++                (event.creation_sequence, view.turn_id, view.session_id, self.workspace, view.job.id, view.id, view.preparation_sha256, seq))
+             self.conn.execute('INSERT INTO runs VALUES(?,?,?,?)',
+                 (view.job.id, state.anchor.thread_id, view.summary.context_snapshot_id, canonical_json(turn_control(event))))
+             revision, active = state.revision + 1, view.turn_id
+         elif event.kind == 'cancelled':
+             control = turn_control(state.turns[event.turn_id].prepared, now)
+             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+-            revision, active = state.revision + 1, None
++            revision, active = state.revision + 2, None
+         else:
+             revision, active = state.revision, state.active_turn_id
+         updated = self.conn.execute('UPDATE codex_turn_heads SET revision=?,event_count=?,head_sha256=?,active_turn_id=? WHERE session_id=? AND revision=? AND event_count=? AND head_sha256=?',
+@@ -259,7 +273,6 @@ class CodexTurnRepository:
+                 command = envelope.event.command
+                 if (command.actor_session_id, command.route, command.target_id, command.key) == (identity.id, route, target, key):
+                     if canonical_json(command.body) != canonical_json(body):
+-                        from ..application.errors import ApiError
+                         raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原命令与本次完整输入不一致。')
+                     return command.ack
+         return None
+diff --git a/tests/contract/test_codex_bootstrap_routes.py b/tests/contract/test_codex_bootstrap_routes.py
+index a194cf2a..c1da051e 100644
+--- a/tests/contract/test_codex_bootstrap_routes.py
++++ b/tests/contract/test_codex_bootstrap_routes.py
+@@ -11,7 +11,7 @@ def test_five_runtime_operations_bind_declared_transport_without_future_routes(t
+         ('/session-preparations/{id}', 'get'): (None, 'CodexBootstrapPreparationView', '200'),
+         ('/session-preparations/{id}/decision', 'post'): ('ApprovalDecision', 'CodexBootstrapDecisionAck', '200'),
+         ('/sessions', 'post'): ('CodexSessionCreateWrite', 'CodexSessionCreateAck', '201'),
+-        ('/sessions/{id}', 'get'): (None, 'CodexSessionView', '200'),
++        ('/sessions/{id}', 'get'): (None, 'CodexCurrentSessionView', '200'),
+     }
+     for (path, method), (request, response, status) in contracts.items():
+         operation = schema['paths']['/api/v1/codex' + path][method]
+diff --git a/tests/contract/test_codex_turn_dto.py b/tests/contract/test_codex_turn_dto.py
+index 4306f8f3..bca1c3c6 100644
+--- a/tests/contract/test_codex_turn_dto.py
++++ b/tests/contract/test_codex_turn_dto.py
+@@ -207,6 +207,28 @@ def test_approval_does_not_upgrade_decision_ack_to_execution_or_unsupported_gran
+     assert dto.GenericApprovalView.model_validate(value).execution == 'completed'
+ 
+ 
++@pytest.mark.parametrize('execution,revision', [('started', 2), ('completed', 2), ('failed', 3), ('unknown', 3)])
++def test_approval_stage_cannot_claim_facts_without_control_revisions(execution, revision):
++    value = samples()['GenericApprovalView']
++    value.update(decision='approve_once', decided_at=NOW, started_at=NOW,
++                 execution=execution, revision=revision)
++    if execution != 'started':
++        value.update(finished_at=LATER, result_sha256=HASH)
++    with pytest.raises(ValidationError):
++        dto.GenericApprovalView.model_validate(value)
++
++
++def test_approval_stage_minimum_does_not_invent_history_for_unstarted_closure():
++    value = samples()['GenericApprovalView']
++    value.update(decision='approve_once', revision=2, decided_at=NOW, validity='closed')
++    assert dto.GenericApprovalView.model_validate(value).execution == 'not_started'
++    value.update(execution='started', started_at=NOW, revision=3)
++    dto.GenericApprovalView.model_validate(value)
++    for execution in ('completed', 'failed', 'unknown'):
++        value.update(execution=execution, revision=4, finished_at=LATER, result_sha256=HASH)
++        dto.GenericApprovalView.model_validate(value)
++
++
+ def test_original_acks_are_not_current_views_or_rewritten_by_later_state():
+     original = b'{"id":"session_one","revision":2,"status":"ready","capabilities":{"approvals":false,"interrupt":false,"artifacts":false},"adapter_version":"synthetic-v1"}'
+     ack = bootstrap.CodexSessionCreateAck.model_validate(json.loads(original))
+diff --git a/tests/integration/test_codex_turn_lifecycle.py b/tests/integration/test_codex_turn_lifecycle.py
+new file mode 100644
+index 00000000..8413164f
+--- /dev/null
++++ b/tests/integration/test_codex_turn_lifecycle.py
+@@ -0,0 +1,208 @@
++"""Synthetic persistence/access races, restart and forward migration oracles."""
++from concurrent.futures import ThreadPoolExecutor
++from dataclasses import replace
++from pathlib import Path
++from threading import Event
++import shutil
++
++from fastapi.testclient import TestClient
++import pytest
++
++from services.api.app.application.codex_turn_models import EventEnvelope
++from services.api.app.infrastructure.database import Database
++from services.api.app.serialization import canonical_json, content_sha256
++from services.api.app.main import create_app
++from tests.integration.test_codex_turn_preparation_http import turn_case as fixture, prepared, turn_body, cancel
++from tests.integration.test_codex_bootstrap_http import ControlledRuntime, approve, make_case
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++turn_case = fixture
++
++
++@pytest.mark.parametrize('change,expected', [('learner', 200), ('logout', 401), ('workspace', 401)])
++def test_safe_get_fresh_delivery_retains_learner_but_rejects_invalid_identity(turn_case, monkeypatch, change, expected):
++    case, _, _, _, _ = turn_case
++    value = prepared(turn_case).json()
++    service = case.app.state.codex_turn_service
++    original = service._state
++    entered, release = Event(), Event()
++    def held(*args, **kwargs):
++        result = original(*args, **kwargs)
++        entered.set()
++        assert release.wait(10)
++        return result
++    monkeypatch.setattr(service, '_state', held)
++    with ThreadPoolExecutor(max_workers=1) as pool:
++        future = pool.submit(case.get, 'turns/' + value['turn_id'])
++        try:
++            assert entered.wait(10)
++            if change == 'learner':
++                response = case.client.post('/api/v1/session/role', json={'role': 'learner'},
++                    headers={**case.headers, 'Idempotency-Key': 'control-role'})
++                assert response.status_code == 200
++            else:
++                # Session-owned storage corruption/revocation fixture only.
++                with case.app.state.database.transaction() as conn:
++                    if change == 'logout':
++                        conn.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z' WHERE id=?", (case.actor_id,))
++                    else:
++                        conn.execute("INSERT INTO workspace(id,title,created_at) VALUES('other_workspace','Synthetic','2026-01-01T00:00:00Z')")
++                        conn.execute("UPDATE local_sessions SET workspace_id='other_workspace' WHERE id=?", (case.actor_id,))
++            before = case.dump()
++        finally:
++            release.set()
++        response = future.result(timeout=10)
++    assert response.status_code == expected
++    assert turn_body()['message'] not in response.text and 'context_refs' not in response.text
++    if response.status_code == 200:
++        assert 'message' not in response.json()
++    assert case.dump() == before
++
++
++def test_restart_preserves_original_ack_current_revision_and_never_runs_cli(turn_case, monkeypatch):
++    import subprocess
++    case, runtime, sid, bootstrap_body, bootstrap_ack = turn_case
++    response = prepared(turn_case)
++    value = response.json()
++    stopped = cancel(case, value['job']['id'])
++    assert stopped.status_code == 200
++    def forbidden(*args, **kwargs):
++        pytest.fail('restart/control launched an external process')
++    monkeypatch.setattr(subprocess, 'Popen', forbidden)
++    new = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime)
++    client = TestClient(new, base_url=case.app.state.settings.origin)
++    client.cookies.update(case.client.cookies)
++    try:
++        before = case.dump()
++        current = client.get('/api/v1/codex/sessions/' + sid)
++        assert current.status_code == 200 and current.json()['revision'] == 5 and current.json()['active_turn_id'] is None
++        replay = client.post(f'/api/v1/codex/sessions/{sid}/turn-preparations', json=turn_body(),
++            headers={**case.headers, 'Idempotency-Key': 'turn'})
++        assert replay.content == response.content
++        original = client.post('/api/v1/codex/sessions', json=bootstrap_body,
++            headers={**case.headers, 'Idempotency-Key': 'bootstrap-session'})
++        assert original.content == bootstrap_ack
++        replay = client.post('/api/v1/jobs/' + value['job']['id'] + '/cancel', json={'expected_revision': 1},
++            headers={**case.headers, 'Idempotency-Key': 'cancel'})
++        assert replay.content == stopped.content
++        assert client.get('/api/v1/runs/' + value['job']['id']).status_code == 404
++        assert len(runtime.calls) == 1 and case.dump() == before
++    finally:
++        client.close()
++
++
++def test_provider_tail_loss_rejects_frozen_original_even_when_its_revision_survives(turn_case):
++    case, _, sid, _, _ = turn_case
++    value = prepared(turn_case).json()
++    response = case.client.put('/api/v1/providers/codex_local/config', json={
++        'expected_revision': 1, 'adapter': 'compatible_chat', 'base_url': 'https://example.invalid',
++        'model': 'synthetic-model-r2', 'embedding_model': None, 'endpoint_policy': 'public_https', 'pricing': None,
++    }, headers={**case.headers, 'Idempotency-Key': 'config-two'})
++    assert response.status_code == 200
++    # Use explicit synthetic corruption with FK enforcement suspended only for
++    # this deliberately invalid fixture; the application connections keep FK ON.
++    with case.app.state.database.connect() as conn:
++        conn.execute('PRAGMA foreign_keys=OFF')
++        conn.execute('DROP TRIGGER provider_config_history_no_delete')
++        conn.execute("DELETE FROM provider_config_history WHERE provider_id='codex_local' AND revision=2")
++    before = case.dump()
++    response = case.get('turns/' + value['turn_id'])
++    assert response.status_code == 409
++    response = case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'turn')
++    assert response.status_code == 409
++    assert case.dump() == before
++
++
++@pytest.mark.parametrize('field', ['requested_session_revision', 'terminal_session_revision'])
++def test_cancel_each_revision_fact_is_checked_even_with_rehashed_owner_chain(turn_case, field):
++    case, _, sid, _, _ = turn_case
++    value = prepared(turn_case).json()
++    assert cancel(case, value['job']['id']).status_code == 200
++    with case.app.state.database.transaction() as conn:
++        row = conn.execute('SELECT record_json FROM codex_turn_events WHERE session_id=? AND seq=2', (sid,)).fetchone()
++        event = EventEnvelope.model_validate_json(row[0])
++        setattr(event.event, field, getattr(event.event, field) + 1)
++        digest = content_sha256(event)
++        conn.execute('DROP TRIGGER codex_turn_events_update')
++        conn.execute('DROP TRIGGER codex_turn_event_members_update')
++        conn.execute('UPDATE codex_turn_events SET record_json=?,record_sha256=? WHERE session_id=? AND seq=2',
++            (canonical_json(event), digest, sid))
++        conn.execute('UPDATE codex_turn_event_members SET record_sha256=? WHERE session_id=? AND seq=2', (digest, sid))
++        conn.execute('UPDATE codex_turn_heads SET head_sha256=? WHERE session_id=?', (digest, sid))
++    before = case.dump()
++    response = case.get('sessions/' + sid)
++    assert response.status_code == 409
++    response = cancel(case, value['job']['id'])
++    assert response.status_code == 409
++    assert case.dump() == before
++
++
++def test_forward_migration_preserves_original_bootstrap_and_all_existing_rows(tmp_path):
++    # Populate genuine old owner facts using the exact pre-0028 schema.
++    runtime = ControlledRuntime()
++    case = make_case(tmp_path / 'seed', codex_bootstrap_runtime=runtime)
++    prior = tmp_path / 'prior_migrations'
++    prior.mkdir()
++    for path in case.app.state.settings.migrations_dir.glob('*.sql'):
++        if path.name < '0028':
++            shutil.copyfile(path, prior / path.name)
++    settings = replace(case.app.state.settings, data_dir=tmp_path / 'old', migrations_dir=prior)
++    old = Database(settings)
++    old.initialize()
++    # Existing bootstrap APIs do not require new turn tables to prepare/create.
++    app = create_app(settings, codex_bootstrap_runtime=runtime)
++    from tests.integration.test_codex_bootstrap_http import Case
++    from services.api.app.security import issue_bootstrap_code
++    client = TestClient(app, base_url=settings.origin)
++    grant = client.post('/api/v1/session/bootstrap', json={'one_time_code': issue_bootstrap_code(old)}, headers={'Origin': settings.origin})
++    headers = {'Origin': settings.origin, 'X-CSRF-Token': grant.json()['csrf_token']}
++    role = client.post('/api/v1/session/role', json={'role': 'author'}, headers={**headers, 'Idempotency-Key': 'role'})
++    assert role.status_code == 200
++    actor = client.get('/api/v1/session').json()['actor_session_id']
++    legacy = Case(app, client, headers, actor)
++    _, _, body = approve(legacy)
++    response = legacy.post('sessions', body, 'legacy-session')
++    assert response.status_code == 201
++    before = table_hashes(old)
++    upgraded = Database(replace(settings, migrations_dir=Path(case.app.state.settings.migrations_dir)))
++    upgraded.initialize()
++    after = table_hashes(upgraded)
++    assert {key: after[key] for key in before if key != 'schema_migrations'} == {key: item for key, item in before.items() if key != 'schema_migrations'}
++    with upgraded.connect() as conn:
++        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
++    current_app = create_app(upgraded.settings, codex_bootstrap_runtime=runtime)
++    current = TestClient(current_app, base_url=settings.origin)
++    current.cookies.update(client.cookies)
++    try:
++        replay = current.post('/api/v1/codex/sessions', json=body, headers={**headers, 'Idempotency-Key': 'legacy-session'})
++        assert replay.content == response.content
++        read = current.get('/api/v1/codex/sessions/' + response.json()['id'])
++        assert read.status_code == 200 and read.json() == {**response.json(), 'active_turn_id': None}
++        assert len(runtime.calls) == 1
++    finally:
++        current.close()
++        client.close()
++        case.client.close()
++
++
++def test_current_cross_workspace_actor_cannot_read_or_cancel_known_turn_ids(turn_case):
++    from services.api.app.security import issue_bootstrap_code
++    case, _, sid, _, _ = turn_case
++    value = prepared(turn_case).json()
++    fresh = case.client.post('/api/v1/session/bootstrap', json={'one_time_code': issue_bootstrap_code(case.app.state.database)},
++        headers={'Origin': case.headers['Origin']})
++    case.headers['X-CSRF-Token'] = fresh.json()['csrf_token']
++    actor = case.client.get('/api/v1/session').json()['actor_session_id']
++    with case.app.state.database.transaction() as conn:
++        conn.execute("INSERT INTO workspace(id,title,created_at) VALUES('other_workspace','Synthetic','2026-01-01T00:00:00Z')")
++        conn.execute("UPDATE local_sessions SET workspace_id='other_workspace',role='author' WHERE id=?", (actor,))
++    before = case.dump()
++    for path in ['sessions/' + sid, f'sessions/{sid}/turns', 'turns/' + value['turn_id'],
++                 'turn-preparations/' + value['id']]:
++        response = case.get(path)
++        assert response.status_code == 404
++    response = cancel(case, value['job']['id'])
++    assert response.status_code == 404
++    response = case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'foreign')
++    assert response.status_code == 404
++    assert case.dump() == before
+diff --git a/tests/integration/test_codex_turn_preparation_http.py b/tests/integration/test_codex_turn_preparation_http.py
+index ac45152c..61afe945 100644
+--- a/tests/integration/test_codex_turn_preparation_http.py
++++ b/tests/integration/test_codex_turn_preparation_http.py
+@@ -2,6 +2,9 @@
+ import pytest
+ 
+ from tests.integration.test_codex_bootstrap_http import ControlledRuntime, approve, make_case
++from tests.integration.test_assessment_learning_port import assessment_learning_state
++
++assessment_state = assessment_learning_state
+ 
+ 
+ @pytest.fixture
+@@ -54,7 +57,7 @@ def test_prepare_current_control_cancel_and_original_acks(turn_case, monkeypatch
+         json={'expected_revision': 1}, headers={**case.headers, 'Idempotency-Key': 'cancel-original'})
+     assert cancel.status_code == 200 and cancel.json()['status'] == 'cancelled', cancel.text
+     current = case.get('sessions/' + session_id).json()
+-    assert current['revision'] == 4 and current['active_turn_id'] is None
++    assert current['revision'] == 5 and current['active_turn_id'] is None
+     assert case.get('turns/' + original['turn_id']).json()['outcome'] == 'cancelled'
+     assert case.get('turn-preparations/' + original['id']).json()['validity'] == 'closed'
+     before = case.dump()
+@@ -93,7 +96,7 @@ def test_fresh_cas_active_slot_full_command_and_schema_zero_write(turn_case, bad
+         body['context_refs'] = [{'entity': 'block', 'id': 'same', 'revision': 1}] * 2
+     elif bad == 'unknown_provider':
+         assert cancel(case, case.get(f'sessions/{sid}/turns').json()['items'][0]['job']['id']).status_code == 200
+-        body['expected_session_revision'] = 4
++        body['expected_session_revision'] = 5
+         body['provider_id'] = 'missing'
+     before = case.dump()
+     result = case.post(f'sessions/{sid}/turn-preparations', body, key)
+@@ -119,7 +122,7 @@ def test_learner_control_cancel_no_subject_and_no_second_terminal(turn_case):
+     assert cancel(case, value['job']['id'], 1, 'stale').status_code == 412
+     second = cancel(case, value['job']['id'], 2, 'observe')
+     assert second.content == first.content
+-    assert case.get('sessions/' + sid).json()['revision'] == 4
++    assert case.get('sessions/' + sid).json()['revision'] == 5
+     assert case.get('turns/' + value['turn_id']).json()['last_seq'] == 2
+     before = case.dump()
+     assert cancel(case, value['job']['id']).content == first.content
+@@ -136,9 +139,9 @@ def test_new_actor_reads_old_control_but_cannot_take_original_session(turn_case,
+         assert other.get('turns/' + original['turn_id']).json()['actor_session_id'] == case.actor_id
+         assert cancel(other, original['job']['id']).status_code == 200
+         before = case.dump()
+-        assert other.post(f'sessions/{sid}/turn-preparations', turn_body(4), 'original-looking').status_code == 403
++        assert other.post(f'sessions/{sid}/turn-preparations', turn_body(5), 'original-looking').status_code == 403
+         assert case.dump() == before
+-        assert prepared(turn_case, revision=4, key='original-actor-new').status_code == 202
++        assert prepared(turn_case, revision=5, key='original-actor-new').status_code == 202
+     finally:
+         other.client.close()
+ 
+@@ -189,6 +192,7 @@ def test_cross_owner_original_binding_damage_cannot_return_partial_success(turn_
+         elif damage == 'job':
+             conn.execute("DELETE FROM job_events WHERE job_id=?", (value['job']['id'],))
+         else:
++            conn.execute("DROP TRIGGER provider_config_history_no_update")
+             conn.execute("UPDATE provider_config_history SET config_json='{}' WHERE provider_id='codex_local'")
+     before = case.dump()
+     assert case.get('sessions/' + sid).status_code == 409
+@@ -201,11 +205,11 @@ def test_pagination_freezes_membership_but_reads_current_status(turn_case):
+     case, _, sid, _, _ = turn_case
+     first = prepared(turn_case).json()
+     assert cancel(case, first['job']['id']).status_code == 200
+-    second = prepared(turn_case, 4, 'two').json()
++    second = prepared(turn_case, 5, 'two').json()
+     assert cancel(case, second['job']['id'], key='cancel-two').status_code == 200
+     page = case.get(f'sessions/{sid}/turns?limit=1').json()
+     assert page['items'][0]['id'] == second['turn_id'] and page['next_cursor']
+-    prepared(turn_case, 6, 'three')
++    prepared(turn_case, 8, 'three')
+     before = case.dump()
+     older = case.get(f'sessions/{sid}/turns?limit=1&cursor=' + page['next_cursor'])
+     assert older.status_code == 200 and [item['id'] for item in older.json()['items']] == [first['turn_id']]
+@@ -221,9 +225,8 @@ def test_prepare_atomic_rollback_keeps_session_revision_job_run_context_and_comm
+     with case.app.state.database.transaction() as conn:
+         conn.execute("CREATE TRIGGER controlled_failure BEFORE INSERT ON codex_turn_event_members BEGIN SELECT RAISE(ABORT,'synthetic rollback'); END;")
+     before = case.dump()
+-    import sqlite3
+-    with pytest.raises(sqlite3.IntegrityError, match='synthetic rollback'):
+-        case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'rollback')
++    response = case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'rollback')
++    assert response.status_code == 500 and response.json()['error']['code'] == 'INTERNAL_ERROR'
+     assert case.dump() == before
+     assert case.get('sessions/' + sid).json()['revision'] == 2
+ 
+@@ -240,3 +243,172 @@ def test_current_provider_revision_changes_eligibility_never_original_ack(turn_c
+     assert case.get('turn-preparations/' + original.json()['id']).json()['validity'] == 'changed'
+     assert case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'turn').content == original.content
+     assert case.dump() == before
++
++
++def test_first_cancel_persists_request_and_release_as_two_session_changes(turn_case):
++    case, _, sid, _, _ = turn_case
++    original = prepared(turn_case).json()
++    assert original['session_revision'] == 3
++    assert cancel(case, original['job']['id']).status_code == 200
++    assert case.get('sessions/' + sid).json()['revision'] == 5
++    assert case.get('turns/' + original['turn_id']).json()['last_seq'] == 2
++
++
++def identity(case):
++    from services.api.app.infrastructure.security import SessionIdentity
++    return SessionIdentity(case.actor_id, case.app.state.database.workspace_id(), 'author', '', '2099-01-01T00:00:00Z')
++
++
++def test_exact_public_source_order_original_pins_and_history_after_current_advance(turn_case):
++    from tests.integration.test_retrieval import publish_small
++    from services.api.app.infrastructure.content_repository import reference
++    from services.api.app.application.content import ContentService
++    case, _, sid, _, _ = turn_case
++    blocks, _, _ = publish_small(case.app.state.database, identity(case), 'turn-source', ['Alpha original\n', 'Beta original\n'])
++    body = {**turn_body(), 'context_refs': [reference(blocks[1]).model_dump(), reference(blocks[0]).model_dump()]}
++    response = case.post(f'sessions/{sid}/turn-preparations', body, 'sources')
++    assert response.status_code == 202, response.text
++    value = response.json()
++    assert [item['ref']['id'] for item in value['summary']['materials']] == [blocks[1].id, blocks[0].id]
++    new = blocks[0].model_copy(update={'revision': 2, 'title': 'Later metadata'})
++    ContentService(case.app.state.database).publish(identity(case).workspace_id, [new], {new.body_path: b'Alpha original\n'})
++    before = case.dump()
++    current = case.get('turn-preparations/' + value['id'])
++    assert current.status_code == 200 and current.json()['validity'] == 'changed'
++    assert current.json()['summary'] == value['summary']
++    replay = case.post(f'sessions/{sid}/turn-preparations', body, 'sources')
++    assert replay.content == response.content
++    assert case.dump() == before
++
++
++@pytest.mark.parametrize('large,damage', [(True, False), (True, True), (False, True)])
++def test_omission_still_verifies_actual_selected_bytes_before_any_job_is_saved(turn_case, large, damage):
++    from tests.integration.test_retrieval import publish_small
++    from services.api.app.infrastructure.content_repository import reference
++    case, _, sid, _, _ = turn_case
++    text = 'Original source α\n' * (4000 if large else 2)
++    blocks, _, _ = publish_small(case.app.state.database, identity(case), 'bounded', [text])
++    block = blocks[0]
++    if damage:
++        path = case.app.state.settings.data_dir / 'blobs' / block.body_sha256[:2] / block.body_sha256
++        path.write_bytes(b'corrupt actual synthetic source')
++    before = case.dump()
++    body = {**turn_body(), 'context_refs': [reference(block).model_dump()]}
++    response = case.post(f'sessions/{sid}/turn-preparations', body, 'bounded-source')
++    if damage:
++        assert response.status_code == 409, response.text
++        assert case.dump() == before
++    else:
++        assert response.status_code == 202, response.text
++        value = response.json()
++        assert value['summary']['materials'] == [] and value['summary']['character_count'] < 12000
++        assert any(item['code'] == 'CODEX_CONTEXT_MATERIAL_OMITTED' for item in value['summary']['warnings'])
++        before = case.dump()
++        read = case.get('turn-preparations/' + value['id'])
++        assert read.status_code == 200 and read.json() == value
++        assert case.dump() == before
++
++
++def test_changed_original_source_cannot_hide_behind_saved_context_for_safe_control(turn_case):
++    from tests.integration.test_retrieval import publish_small
++    from services.api.app.infrastructure.content_repository import reference
++    case, _, sid, _, _ = turn_case
++    blocks, _, _ = publish_small(case.app.state.database, identity(case), 'retained', ['Actual original\n'])
++    body = {**turn_body(), 'context_refs': [reference(blocks[0]).model_dump()]}
++    created = case.post(f'sessions/{sid}/turn-preparations', body, 'retained')
++    assert created.status_code == 202, created.text
++    value = created.json()
++    digest = blocks[0].body_sha256
++    (case.app.state.settings.data_dir / 'blobs' / digest[:2] / digest).write_bytes(b'corrupt original')
++    before = case.dump()
++    control = case.get('turns/' + value['turn_id'])
++    assert control.status_code == 409
++    replay = case.post(f'sessions/{sid}/turn-preparations', body, 'retained')
++    assert replay.status_code == 409
++    assert cancel(case, value['job']['id']).status_code == 409
++    assert case.dump() == before
++
++
++def test_concurrent_real_writers_reserve_one_slot_and_original_key_one_job(turn_case):
++    from concurrent.futures import ThreadPoolExecutor
++    from threading import Barrier
++    from services.api.app.codex_turn_dto import CodexTurnPrepareWrite
++    from services.api.app.application.errors import ApiError
++    case, _, sid, _, _ = turn_case
++    service, actor = case.app.state.codex_turn_service, identity(case)
++    barrier = Barrier(2)
++    def run(key):
++        barrier.wait()
++        try:
++            return service.prepare_turn(actor, sid, CodexTurnPrepareWrite.model_validate(turn_body()), key)
++        except ApiError as error:
++            return error.status
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        results = list(pool.map(run, ['same', 'same']))
++    assert results[0] == results[1]
++    assert len(case.get(f'sessions/{sid}/turns').json()['items']) == 1
++    assert cancel(case, results[0].job.id).status_code == 200
++    barrier = Barrier(2)
++    def distinct(key):
++        barrier.wait()
++        try:
++            return service.prepare_turn(actor, sid, CodexTurnPrepareWrite.model_validate(turn_body(5)), key)
++        except ApiError as error:
++            return error.status
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        results = list(pool.map(distinct, ['one', 'two']))
++    assert sum(not isinstance(item, int) for item in results) == 1
++    assert 412 in results
++    assert len(case.get(f'sessions/{sid}/turns').json()['items']) == 2
++
++
++def test_cancel_transaction_failure_preserves_waiting_slot_and_no_terminal(turn_case):
++    case, _, sid, _, _ = turn_case
++    value = prepared(turn_case).json()
++    with case.app.state.database.transaction() as conn:
++        conn.execute("CREATE TRIGGER cancel_failure BEFORE UPDATE ON codex_turn_heads BEGIN SELECT RAISE(ABORT,'synthetic cancel rollback'); END;")
++    before = case.dump()
++    result = cancel(case, value['job']['id'])
++    assert result.status_code == 500
++    assert case.dump() == before
++    current = case.get('sessions/' + sid).json()
++    assert current['revision'] == 3 and current['active_turn_id'] == value['turn_id']
++    control = case.get('turns/' + value['turn_id']).json()
++    assert control['execution'] == 'not_started' and control['last_seq'] == 1
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book'])
++def test_real_policy_exclusion_and_control_access(assessment_state, mode):
++    from tests.integration.test_assessment_policy import start
++    from services.api.app.application.errors import ApiError
++    database, _, fixture, assessment = assessment_state
++    runtime = ControlledRuntime()
++    case = make_case(database.settings.data_dir, codex_bootstrap_runtime=runtime)
++    case.app.state.provider_service.secret_store.initialize()
++    config = case.client.put('/api/v1/providers/codex_local/config', json={
++        'expected_revision': 0, 'adapter': 'compatible_chat', 'base_url': 'https://example.invalid',
++        'model': 'synthetic-model', 'embedding_model': None, 'endpoint_policy': 'public_https', 'pricing': None,
++    }, headers={**case.headers, 'Idempotency-Key': 'config'})
++    assert config.status_code == 200
++    _, _, body = approve(case)
++    session = case.post('sessions', body, 'session').json()['id']
++    turn = case.post(f'sessions/{session}/turn-preparations', turn_body(), 'prepared')
++    assert turn.status_code == 202, turn.text
++    owner_state = database, identity(case), fixture, assessment
++    if mode == 'independent':
++        before = case.dump()
++        with pytest.raises(ApiError) as rejected:
++            start(owner_state, mode=mode)
++        assert rejected.value.code == 'SUBJECT_WORK_ACTIVE'
++        assert case.dump() == before
++        assert cancel(case, turn.json()['job']['id']).status_code == 200
++    start(owner_state, mode=mode)
++    before = case.dump()
++    value = turn.json()
++    assert case.get('turns/' + value['turn_id']).status_code == 200
++    assert case.get(f'sessions/{session}/turns').status_code == 200
++    assert case.get('turn-preparations/' + value['id']).status_code == 409
++    assert case.post(f'sessions/{session}/turn-preparations', turn_body(), 'prepared').status_code == 409
++    assert case.dump() == before
++    assert cancel(case, value['job']['id'], 2 if mode == 'independent' else 1, 'safe-stop').status_code == 200
++    assert len(runtime.calls) == 1
+diff --git a/tests/integration/test_codex_turn_review_boundaries.py b/tests/integration/test_codex_turn_review_boundaries.py
+new file mode 100644
+index 00000000..16f0e16b
+--- /dev/null
++++ b/tests/integration/test_codex_turn_review_boundaries.py
+@@ -0,0 +1,70 @@
++"""Independent owner-boundary counterexamples retained across fixed sources."""
++from concurrent.futures import ThreadPoolExecutor
++from threading import Event
++
++from tests.integration.test_codex_turn_preparation_http import turn_case as fixture, prepared, turn_body
++from tests.integration.test_retrieval import publish_small
++from services.api.app.infrastructure.content_repository import reference
++
++turn_case = fixture
++
++
++def identity(case):
++    from services.api.app.infrastructure.security import SessionIdentity
++    return SessionIdentity(case.actor_id, case.app.state.database.workspace_id(), 'author', '', '2099-01-01T00:00:00Z')
++
++
++def test_member_creation_sequence_corruption_is_rejected_by_read_and_replay(turn_case):
++    case, _, sid, _, _ = turn_case
++    original = prepared(turn_case).json()
++    with case.app.state.database.transaction() as conn:
++        conn.execute('DROP TRIGGER codex_turn_members_update')
++        conn.execute('UPDATE codex_turn_members SET sequence=sequence+100')
++    before = case.dump()
++    response = case.get(f'sessions/{sid}/turns?limit=1')
++    assert response.status_code == 409
++    replay = case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'turn')
++    assert replay.status_code == 409
++    response = case.get('turns/' + original['turn_id'])
++    assert response.status_code == 409
++    assert case.dump() == before
++
++
++def test_large_omitted_selection_must_verify_real_body(turn_case):
++    case, _, sid, _, _ = turn_case
++    blocks, _, _ = publish_small(case.app.state.database, identity(case), 'large-review', ['large synthetic α\n' * 4000])
++    digest = blocks[0].body_sha256
++    path = case.app.state.settings.data_dir / 'blobs' / digest[:2] / digest
++    path.write_bytes(b'corrupt synthetic original')
++    before = case.dump()
++    body = {**turn_body(), 'context_refs': [reference(blocks[0]).model_dump()]}
++    response = case.post(f'sessions/{sid}/turn-preparations', body, 'large-corrupt')
++    assert response.status_code == 409
++    assert case.dump() == before
++
++
++def test_subject_get_rechecks_access_after_read_snapshot_closes(turn_case, monkeypatch):
++    case, _, _, _, _ = turn_case
++    value = prepared(turn_case).json()
++    owner = case.app.state.codex_turn_service.context
++    original = owner.current
++    entered, release = Event(), Event()
++    def held(*args):
++        entered.set()
++        assert release.wait(10), 'controlled role-change writer did not finish'
++        return original(*args)
++    monkeypatch.setattr(owner, 'current', held)
++    with ThreadPoolExecutor(max_workers=1) as pool:
++        future = pool.submit(case.get, 'turn-preparations/' + value['id'])
++        try:
++            assert entered.wait(10), 'subject GET did not reach its checked context read'
++            role = case.client.post('/api/v1/session/role', json={'role': 'learner'},
++                headers={**case.headers, 'Idempotency-Key': 'late-role'})
++            assert role.status_code == 200
++            before = case.dump()
++        finally:
++            release.set()
++        response = future.result(timeout=10)
++    assert response.status_code == 403
++    assert turn_body()['message'] not in response.text
++    assert case.dump() == before

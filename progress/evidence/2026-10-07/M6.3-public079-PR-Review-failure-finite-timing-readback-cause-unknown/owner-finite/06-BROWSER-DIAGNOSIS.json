@@ -1,0 +1,131 @@
+{
+  "schema": "learning-workbench.current-original-pr-browser-bounded-diagnosis.v1",
+  "reviewed_utc": "2026-10-07T15:00:39.002794+00:00",
+  "fixed_source_commit": "079a008cf88b37e4517cb391503a1e7393ccf374",
+  "spec_sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec",
+  "pr_original": {
+    "run_id": 37632662238,
+    "attempt": 1,
+    "job_id": 112830674946,
+    "event": "pull_request",
+    "job_conclusion": "failure",
+    "actual_checkout_sha": "e9eb82d41dd87649be6c8090c35b5052ccb1319c",
+    "synthetic_merge_sha_is_not_wrong_source": true,
+    "merge_full_tree_equality": "ROOT_REPORTED_ALREADY_INDEPENDENTLY_PROVEN_23175; NOT_REPROVEN_BY_THIS_FINITE_REVIEW",
+    "actual_footer": {
+      "failed": 1,
+      "passed": 132,
+      "duration": "39.9m"
+    },
+    "capture_command_exit_code": 0,
+    "test_make_command_exit_code": 2,
+    "playwright_child_make_error": 1,
+    "test_name": "real history and exact material review preserve original submitted text, null scores and a selected old revision after reload",
+    "failure_source": "tests/e2e/review.spec.ts:147",
+    "failure_kind": "original shared test timeout30000ms at reader URL predicate",
+    "original_raw_streams": [
+      {
+        "path": "$HOME/.cache/learning-workbench-acceptance/m63-ci-public079a008-observation-oct07/job-112830674946-logs-01.stdout",
+        "bytes": 101263,
+        "sha256": "efba20a76cf2bb20085f78000115630aae0df2cabf6f4f61d39d5a27050a88ea"
+      },
+      {
+        "path": "$HOME/.cache/learning-workbench-acceptance/m63-ci-public079a008-observation-oct07/job-112830674946-logs-01.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "artifact_binding": {
+    "artifact_id": 11489704333,
+    "archive": {
+      "path": "$HOME/.cache/learning-workbench-acceptance/m63-forward-guard-review-browser-diagnosis-oct07/01-failure-artifact.stdout.zip",
+      "bytes": 258850,
+      "sha256": "bba42525df8b088cbc2fa07b1e4d53989a3f4f55ddc256fb047646697e8ff44b"
+    },
+    "original_upload_raw_lines": [
+      965,
+      967,
+      968
+    ],
+    "only_inflated_member": "review-real-history-and-ex-756c0-d-old-revision-after-reload/review-history-timing.json",
+    "timing_file": {
+      "path": "$HOME/.cache/learning-workbench-acceptance/m63-forward-guard-review-browser-diagnosis-oct07/02-original-review-history-timing.json",
+      "bytes": 62894,
+      "sha256": "3259684f9d08284e9495f40c5ebdc414929c6147df001ef3ada1e32bc4a94dd2"
+    },
+    "other_members_inflated_or_read": 0,
+    "archive_policy": "PRIVATE_ONLY; SHA metadata allowed, no archive payload publication, no other member open/extraction"
+  },
+  "actual_observations": {
+    "retry": 0,
+    "observed_timeout_ms": 30000,
+    "phase_count": 30,
+    "http_event_count": 286,
+    "dropped": {
+      "phases": 0,
+      "http": 0
+    },
+    "body_finally_elapsed_ms": 23522.21169899986,
+    "material_click_interval_ms": 21.07224899996072,
+    "reader_route_to_finally_ms": 0.6805310000199825,
+    "last_browser_request": {
+      "sequence": 314,
+      "elapsed_ms": 23520.781908999896,
+      "event": "request",
+      "route": "/api/v1/courses/:id",
+      "method": "GET"
+    },
+    "last_course_request_observation_window_ms": 1.4297899999655783,
+    "last_course_headers_or_finished_observed": false,
+    "reader_binding_reached": false,
+    "all_http_events": {
+      "request": 98,
+      "response-headers": 94,
+      "request-finished": 94
+    },
+    "all_response_headers_status_counts": {
+      "200": 86,
+      "201": 1,
+      "202": 5,
+      "403": 1,
+      "412": 1
+    }
+  },
+  "source_semantics": [
+    "Timing starts inside original test body after runtime/page fixture setup; page.request, fixture setup, response JSON consumption, React state completion and scheduling are not observed.",
+    "Original ReviewMaterialLinks navigate first awaits exact course then lesson/block verification before open; the original final course GET matches the first mandatory asynchronous verification request.",
+    "With only1.429790ms observation after the course request and0.680531ms after reader-route, no request failure/hang or successful navigation call can be inferred.",
+    "Reader target identity, hash and parent guards remain required; bypassing them or increasing budget would change the authorized semantics.",
+    "Shell deferred state-updater ordering is an unproved possibility only, because original timing does not show course verification completion/openReal invocation; no cause/fix claim admitted."
+  ],
+  "inference": "Near-zero observed post-click time is consistent with exhaustion of a shared test deadline accumulated earlier; missing fixture/setup and substep timing prevents complete accounting and does not prove a product defect.",
+  "unknowns": [
+    "actual fixture/setup duration and test deadline remaining at body enter",
+    "per-substep original package generation/import/manual UI wait duration",
+    "request caller, instance identity, JSON/React completion, invalidation reason",
+    "whether a repeat was unnecessary or contributed materially to timeout",
+    "whether openReal was ever invoked in this failed original test"
+  ],
+  "next_narrow_verification": {
+    "status": "PROPOSED_NOT_RUN",
+    "scope": "On the next separately authorized original case/gate execution, retain the same original argv, case, fixture placement, timeout30000ms and retry0. Capture bounded monotonic metadata-only fixture start/end and original helper substep boundaries, plus static caller labels for already-existing HTTP calls and access-epoch invalidation. No additional requests, DOM, bodies, IDs, screenshots, setup movement, deadline or retry changes.",
+    "decision": "First establish where the same deadline was spent; only then isolate a measured unnecessary request or functional defect with a fail-capable regression. No standalone PASS is a repair or complete-gate acceptance."
+  },
+  "product_defect": "UNKNOWN",
+  "root_cause": "UNKNOWN",
+  "cause_closed": false,
+  "repair": "NOT_IMPLEMENTED_NO_CONFIRMED_DEFECT",
+  "code_mutation": "NONE",
+  "tests_rerun": "NONE",
+  "budget_retry_change": "NONE",
+  "remote_mutation": "NONE",
+  "fixture_review": "04-FORWARD-GUARD-REVIEW.json; both axes0 blocking; independent original1F/1P/44P receipt readback retained",
+  "scope_not_accepted": [
+    "whole CI",
+    "M6.3",
+    "real model/production turn"
+  ],
+  "ci_working_input_before_after_maps": "NOT_CAPTURED",
+  "old_early_eight_job_seal_and_dependency_frozen_package": "UNTOUCHED"
+}

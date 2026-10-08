@@ -74,9 +74,18 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
         ('GET', '/api/v1/content/restore-numeric-checks/{id}'),
         ('POST', '/api/v1/content/restore-numeric-checks/{id}/decision'),
     } <= projection
-    assert len(projection) == 110
-    assert len(SPEC_ROUTES) == 130
-    assert len(SPEC_ROUTES - projection) == 20
+    assert ('GET', '/api/v1/codex/capabilities') in projection
+    assert {('POST', '/api/v1/codex/session-preparations'), ('GET', '/api/v1/codex/session-preparations/{id}'),
+            ('POST', '/api/v1/codex/session-preparations/{id}/decision'), ('POST', '/api/v1/codex/sessions'),
+            ('GET', '/api/v1/codex/sessions/{id}')} <= projection
+    assert ('POST', '/api/v1/codex/sessions/{id}/interrupt') in projection
+    assert ('GET', '/api/v1/codex/sessions/{id}/turns/{turn_id}/artifacts') in projection
+    assert {('POST', '/api/v1/codex/sessions/{id}/artifacts/import'),
+            ('GET', '/api/v1/codex/artifact-imports/{job_id}')} <= projection
+    assert ('GET', '/api/v1/codex/turns/{id}/events') in projection
+    assert len(projection) == 134
+    assert len(SPEC_ROUTES) == 147
+    assert len(SPEC_ROUTES - projection) == 13
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
@@ -153,3 +162,24 @@ def test_saved_openapi_matches_actual_registered_handlers_and_coverage():
     assert not registered & backlog
     assert registered | backlog == declared
     assert coverage["product_acceptance"] == "NOT_RUN"
+
+
+def test_codex_turn_slice_registers_real_preparation_control_and_permit_operations():
+    from services.api.app.main import create_app
+    paths = create_app().openapi()['paths']
+    assert paths['/api/v1/codex/sessions/{id}/turn-preparations']['post']['responses']['202']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnPreparationView')
+    assert paths['/api/v1/codex/turn-preparations/{id}']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnPreparationView')
+    assert paths['/api/v1/codex/sessions/{id}/turns']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnPage')
+    assert paths['/api/v1/codex/turns/{id}']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnControlView')
+    assert paths['/api/v1/codex/sessions/{id}/turns']['post']['responses']['202']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnStartAck')
+    for path, method, status, dto in [
+        ('/api/v1/codex/consent-previews', 'post', '201', 'CodexConsentProposalView'),
+        ('/api/v1/codex/consent-proposals/{id}', 'get', '200', 'CodexConsentProposalView'),
+        ('/api/v1/codex/consents', 'post', '201', 'CodexConsentCreateAck'),
+        ('/api/v1/codex/consents/{id}', 'get', '200', 'CodexConsentView'),
+        ('/api/v1/codex/consents/{id}/revoke', 'post', '200', 'MutationAck'),
+    ]:
+        assert paths[path][method]['responses'][status]['content']['application/json']['schema']['$ref'].endswith('/' + dto)
+    assert paths['/api/v1/codex/turns/{id}/result']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnResultView')
+    assert paths['/api/v1/approvals/{id}']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/GenericApprovalView')
+    assert paths['/api/v1/approvals/{id}/decision']['post']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/GenericApprovalDecisionAck')

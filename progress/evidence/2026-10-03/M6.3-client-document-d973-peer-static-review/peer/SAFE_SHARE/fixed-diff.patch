@@ -1,0 +1,245 @@
+diff --git a/apps/web/src/features/authoring/AuthoringForm.tsx b/apps/web/src/features/authoring/AuthoringForm.tsx
+index 90baf766..7765f269 100644
+--- a/apps/web/src/features/authoring/AuthoringForm.tsx
++++ b/apps/web/src/features/authoring/AuthoringForm.tsx
+@@ -3,7 +3,8 @@ import type { AuthoringPrepareWrite, AuthoringGroupPrepareWrite, ContentRef } fr
+ import { checkedAuthoring } from './authoringCommands'
+ import { AuthoringTargets, type GroupTargets } from './AuthoringTargets'
+ import { sameRef } from '../reader/target'
+-export function AuthoringForm({ currentBlock, busy, submit, submitGroup, denied = () => {}, onDirty }: { currentBlock: ContentRef | null; busy: boolean; submit: (body: AuthoringPrepareWrite) => Promise<void>; onDirty: (dirty: boolean) => void; submitGroup?: (body: AuthoringGroupPrepareWrite) => Promise<void>; denied?: (reason: unknown) => void }) {
++import { LocalTaskDocument, type LocalTaskScope } from './LocalTaskDocument'
++export function AuthoringForm({ localTask, currentBlock, busy, submit, submitGroup, denied = () => {}, onDirty }: { localTask?: LocalTaskScope; currentBlock: ContentRef | null; busy: boolean; submit: (body: AuthoringPrepareWrite) => Promise<void>; onDirty: (dirty: boolean) => void; submitGroup?: (body: AuthoringGroupPrepareWrite) => Promise<void>; denied?: (reason: unknown) => void }) {
+   const [topic, setTopic] = useState(''), [prerequisites, setPrerequisites] = useState(''), [objectives, setObjectives] = useState(''), [proof, setProof] = useState<'full' | 'declared_dependencies'>('full'), [provider, setProvider] = useState('')
+   const [kind, setKind] = useState<'worked_example' | 'lesson' | 'practice_set' | 'assessment'>('worked_example')
+   const [targets, setTargets] = useState<GroupTargets>({ concepts: [], lesson: null }), [modes, setModes] = useState<Array<'independent' | 'assisted' | 'open_book'>>([]), [time, setTime] = useState(''), [unlimited, setUnlimited] = useState(false)
+@@ -47,6 +48,7 @@ export function AuthoringForm({ currentBlock, busy, submit, submitGroup, denied
+       {refs.map((ref, i) => <p key={`${ref.id}:${ref.revision}`}>{ref.id} · r{ref.revision} · <code>{ref.sha256}</code> <button onClick={() => setRefs(old => old.filter((_, index) => index !== i))}>移除材料 {i + 1}</button></p>)}
+       <details><summary>明确加入其他准确内容块</summary><label>内容块 ID<input value={id} onChange={e => setId(e.target.value)} /></label><label>内容修订<input inputMode="numeric" value={revision} onChange={e => setRevision(e.target.value)} /></label><label>内容 SHA256<input value={hash} onChange={e => setHash(e.target.value)} /></label><button onClick={() => add({ entity: 'block', id, revision: /^[1-9][0-9]*$/.test(revision) ? Number(revision) : 0, sha256: hash })}>加入这份准确引用</button></details>
+       <button onClick={() => void prepare()}>{kind === 'worked_example' ? '明确准备本次例题任务' : '明确准备本次组合创作任务'}</button>
++      {localTask && <LocalTaskDocument {...localTask} inputs={{ topic, prerequisites, objectives, proof }} busy={busy} denied={denied} />}
+     </fieldset>{error && <p role="alert">{error}</p>}
+   </section>
+ }
+diff --git a/apps/web/src/features/authoring/AuthoringPanel.tsx b/apps/web/src/features/authoring/AuthoringPanel.tsx
+index c67bdbc6..770ae985 100644
+--- a/apps/web/src/features/authoring/AuthoringPanel.tsx
++++ b/apps/web/src/features/authoring/AuthoringPanel.tsx
+@@ -40,8 +40,8 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port
+     <AuthoringControlList jobs={state.jobs} busy={state.busy || !state.controlReady} academic={state.academic} readBlocked={!state.ready} read={id => void state.read(id)} cancel={job => void state.cancel(job)} />
+     {state.cursor && <button disabled={state.busy} onClick={() => void state.refresh(true)}>继续读取安全任务</button>}
+     <section aria-label="原创作命令回执"><h3>本机保留的原命令</h3>{state.commands.map(command => <article key={command.command_id}><p>{command.kind === 'cancel' ? '取消任务' : command.kind === 'prepare' ? '准备例题' : command.kind === 'group_prepare' ? '准备组合草稿' : ['numeric_preview', 'group_numeric_preview'].includes(command.kind) ? '数值检查预览' : '独立数值决定'} · {command.ack ? '原命令已确认' : command.rejection ? '服务端拒绝，保留原基准' : '结果未知，原 key 与完整命令保留'}</p><details><summary>核对原命令</summary><p>{command.command_id}</p>{command.kind !== 'cancel' && <pre>{JSON.stringify(command.body, null, 2)}</pre>}{command.ack && <p>原回执不是当前状态。请从任务列表重新读取；数值检查从原候选的检查列表进入。</p>}</details><button disabled={state.busy || !(command.kind === 'cancel' ? state.controlReady : state.ready) || !!command.ack} onClick={() => void state.execute(command)}>回放原命令 {command.command_id}</button></article>)}</section>
+-    {!state.academic ? <p role="status">当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。</p> : <div key={`${workspace}:${access}`}>
+-      <AuthoringForm currentBlock={currentBlock} busy={state.busy || !state.ready} submit={body => state.create({ kind: 'prepare', body })} submitGroup={port.groups ? body => state.create({ kind: 'group_prepare', body }) : undefined} denied={state.reportAccessError} onDirty={setFormDirty} />
++    {!state.academic ? <p role="status">当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。</p> : <div key={`${workspace}:${access}:${state.actor}`}>
++      <AuthoringForm localTask={{ workspace, actor: state.actor, port }} currentBlock={currentBlock} busy={state.busy || !state.ready} submit={body => state.create({ kind: 'prepare', body })} submitGroup={port.groups ? body => state.create({ kind: 'group_prepare', body }) : undefined} denied={state.reportAccessError} onDirty={setFormDirty} />
+       {detail && <section aria-label="受保护创作详情"><h3>{detail.summary.title}</h3><p>实际任务状态：{detail.summary.status} · r{detail.summary.job_revision}</p><button disabled={state.busy} onClick={() => void state.read(detail.summary.id)}>重新读取本次创作任务</button>
+         <details><summary>完整原教学要求与实际材料</summary><pre>{JSON.stringify(detail.request, null, 2)}</pre><p>实际包装字符数 {detail.preparation.character_count}，不是 token 计数。</p>{!detail.preparation.materials.length && <p>无已选教材来源。</p>}{detail.preparation.materials.map(v => <article key={`${v.ref.id}:${v.ref.revision}`}><h4>{v.title} · 材料未审</h4><pre>{JSON.stringify(v, null, 2)}</pre></article>)}</details>
+         {detail.preparation.warnings.length > 0 && <p>生成准备时保存的提示（原记录）：</p>}{detail.preparation.warnings.map((v, i) => <p key={i}>{v.code}：{v.message}</p>)}
+diff --git a/apps/web/src/features/authoring/LocalTaskDocument.test.tsx b/apps/web/src/features/authoring/LocalTaskDocument.test.tsx
+new file mode 100644
+index 00000000..f5f9e5ac
+--- /dev/null
++++ b/apps/web/src/features/authoring/LocalTaskDocument.test.tsx
+@@ -0,0 +1,106 @@
++import 'fake-indexeddb/auto'
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { afterEach, expect, test, vi } from 'vitest'
++import { ApiError, request } from '../../api/client'
++import { AuthoringPanel } from './AuthoringPanel'
++import type { AuthoringPort } from './authoringClient'
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++
++const NativeURL = URL
++const createURL = vi.fn<(blob: Blob) => string>(() => 'blob:synthetic-local-task')
++const revokeURL = vi.fn()
++afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); createURL.mockClear(); revokeURL.mockClear() })
++function setup() {
++  vi.stubGlobal('URL', class extends NativeURL { static createObjectURL = createURL; static revokeObjectURL = revokeURL })
++  const clicked = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
++  const workspace = `workspace_${crypto.randomUUID()}`
++  const session: SessionResponse = { workspace_id: workspace, actor_session_id: 'actor_local_task_original', role: 'author', csrf_token: 'synthetic-only', active_independent_attempt_id: null, active_open_book_attempt_id: null }
++  const mutation = vi.fn(async (): Promise<never> => { throw new Error('No server mutation or subject read expected') })
++  const port: AuthoringPort = { session: vi.fn(async () => ({ ...session })), list: vi.fn(async () => ({ items: [], next_cursor: null })), prepare: mutation, read: mutation, draft: mutation, preview: mutation, numeric: mutation, decide: mutation, job: mutation, cancel: mutation }
++  const state = vi.fn()
++  const view = render(<AuthoringPanel workspace={workspace} paused={false} currentBlock={null} port={port} onState={state} />)
++  return { port, session, state, clicked, mutation, view, workspace }
++}
++async function fill() {
++  await screen.findByLabelText('例题主题')
++  fireEvent.change(screen.getByLabelText('例题主题'), { target: { value: '合成主题 α\n第二行' } })
++  fireEvent.change(screen.getByLabelText('已声明先修（每行一条）'), { target: { value: '线性代数\n  保留空格' } })
++  fireEvent.change(screen.getByLabelText('学习目标（每行一条，至少一条）'), { target: { value: '写出完整证明\n核对边界' } })
++  const button = screen.getByRole('button', { name: '下载当前四项需求说明' })
++  await waitFor(() => expect(button.matches(':disabled')).toBe(false))
++  return button
++}
++const readBlob = (blob: Blob) => new Promise<string>((resolve, reject) => {
++  const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsText(blob)
++})
++test('author downloads only the four current inputs without provider or server mutation and keeps dirty protection', async () => {
++  const f = setup(), button = await fill()
++  await waitFor(() => expect(f.state.mock.lastCall?.[0].dirty).toBe(true))
++  fireEvent.click(button)
++  await waitFor(() => expect(createURL).toHaveBeenCalledOnce())
++  const text = await readBlob(createURL.mock.calls[0][0])
++  expect(text).toBe('# 离线创作需求说明\n\n未连接 Codex。本文件仅包含作者当前输入的四项需求，不含已选材料或其他任务设置；没有创建服务器任务、授权或生成结果。\n\n## 主题\n\n合成主题 α\n第二行\n\n## 已声明先修\n\n线性代数\n  保留空格\n\n## 学习目标\n\n写出完整证明\n核对边界\n\n## 证明策略\n\nfull（完整证明）\n')
++  expect(f.clicked).toHaveBeenCalledOnce(); expect(f.mutation).not.toHaveBeenCalled()
++  expect(f.port.session).toHaveBeenCalledTimes(2)
++  expect(f.state.mock.lastCall?.[0].dirty).toBe(true)
++  expect((screen.getByLabelText('例题主题') as HTMLTextAreaElement).value).toBe('合成主题 α\n第二行')
++  await waitFor(() => expect(revokeURL).toHaveBeenCalledWith('blob:synthetic-local-task'))
++})
++
++test('selected references and provider stay outside the local file and no consent is required', async () => {
++  const f = setup(), button = await fill()
++  fireEvent.change(screen.getByLabelText('已配置的提供商 ID'), { target: { value: 'provider_do_not_export' } })
++  fireEvent.change(screen.getByLabelText('内容块 ID'), { target: { value: 'block_do_not_export' } })
++  fireEvent.change(screen.getByLabelText('内容修订'), { target: { value: '7' } })
++  fireEvent.change(screen.getByLabelText('内容 SHA256'), { target: { value: 'd'.repeat(64) } })
++  fireEvent.click(screen.getByRole('button', { name: '加入这份准确引用' }))
++  fireEvent.change(screen.getByLabelText('证明策略'), { target: { value: 'declared_dependencies' } })
++  fireEvent.click(button); await waitFor(() => expect(createURL).toHaveBeenCalledOnce())
++  const text = await readBlob(createURL.mock.calls[0][0])
++  expect(text).toContain('declared_dependencies（明确声明所依赖的结论）')
++  for (const omitted of ['provider_do_not_export', 'block_do_not_export', 'd'.repeat(64), f.session.actor_session_id, f.session.csrf_token]) expect(text).not.toContain(omitted)
++  expect(f.mutation).not.toHaveBeenCalled(); expect(f.state.mock.lastCall?.[0].dirty).toBe(true)
++})
++test.each(['learner', 'independent', 'open_book', 'new_actor', 'workspace', 'expired', 'bad_schema'])('fresh %s admission rejects a download without server mutation', async mode => {
++  const f = setup(), button = await fill()
++  if (mode === 'learner') f.session.role = 'learner'
++  if (mode === 'independent') f.session.active_independent_attempt_id = 'attempt_independent'
++  if (mode === 'open_book') f.session.active_open_book_attempt_id = 'attempt_open_book'
++  if (mode === 'new_actor') f.session.actor_session_id = 'actor_another_session'
++  if (mode === 'workspace') f.session.workspace_id = 'workspace_another'
++  if (mode === 'expired') f.port.session = vi.fn(async () => { throw new ApiError(401, 'private detail') })
++  if (mode === 'bad_schema') f.port.session = vi.fn(async () => ({ ...f.session, active_open_book_attempt_id: undefined }) as unknown as SessionResponse)
++  fireEvent.click(button)
++  await waitFor(() => expect(screen.queryByText('正在重新核对当前作者与测试策略…')).toBeNull())
++  expect(createURL).not.toHaveBeenCalled(); expect(f.clicked).not.toHaveBeenCalled(); expect(f.mutation).not.toHaveBeenCalled()
++  expect(screen.queryByText('private detail')).toBeNull()
++})
++function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(accept => { resolve = accept }); return { promise, resolve } }
++test.each(['workspace', 'port', 'policy', 'unmount', 'inputs', 'access'])('late permission read after %s change cannot download the original inputs', async mode => {
++  const f = setup(), button = await fill(), pending = deferred<SessionResponse>()
++  f.port.session = vi.fn(() => pending.promise)
++  fireEvent.click(button); await waitFor(() => expect(f.port.session).toHaveBeenCalledOnce())
++  if (mode === 'unmount') f.view.unmount()
++  else if (mode === 'inputs') fireEvent.change(screen.getByLabelText('例题主题'), { target: { value: 'new text after request' } })
++  else if (mode === 'access') {
++    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...f.session, role: 'learner' }), { status: 200 })))
++    await act(async () => { await request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic-local-task-role' }) })
++  } else f.view.rerender(<AuthoringPanel workspace={mode === 'workspace' ? 'workspace_new' : f.workspace} paused={mode === 'policy'} currentBlock={null} port={mode === 'port' ? { ...f.port, session: vi.fn(async () => ({ ...f.session })) } : f.port} onState={f.state} />)
++  await act(async () => pending.resolve({ ...f.session }))
++  expect(createURL).not.toHaveBeenCalled(); expect(f.clicked).not.toHaveBeenCalled(); expect(f.mutation).not.toHaveBeenCalled()
++})
++test('double clicking one pending read downloads once and permission failure does not clear valid local inputs', async () => {
++  const f = setup(), button = await fill(), pending = deferred<SessionResponse>()
++  f.port.session = vi.fn(() => pending.promise)
++  fireEvent.click(button); fireEvent.click(button)
++  expect(f.port.session).toHaveBeenCalledOnce()
++  await act(async () => pending.resolve({ ...f.session }))
++  await waitFor(() => expect(f.clicked).toHaveBeenCalledOnce())
++  expect(f.state.mock.lastCall?.[0].dirty).toBe(true)
++  f.port.session = vi.fn(async () => { throw new ApiError(503, 'private detail') })
++  fireEvent.click(button)
++  await screen.findByText('当前权限或下载未确认；原输入保留，请重新读取权限后明确重试。')
++  expect(createURL).toHaveBeenCalledOnce()
++  expect((screen.getByLabelText('例题主题') as HTMLTextAreaElement).value).toBe('合成主题 α\n第二行')
++  expect(f.state.mock.lastCall?.[0].dirty).toBe(true)
++})
+diff --git a/apps/web/src/features/authoring/LocalTaskDocument.tsx b/apps/web/src/features/authoring/LocalTaskDocument.tsx
+new file mode 100644
+index 00000000..caa6e594
+--- /dev/null
++++ b/apps/web/src/features/authoring/LocalTaskDocument.tsx
+@@ -0,0 +1,50 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
++import type { AuthoringPort } from './authoringClient'
++import { checkedAuthoring } from './authoringCommands'
++
++type Inputs = { topic: string; prerequisites: string; objectives: string; proof: 'full' | 'declared_dependencies' }
++export type LocalTaskScope = { workspace: string; actor: string | null; port: Pick<AuthoringPort, 'session'> }
++export function LocalTaskDocument({ workspace, actor, port, inputs, busy, denied }: LocalTaskScope & {
++  inputs: Inputs; busy: boolean; denied: (reason: unknown) => void
++}) {
++  const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++  const owner = JSON.stringify([workspace, actor, access, busy, inputs.topic, inputs.prerequisites, inputs.objectives, inputs.proof])
++  const current = useRef({ owner, port }); current.current = { owner, port }
++  const live = useRef(true), pending = useRef<object | null>(null), urls = useRef(new Set<string>())
++  const [working, setWorking] = useState(false), [message, setMessage] = useState('')
++  useEffect(() => {
++    live.current = true; pending.current = null; setWorking(false); setMessage('')
++    return () => { live.current = false; pending.current = null; for (const url of urls.current) URL.revokeObjectURL(url); urls.current.clear() }
++  }, [owner, port])
++  const download = async () => {
++    if (!actor || busy || pending.current) return
++    if (!inputs.topic.trim() || !inputs.objectives.trim()) { setMessage('请填写主题与学习目标；没有创建任务或下载文件。'); return }
++    const token = {}, snapshot = { ...inputs }; pending.current = token; setWorking(true); setMessage('')
++    const valid = () => live.current && pending.current === token && current.current.owner === owner && current.current.port === port && getSessionGeneration() === access
++    try {
++      const session = checkedAuthoring<SessionResponse>('SessionResponse', await port.session())
++      if (!valid()) return
++      if (session.workspace_id !== workspace || session.actor_session_id !== actor || session.role !== 'author' || session.active_independent_attempt_id !== null || session.active_open_book_attempt_id !== null) {
++        throw new ApiError(403, '当前身份或测试策略已改变，未下载需求说明。')
++      }
++      const text = '# 离线创作需求说明\n\n未连接 Codex。本文件仅包含作者当前输入的四项需求，不含已选材料或其他任务设置；没有创建服务器任务、授权或生成结果。\n\n'
++        + `## 主题\n\n${snapshot.topic}\n\n## 已声明先修\n\n${snapshot.prerequisites}\n\n## 学习目标\n\n${snapshot.objectives}\n\n## 证明策略\n\n${snapshot.proof === 'full' ? 'full（完整证明）' : 'declared_dependencies（明确声明所依赖的结论）'}\n`
++      const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' })); urls.current.add(url)
++      const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'learning-task.md'
++      try { document.body.append(anchor); anchor.click() } finally { anchor.remove(); window.setTimeout(() => { URL.revokeObjectURL(url); urls.current.delete(url) }, 0) }
++      setMessage('已交给浏览器下载；临时表单仍未保存到服务器。返回文件请另从“导入”选择并预览，不证明 Codex 来源或质量。')
++    } catch (reason) {
++      if (!valid()) return
++      if (reason instanceof ApiError && [401, 403].includes(reason.status)) denied(reason)
++      setMessage('当前权限或下载未确认；原输入保留，请重新读取权限后明确重试。')
++    } finally {
++      if (pending.current === token) { pending.current = null; if (live.current) setWorking(false) }
++    }
++  }
++  return <section aria-label="离线需求说明"><p>未连接 Codex：仅下载当前主题、先修、学习目标与证明策略。已选材料、来源引用、提供商及其他任务设置不在文件内；不会创建任务或授予执行权限。</p>
++    <button disabled={busy || working || !actor} onClick={() => void download()}>下载当前四项需求说明</button>
++    {working && <p role="status">正在重新核对当前作者与测试策略…</p>}{message && <p role="status">{message}</p>}
++  </section>
++}
+diff --git a/apps/web/src/features/authoring/useAuthoring.ts b/apps/web/src/features/authoring/useAuthoring.ts
+index c89dedb0..bd7fe8b9 100644
+--- a/apps/web/src/features/authoring/useAuthoring.ts
++++ b/apps/web/src/features/authoring/useAuthoring.ts
+@@ -24,7 +24,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+   const [detail, setDetail] = useState<AuthoringJobReadView | null>(null), [draft, setDraft] = useState<AuthoringDraftView | AuthoringGroupDraftView | null>(null), [numeric, setNumeric] = useState<NumericCheckView | AuthoringGroupNumericCheckView | null>(null)
+   const [privateSolution, setPrivateSolution] = useState<AuthoringPrivateSolutionView | null>(null)
+   const groupPort = () => { if (!port.groups) throw new Error('Group Authoring port unavailable'); return port.groups }
+-  const [subjectReady, setSubjectReady] = useState(false)
++  const [subjectReady, setSubjectReady] = useState(false), [actor, setActor] = useState<string | null>(null)
+   const [commands, setCommands] = useState<AuthoringCommand[]>([]), [ready, setReady] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
+   const academic = renderOwner === owner && permission && !paused && !denied
+   const academicRef = useRef(academic); academicRef.current = academic
+@@ -83,7 +83,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+       if (!admissionValid()) return
+       if (session.workspace_id !== workspace) throw new Error('Session workspace mismatch')
+       const allowed = session.role === 'author' && session.active_independent_attempt_id === null && session.active_open_book_attempt_id === null && !paused
+-      setPermission(allowed)
++      setPermission(allowed); setActor(allowed ? session.actor_session_id : null)
+       if (allowed) {
+         const values = await loadCommands(true)
+         if (admissionValid() && !scope.current.paused) {
+@@ -111,7 +111,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+       if (!current() || sequence !== operation.current) return
+       if (session.workspace_id !== workspace) throw new Error('Session mismatch')
+       const allowed = session.role === 'author' && !session.active_independent_attempt_id && !session.active_open_book_attempt_id && !scope.current.paused
+-      setPermission(allowed); setDenied(false); if (!allowed) clearSubject()
++      setPermission(allowed); setActor(allowed ? session.actor_session_id : null); setDenied(false); if (!allowed) clearSubject()
+       const local = await loadCommands(allowed)
+       if (current() && sequence === operation.current) { setCommands(local); setReady(true); setSubjectReady(allowed) }
+     } catch (reason) { if (current() && sequence === operation.current) fail(reason) } finally { finish(sequence) }
+@@ -221,7 +221,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+     if (pending) { setError('已有未知结果的原命令，请先回放；未创建新 key。'); return }
+     try { await execute(makeAuthoringCommand(workspace, input)) } catch (reason) { if (current()) fail(reason) }
+   }
+-  return { jobs: renderOwner === owner ? jobs : [], cursor, detail: academic ? detail : null, draft: academic ? draft : null, numeric: academic ? numeric : null, privateSolution: academic ? privateSolution : null,
++  return { actor: academic ? actor : null, jobs: renderOwner === owner ? jobs : [], cursor, detail: academic ? detail : null, draft: academic ? draft : null, numeric: academic ? numeric : null, privateSolution: academic ? privateSolution : null,
+     reportAccessError: (reason: unknown) => { if (current()) fail(reason) },
+     commands: renderOwner === owner ? commands.filter(v => academic || v.kind === 'cancel') : [], academic, ready: ready && (!academic || subjectReady), controlReady: ready, busy, error: renderOwner === owner ? error : '', refresh, read, readDraft, readNumeric, readPrivateSolution, execute, create,
+     cancel: (job: JobSnapshot) => { const value = checkedJob(job); return create({ kind: 'cancel', job_id: value.id, body: { expected_revision: value.revision } }) },

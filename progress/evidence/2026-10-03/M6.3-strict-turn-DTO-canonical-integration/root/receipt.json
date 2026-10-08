@@ -1,0 +1,82 @@
+{
+  "status": "FIXED_DTO_CANONICAL_INTEGRATED_SCOPED_STATIC_PASS",
+  "head": "764090fa7312565955bc7e781f2f279bf40f9d04",
+  "previous_head": "69029bc1ab355efdbb6e0fdb8a86204c59cea71a",
+  "fixed_dto_source": "8da88ed890a25ee9ed6753fb6b4599625e449bf8",
+  "changed_paths": [
+    "packages/contracts/generated/codex-turn-schemas.json",
+    "packages/contracts/generated/codex-turn-types.ts",
+    "scripts/codex_turn_contracts.py",
+    "scripts/generate_contracts.py",
+    "services/api/app/codex_turn_dto.py",
+    "tests/contract/codex_turn_samples.py",
+    "tests/contract/codex_turn_types.ts",
+    "tests/contract/test_codex_turn_dto.py"
+  ],
+  "complete_nonprogress_git_inputs": 1394,
+  "before_after_gates_git_exact": true,
+  "helper_complete_common_inputs_byte_equal": 1392,
+  "helper_difference": "Only documentary .gitattributes differs; canonical extra historical approved proposal. All runtime/code/DTO/generated inputs exact helper8da.",
+  "gates": [
+    {
+      "name": "structural",
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--no-sync",
+        "python",
+        "scripts/verify_spec.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.9048901759961154,
+      "log_sha256": "66961042a78693834c23a34dc2e1a18ec15d61d1a4c6f56149b9e517969b002d"
+    },
+    {
+      "name": "ruff",
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--no-sync",
+        "ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.02279818399983924,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "name": "mypy",
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--no-sync",
+        "mypy"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.344259396995767,
+      "log_sha256": "084c81ad248b6c6adfb57f728815778f3a08676134cf5115c889c4afc5ce9a67"
+    },
+    {
+      "name": "web-types",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "typecheck"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.6270451410091482,
+      "log_sha256": "2226e6b8da4fc06b00505a3719b993d066233c300edc12ea80fa62988b33dd6d"
+    }
+  ],
+  "registered_operations": 116,
+  "declared_operations": 147,
+  "boundary": "Local reviewed DTO integration and structural/static checks; no new HTTP runtime integration yet, no model/CLI/tool/DB or whole M6.3 acceptance. Remote still690 until a separately audited actual push."
+}

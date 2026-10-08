@@ -1,0 +1,63 @@
+{
+  "runs": [
+    {
+      "run": "migration-red-01",
+      "source_sha": "38685c693d602f98dd8b7cd953dd7844301a8dc5",
+      "raw_log_sha256": "c2dc3f0f665067c5a7e5ebb463b2f0dca195ac19b2b30d0ac1f91d24408b5639",
+      "exit_code": 1,
+      "complete_nonprogress_inputs": 1458,
+      "before_after_exact": true,
+      "failure_summary": [
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           AssertionError: Regex pattern did not match.",
+        "E             Actual message: 'FOREIGN KEY constraint failed'",
+        "E           AssertionError: Regex pattern did not match.",
+        "E             Actual message: 'FOREIGN KEY constraint failed'",
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           Failed: DID NOT RAISE IntegrityError",
+        "E           Failed: DID NOT RAISE IntegrityError"
+      ],
+      "raw_log_publication": "EXCLUDED: failure trace can include live synthetic fixture auth repr; publish only hash and this selected safe summary"
+    },
+    {
+      "run": "delivery-red-01",
+      "source_sha": "e8ec33be6e8f0094ebb1136ec0c5547d2fd054f8",
+      "raw_log_sha256": "4958605af1f35b7ac4e239e523519364b7a207247f211c6d47e045e2638dd786",
+      "exit_code": 1,
+      "complete_nonprogress_inputs": 1459,
+      "before_after_exact": true,
+      "failure_summary": [
+        "E       assert 200 == 403",
+        "E       assert 200 == 401"
+      ],
+      "raw_log_publication": "EXCLUDED: failure trace can include live synthetic fixture auth repr; publish only hash and this selected safe summary"
+    },
+    {
+      "run": "delivery-red-02",
+      "source_sha": "236bf2ef8db02e65f343da1d0d6ab00dff1aab3b",
+      "raw_log_sha256": "b4b92c0ec5556c805f5c36dda7e47ffe5be7ade900bbfe485cb1949731255511",
+      "exit_code": 1,
+      "complete_nonprogress_inputs": 1459,
+      "before_after_exact": true,
+      "failure_summary": [
+        "E       assert 200 == 403",
+        "E       assert 200 == 401",
+        "E               assert 200 == 409",
+        "E               assert 200 == 409"
+      ],
+      "raw_log_publication": "EXCLUDED: failure trace can include live synthetic fixture auth repr; publish only hash and this selected safe summary"
+    }
+  ],
+  "qualifications": [
+    "Migration RED is 10 non-raising normal statements plus 2 DELETE cases with existing FOREIGN KEY rejection, not the required immutable guard; it does not allege every statement silently rewrote stored rows.",
+    "All four delivery-red-02 permission changes used real HTTP and committed after the original download read transaction closed; original GET returned 200 in each case.",
+    "delivery-red-01 expected error code ROLE_REQUIRED was unreachable behind its failing status assertion. It was corrected to actual POLICY_DENIED in red-02 before production changes; original log/source remain intact.",
+    "No actual model, CLI, host isolation probe, arbitrary remote network, or complete M6.3 acceptance is implied."
+  ]
+}

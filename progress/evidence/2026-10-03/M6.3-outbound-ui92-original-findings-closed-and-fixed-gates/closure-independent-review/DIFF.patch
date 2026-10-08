@@ -1,0 +1,98 @@
+diff --git a/apps/web/src/features/codex/CodexTurnOutboundPanel.test.tsx b/apps/web/src/features/codex/CodexTurnOutboundPanel.test.tsx
+index a8c68e36..3f10c015 100644
+--- a/apps/web/src/features/codex/CodexTurnOutboundPanel.test.tsx
++++ b/apps/web/src/features/codex/CodexTurnOutboundPanel.test.tsx
+@@ -230,3 +230,14 @@ test('outbound unsaved input and isolated memory reach the existing parent navig
+  expect(changed).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true })
+  expect(heldOutboundForms(workspace)[0].fields.max_input_tokens).toBe('1234')
+ })
++
++test.each(['failed', 'cancelled'] as const)('retained complete response after %s turn stays visible without declaring the turn successful', async outcome => {
++ const p = port(), store = local(), formStore = local(), answer = 'Synthetic exact answer α\n'
++ const value = { control: { ...outboundControl(), job: { id: 'job_turn_test', status: outcome }, execution: 'terminal', outcome, started_at: '2026-10-04T00:00:02Z', finished_at: '2026-10-04T00:00:03Z', error_code: outcome === 'failed' ? 'POLICY_DENIED' : 'CODEX_CANCELLED' },
++  preparation_id: 'turn_preparation_test', answer_markdown: answer, output_sha256: bytesToHex(sha256(new TextEncoder().encode(answer))), output_state: 'complete', usage: { input_tokens: 50, output_tokens: 5 }, mathematical: 'NOT_RUN', sources: 'NOT_RUN', independent_pedagogy: 'NOT_RUN' }
++ const fetch = vi.fn(async () => new Response(JSON.stringify(value))); vi.stubGlobal('fetch', fetch)
++ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await prepare('preview')
++ fireEvent.click(screen.getByText('独立读取本回合结果')); await screen.findByLabelText('当前未审回合结果')
++ expect(screen.getByLabelText('原始未审回答').textContent).toBe(answer); expect(screen.getByText(`输出 complete · terminal · ${outcome}`)).toBeTruthy()
++ expect(screen.getByText(/回合尚未记为 completed。输出状态仅描述保留的原响应/)).toBeTruthy(); expect(fetch).toHaveBeenCalledOnce()
++})
+diff --git a/apps/web/src/features/codex/CodexTurnOutboundPanel.tsx b/apps/web/src/features/codex/CodexTurnOutboundPanel.tsx
+index 7506a169..3be2b8dd 100644
+--- a/apps/web/src/features/codex/CodexTurnOutboundPanel.tsx
++++ b/apps/web/src/features/codex/CodexTurnOutboundPanel.tsx
+@@ -47,6 +47,7 @@ export function CodexTurnOutboundPanel({ workspace, writeAdmitted, port, store,
+    <p>预算、提案过期或证明变化时，先明确取消原未开始 Job，再新准备。不会自动换 key、重试、借用 bootstrap 或普通 Provider 许可。</p>
+    <button disabled={disabled || !state.basis || state.basis.preparation.turn_id !== state.fields.turn_id} onClick={() => void state.read('result')}>独立读取本回合结果</button>
+    {state.result && <section aria-label="当前未审回合结果"><p>输出 {state.result.output_state} · {state.result.control.execution} · {state.result.control.outcome ?? '尚无终态'}</p>
++    {state.result.control.outcome !== 'completed' && <p>回合尚未记为 completed。输出状态仅描述保留的原响应，不表示回合成功或执行可以重试。</p>}
+     <pre aria-label="原始未审回答">{state.result.answer_markdown}</pre><pre>{JSON.stringify({ output_sha256: state.result.output_sha256, usage: state.result.usage }, null, 2)}</pre>
+     <p>数学审查 NOT_RUN · 来源审查 NOT_RUN · 独立教学审查 NOT_RUN。partial 是部分结果，HTTP 200 或空文本不表示完成；未自动发布或回导。</p></section>}
+    {state.forms.map(f => <button key={f.snapshot_id} disabled={state.busy} onClick={() => void state.restore(f)}>恢复外发表单 {f.draft_id} · {f.sequence}</button>)}
+diff --git a/apps/web/src/features/codex/turnOutboundClient.ts b/apps/web/src/features/codex/turnOutboundClient.ts
+index 1eb43bde..438c6588 100644
+--- a/apps/web/src/features/codex/turnOutboundClient.ts
++++ b/apps/web/src/features/codex/turnOutboundClient.ts
+@@ -23,11 +23,12 @@ function summary(value: CodexFrozenOutboundSummary) {
+  const tokens = proof.kind === 'local_exact' ? proof.input_tokens : proof.input_tokens_upper_bound
+  if (duration <= 0n || duration > 600000000n || proof.request_body_sha256 !== value.request_body_sha256 || tokens > value.budget.max_input_tokens
+   || value.cost_estimate.kind === 'estimated' && value.budget.max_cost_usd !== null && value.cost_estimate.maximum_estimated_cost > value.budget.max_cost_usd) fail()
+- const endpoint = new URL(value.endpoint)
++ const endpoint = new URL(value.endpoint), authority = /^https?:\/\/([^/?#]+)/i.exec(value.endpoint)?.[1]
++ const literalHost = authority?.toLowerCase().replace(/:\d+$/, '')
+  if (!['http:', 'https:'].includes(endpoint.protocol) || !endpoint.hostname || endpoint.username || endpoint.password || endpoint.hash || endpoint.search
+-  || /[\x00-\x20\x7f\\]/.test(value.endpoint) || value.endpoint.split('/')[2]?.includes('@') || endpoint.port === '0'
++  || !authority || /[\x00-\x20\x7f\\]/.test(value.endpoint) || authority.includes('@') || endpoint.port === '0'
+   || value.endpoint_policy === 'public_https' && endpoint.protocol !== 'https:'
+-  || value.endpoint_policy === 'explicit_loopback' && !['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname)) fail()
++  || value.endpoint_policy === 'explicit_loopback' && !['127.0.0.1', 'localhost', '[::1]'].includes(literalHost!)) fail()
+  const refs = value.references.map(v => [v.ref.entity, v.ref.id, v.ref.revision])
+  if (value.references.some(v => v.ref.entity !== 'block') || new Set(refs.map(v => JSON.stringify(v))).size !== refs.length) fail()
+ }
+@@ -55,8 +56,9 @@ export function checkedOutbound<N extends keyof Wire>(name: N, raw: unknown): Wi
+  if (name === 'CodexTurnResultView') {
+   const r = value as CodexTurnResultView; checkedTurn('CodexTurnControlView', r.control)
+   const digest = r.answer_markdown === '' ? null : bytesToHex(sha256(new TextEncoder().encode(r.answer_markdown)))
+-  if (r.output_sha256 !== digest || (r.output_state === 'none') !== (digest === null)
+-   || r.output_state === 'complete' && r.control.outcome !== 'completed' || digest !== null && r.control.outcome === 'completed' && r.output_state !== 'complete') fail()
++  // Output describes the retained response. Later actor loss or cancellation
++  // can change the turn outcome without changing those original output bytes.
++  if (r.output_sha256 !== digest || (r.output_state === 'none') !== (digest === null)) fail()
+  }
+  return value
+ }
+diff --git a/apps/web/src/features/codex/turnOutboundContracts.test.ts b/apps/web/src/features/codex/turnOutboundContracts.test.ts
+index 2c4064a3..eac4f591 100644
+--- a/apps/web/src/features/codex/turnOutboundContracts.test.ts
++++ b/apps/web/src/features/codex/turnOutboundContracts.test.ts
+@@ -44,12 +44,11 @@ test.each(['  原文 α\n中文😀  ', '', 'e\u0301 ≠ é'])('UTF-8 result wir
+  expect(await turnOutboundClient.result('turn_test')).toEqual(value)
+  expect(fetch.mock.calls[0][0]).toBe('/api/v1/codex/turns/turn_test/result')
+ })
+-test.each(['digest', 'normalized', 'empty', 'complete_failed', 'wrong_turn', 'extra'])('actual result GET rejects %s wire before delivery', async mode => {
++test.each(['digest', 'normalized', 'empty', 'wrong_turn', 'extra'])('actual result GET rejects %s wire before delivery', async mode => {
+  const value = result('  α\n中文😀  ', 'failed')
+  const raw = mode === 'digest' ? { ...value, output_sha256: '0'.repeat(64) }
+   : mode === 'normalized' ? { ...value, answer_markdown: value.answer_markdown.trim() }
+   : mode === 'empty' ? { ...value, answer_markdown: '', output_sha256: null }
+-  : mode === 'complete_failed' ? { ...value, output_state: 'complete' }
+   : mode === 'wrong_turn' ? { ...value, control: { ...value.control, id: 'other_turn' } } : { ...value, private_body: 'synthetic-only' }
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(raw))))
+  await expect(turnOutboundClient.result('turn_test')).rejects.toThrow()
+@@ -92,3 +91,16 @@ test('safe revoke no-op retains actual revoked revision without fabricating anot
+  expect(decodeOutboundCommand(JSON.stringify({ ...c, ack: { id: 'codexconsent_original', revision: 2, applied: false } }), workspace).ack).toEqual({ id: 'codexconsent_original', revision: 2, applied: false })
+  expect(() => decodeOutboundCommand(JSON.stringify({ ...c, ack: { id: 'codexconsent_original', revision: 3, applied: true } }), workspace)).toThrow()
+ })
++
++test.each(['failed', 'cancelled'] as const)('actual result GET preserves completed response output after turn becomes %s', async outcome => {
++ // The worker can retain a completed response then fail/stop the turn after
++ // an access/cancellation change; the result owner keeps both original facts.
++ const value = result('Synthetic exact answer α\n')
++ value.control = { ...value.control, job: { id: 'job_turn_test', status: outcome }, outcome, error_code: outcome === 'failed' ? 'POLICY_DENIED' : 'CODEX_CANCELLED', cancel_requested: outcome === 'cancelled' }
++ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(value))))
++ expect(await turnOutboundClient.result('turn_test')).toEqual(value)
++})
++test.each(['http:/localhost/model', 'http:///localhost/model', 'http://127.1/model'])('rejects non-owner endpoint spelling %s despite browser URL normalization', endpoint => {
++ const p = proposal(); p.summary.endpoint = endpoint; p.summary.endpoint_policy = 'explicit_loopback'
++ expect(() => checkedOutbound('CodexConsentProposalView', p)).toThrow()
++})

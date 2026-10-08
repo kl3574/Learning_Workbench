@@ -1,0 +1,49 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+___ test_pair_cannot_send_to_an_existing_named_socket_outside_broker[sendto] ___
+tests/security/test_codex_probe_ipc_destination.py:61: in test_pair_cannot_send_to_an_existing_named_socket_outside_broker
+    assert result == {'internal_pair':True,'denied':True}
+E   AssertionError: assert {'internal_pa...enied': False} == {'internal_pa...denied': True}
+E     
+E     Omitting 1 identical items, use -vv to show
+E     Differing items:
+E     {'denied': False} != {'denied': True}
+E     Use -v to get more diff
+__ test_pair_cannot_send_to_an_existing_named_socket_outside_broker[sendmsg] ___
+tests/security/test_codex_probe_ipc_destination.py:61: in test_pair_cannot_send_to_an_existing_named_socket_outside_broker
+    assert result == {'internal_pair':True,'denied':True}
+E   AssertionError: assert {'internal_pa...enied': False} == {'internal_pa...denied': True}
+E     
+E     Omitting 1 identical items, use -vv to show
+E     Differing items:
+E     {'denied': False} != {'denied': True}
+E     Use -v to get more diff
+__ test_pair_cannot_send_to_an_existing_named_socket_outside_broker[sendmmsg] __
+tests/security/test_codex_probe_ipc_destination.py:61: in test_pair_cannot_send_to_an_existing_named_socket_outside_broker
+    assert result == {'internal_pair':True,'denied':True}
+E   AssertionError: assert {'internal_pa...enied': False} == {'internal_pa...denied': True}
+E     
+E     Omitting 1 identical items, use -vv to show
+E     Differing items:
+E     {'denied': False} != {'denied': True}
+E     Use -v to get more diff
+_________ test_fifo_configuration_is_rejected_without_a_blocking_open __________
+tests/security/test_codex_probe_ipc_destination.py:83: in test_fifo_configuration_is_rejected_without_a_blocking_open
+    run = subprocess.run([sys.executable, '-c', program, str(tmp_path)],
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py:2116: in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py:1253: in _check_timeout
+    raise TimeoutExpired(
+E   subprocess.TimeoutExpired: Command '['$HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/bin/python', '-c', "\nfrom pathlib import Path\nimport os,sys\nfrom services.api.app.infrastructure.codex_probe import LocalCodexProbe\nfrom services.api.app.application.errors import ApiError\nbase=Path(sys.argv[1]);binary=base/'unused-binary';binary.write_bytes(b'synthetic')\nhome=base/'data'/'codex-broker'/'home';home.mkdir(parents=True,mode=0o700)\nfor path in [home.parent,home.parent.parent]:path.chmod(0o700)\nos.mkfifo(home/'config.toml',0o600)\ntry:LocalCodexProbe(base/'data',binary).read()\nexcept ApiError as error:\n assert error.code=='CODEX_BROKER_CONFIG_CHANGED'\n print('FIFO_REJECTED_WITHOUT_EXEC')\nelse:raise AssertionError('FIFO admitted')\n", '$HOME/.cache/m63-capability-tmp/pytest-of-lkx/pytest-14/test_fifo_configuration_is_rej0']' timed out after 2 seconds
+=========================== short test summary info ============================
+FAILED tests/security/test_codex_probe_ipc_destination.py::test_pair_cannot_send_to_an_existing_named_socket_outside_broker[sendto]
+FAILED tests/security/test_codex_probe_ipc_destination.py::test_pair_cannot_send_to_an_existing_named_socket_outside_broker[sendmsg]
+FAILED tests/security/test_codex_probe_ipc_destination.py::test_pair_cannot_send_to_an_existing_named_socket_outside_broker[sendmmsg]
+FAILED tests/security/test_codex_probe_ipc_destination.py::test_fifo_configuration_is_rejected_without_a_blocking_open
+4 failed in 2.13s

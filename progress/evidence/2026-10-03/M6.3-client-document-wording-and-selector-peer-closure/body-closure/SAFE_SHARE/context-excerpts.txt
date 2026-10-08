@@ -1,0 +1,148 @@
+
+== AGENTS.md @ 83daf55c1d536ab018182fc2419f3424faaba1e2 ==
+1: Read PRODUCT_DESIGN.md completely and follow its implementation, recovery, verification, and publication workflow. It is the sole product and engineering specification.
+
+== PRODUCT_DESIGN.md @ 83daf55c1d536ab018182fc2419f3424faaba1e2 ==
+318: ### 6.1 导入资料并开始学习
+319: 
+320: 用户选择文件 → 服务端检查大小和类型 → 保存不可变原件 → 创建解析任务 → 提取正文/元数据/警告 → 预览章节与公式 → 用户确认映射与用途 → 事务写入规范内容 → 显示在教材目录 → 生成或绑定路线 → 开始阅读。
+321: 
+322: 取消导入必须清理暂存或标记待清理，不产生半本教材。相同文件哈希重复导入要提示“已有原件”；相同内容可以在不同课程中引用，不重复存储原始字节。解析质量差时允许把原文作为只读附件阅读，不能自动把它当作准确 RAG 真值。
+350: ### 6.6 用 Codex 生成教材
+351: 
+352: 用户给主题、先修、目标和证明策略 → Authoring 建立受控任务 → CodexBroker 准备隔离工作目录 → 启动/恢复会话 → 转译工具审批 → 产生 Markdown、题包、计算验证产物 → 验收内容和来源 → 导入草稿 → 人工审阅 → 发布。
+353: 
+354: 普通 LLM 的结构化草稿生成和 Codex 的工具型文件生成是两个适配器，不共享“任意执行权限”。未安装或未授权 Codex 时，提供明确的任务导出/文件回导降级通道，并标注“未连接 Codex”。
+654: ### 12.5 Codex Broker
+655: 
+656: 官方 App Server 有 thread/turn/item 事件及审批交互；本项目 Broker 应据固定版本适配，而不是把事件名和进程控制逻辑散落到 React 组件。[S15]
+657: 
+658: Broker 的最小职责：探测可用性与授权状态；维护产品 session 到 Codex thread 的映射；仅在隔离工作目录运行；转译命令/文件/网络审批；中断与清理；扫描产物；返回受控路径的文件引用；保留费用/状态证据。涉及权限提高、网络和文件变更要展示操作范围，不因工具名字叫“生成教材”就默认批准所有 shell 命令。
+1006: ### 20.3 内容导入、阅读和生成的质量等级
+1007: 
+1008: 内容可作为“参考材料”进入库，不意味着内容被认证。导入时用户确认的是解析预览，不自动获得数学 APPROVED。Reader 显示 source/user_supplied/review 等状态。正式 AI 生成教材发布需要结构检查及所有适用的数学/来源审批；不含数学的内容可标 NOT_APPLICABLE，并写原因；不允许用 NOT_APPLICABLE 绕过包含定理/公式的审核。独立教学评测可以 NOT_RUN，不阻止软件交付，但阻止宣称“教学效果已验证”。
+1009: 
+1010: “所有定理证明完整”的作者约束属于题材范围内的内容要求：声明先修、变量域/维度、假设、定理/证明/例题/练习关联，完整证明策略不被模型降级。需要外部定理时把证明加入或由用户显式改 proof_policy，不能隐式以“工具定理”跳过。例题真正执行数值验证；代码默认仅文本，只有用户批准的隔离数值校验才运行。
+1011: 
+1012: 导入的 HTML、PDF、DOCX 不等于完整教材主稿。解析低保真时保留原件与片段级警告，原件预览也受本机策略保护。文本 PDF 不自动恢复数学 TeX，扫描件默认无 OCR；用户可另行授权 OCR，但结果仍需确认。中文编码优先 UTF-8，遇到无效字节返回编码选择预览，不静默替换乱码。
+1465: #### 20.16.5 201、未知结果与当前读回
+1466: 
+1467: session r1/initializing 表示单次控制开始许可已登记，并不表示存在外部 thread。只有从该唯一实际控制实例取得完整、匹配、受检的成功响应，验证 root/profile/返回身份并持久保存外部 thread 映射及回执后，才变为 r2/ready 并产生原 201 ACK。ready 仅表示 bootstrap 映射已核验成功，不表示模型调用、真实账号授权、当前进程仍运行或整个 Broker 已完成；账号授权状态仍由已有能力读取独立观察。
+1569: | POST `/imports` | multipart `file`，`kind:auto|markdown|text|html|pdf|docx|learnpack`，`target_course_id?`；最大字节数按正文 | 202 `{import_id,job:JobRef,input_sha256}`。仅暂存，不改正式课程 |
+1570: | GET `/imports/{id}` | 无 | `{id,status:staged|parsing|preview_ready|committed|cancelled|failed,input_sha256,warnings:Warning[],candidate_summary:{course_title,lesson_count,block_count,unresolved_refs},preview_refs:Id[]}`。预览标识不是已发布 ContentRef |
+1571: | POST `/imports/{id}/commit` | `{expected_input_sha256,accepted_warning_codes:string[],id_mapping:{old_id,new_id}[]}` | `{course_refs:ContentRef[],migration_receipt_id}`；新哈希不一致409；error级警告不可绕过 |
+
+== apps/web/src/features/authoring/AuthoringPanel.tsx @ 83daf55c1d536ab018182fc2419f3424faaba1e2 ==
+39:     {state.error && <p role="status">{state.error}</p>}
+40:     <AuthoringControlList jobs={state.jobs} busy={state.busy || !state.controlReady} academic={state.academic} readBlocked={!state.ready} read={id => void state.read(id)} cancel={job => void state.cancel(job)} />
+41:     {state.cursor && <button disabled={state.busy} onClick={() => void state.refresh(true)}>继续读取安全任务</button>}
+42:     <section aria-label="原创作命令回执"><h3>本机保留的原命令</h3>{state.commands.map(command => <article key={command.command_id}><p>{command.kind === 'cancel' ? '取消任务' : command.kind === 'prepare' ? '准备例题' : command.kind === 'group_prepare' ? '准备组合草稿' : ['numeric_preview', 'group_numeric_preview'].includes(command.kind) ? '数值检查预览' : '独立数值决定'} · {command.ack ? '原命令已确认' : command.rejection ? '服务端拒绝，保留原基准' : '结果未知，原 key 与完整命令保留'}</p><details><summary>核对原命令</summary><p>{command.command_id}</p>{command.kind !== 'cancel' && <pre>{JSON.stringify(command.body, null, 2)}</pre>}{command.ack && <p>原回执不是当前状态。请从任务列表重新读取；数值检查从原候选的检查列表进入。</p>}</details><button disabled={state.busy || !(command.kind === 'cancel' ? state.controlReady : state.ready) || !!command.ack} onClick={() => void state.execute(command)}>回放原命令 {command.command_id}</button></article>)}</section>
+43:     {!state.academic ? <p role="status">当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。</p> : <div key={`${workspace}:${access}:${state.actor}`}>
+44:       <AuthoringForm localTask={{ workspace, actor: state.actor, port }} currentBlock={currentBlock} busy={state.busy || !state.ready} submit={body => state.create({ kind: 'prepare', body })} submitGroup={port.groups ? body => state.create({ kind: 'group_prepare', body }) : undefined} denied={state.reportAccessError} onDirty={setFormDirty} />
+45:       {detail && <section aria-label="受保护创作详情"><h3>{detail.summary.title}</h3><p>实际任务状态：{detail.summary.status} · r{detail.summary.job_revision}</p><button disabled={state.busy} onClick={() => void state.read(detail.summary.id)}>重新读取本次创作任务</button>
+56:     </div>}
+57:     <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
+58:     <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} />
+59:     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
+
+== apps/web/src/features/authoring/AuthoringForm.tsx @ 83daf55c1d536ab018182fc2419f3424faaba1e2 ==
+1: import { useEffect, useRef, useState } from 'react'
+2: import type { AuthoringPrepareWrite, AuthoringGroupPrepareWrite, ContentRef } from '../../../../../packages/contracts/generated/api-types'
+3: import { checkedAuthoring } from './authoringCommands'
+4: import { AuthoringTargets, type GroupTargets } from './AuthoringTargets'
+5: import { sameRef } from '../reader/target'
+6: import { LocalTaskDocument, type LocalTaskScope } from './LocalTaskDocument'
+7: export function AuthoringForm({ localTask, currentBlock, busy, submit, submitGroup, denied = () => {}, onDirty }: { localTask?: LocalTaskScope; currentBlock: ContentRef | null; busy: boolean; submit: (body: AuthoringPrepareWrite) => Promise<void>; onDirty: (dirty: boolean) => void; submitGroup?: (body: AuthoringGroupPrepareWrite) => Promise<void>; denied?: (reason: unknown) => void }) {
+8:   const [topic, setTopic] = useState(''), [prerequisites, setPrerequisites] = useState(''), [objectives, setObjectives] = useState(''), [proof, setProof] = useState<'full' | 'declared_dependencies'>('full'), [provider, setProvider] = useState('')
+9:   const [kind, setKind] = useState<'worked_example' | 'lesson' | 'practice_set' | 'assessment'>('worked_example')
+46:       <h4>本次材料范围</h4>{!refs.length && <p>无已选教材来源。不会自动加入当前教材或父级内容。</p>}
+47:       {currentBlock?.entity === 'block' && <button disabled={refs.some(v => sameRef(v, currentBlock)) || refs.length >= 8} onClick={() => add(currentBlock)}>明确加入当前准确内容块</button>}
+48:       {refs.map((ref, i) => <p key={`${ref.id}:${ref.revision}`}>{ref.id} · r{ref.revision} · <code>{ref.sha256}</code> <button onClick={() => setRefs(old => old.filter((_, index) => index !== i))}>移除材料 {i + 1}</button></p>)}
+49:       <details><summary>明确加入其他准确内容块</summary><label>内容块 ID<input value={id} onChange={e => setId(e.target.value)} /></label><label>内容修订<input inputMode="numeric" value={revision} onChange={e => setRevision(e.target.value)} /></label><label>内容 SHA256<input value={hash} onChange={e => setHash(e.target.value)} /></label><button onClick={() => add({ entity: 'block', id, revision: /^[1-9][0-9]*$/.test(revision) ? Number(revision) : 0, sha256: hash })}>加入这份准确引用</button></details>
+50:       <button onClick={() => void prepare()}>{kind === 'worked_example' ? '明确准备本次例题任务' : '明确准备本次组合创作任务'}</button>
+51:       {localTask && <LocalTaskDocument {...localTask} inputs={{ topic, prerequisites, objectives, proof }} busy={busy} denied={denied} />}
+52:     </fieldset>{error && <p role="alert">{error}</p>}
+53:   </section>
+54: }
+
+== apps/web/src/features/codex/codexClient.ts @ 83daf55c1d536ab018182fc2419f3424faaba1e2 ==
+1: import type { CodexCapabilities, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+2: import { request } from '../../api/client'
+3: import { checkedProvider } from '../providers/providerSchema'
+4: 
+5: export type CodexCapabilityPort = {
+6:   session(): Promise<SessionResponse>
+7:   capabilities(): Promise<CodexCapabilities>
+8: }
+9: 
+10: /** Validate the generated wire contract before any connection status is shown. */
+11: export function checkedCodex<T>(name: 'CodexCapabilities' | 'SessionResponse', value: unknown): T {
+12:   try {
+13:     const checked = checkedProvider<T>(name, value)
+14:     if (name === 'CodexCapabilities') {
+15:       const view = checked as CodexCapabilities
+16:       if (!view.available && (view.authorized || view.sandbox_roots.length > 0 || Object.values(view.capabilities).some(Boolean))
+17:         || view.available && !view.adapter_version?.trim()
+18:         || new Set(view.sandbox_roots.map(root => root.id)).size !== view.sandbox_roots.length) throw new Error('Inconsistent capability observation')
+19:     }
+20:     return checked
+21:   }
+22:   catch { throw new Error('Codex 连接状态不符合当前契约，请重新检查。') }
+23: }
+24: 
+25: export const codexCapabilityClient: CodexCapabilityPort = {
+26:   session: async () => checkedCodex('SessionResponse', await request('GET /api/v1/session', undefined)),
+27:   capabilities: async () => checkedCodex('CodexCapabilities', await request('GET /api/v1/codex/capabilities', undefined)),
+28: }
+
+== apps/web/src/features/imports/DraftPreview.tsx @ 83daf55c1d536ab018182fc2419f3424faaba1e2 ==
+63: export function DraftPreview({ ids, selected, draft, source, sourceError, accessEpoch, loading, error, choose }: {
+64:   ids: string[]; selected: string; draft: DraftSnapshot | null; source: SourceSnapshot | null;
+65:   accessEpoch: RefObject<number>;
+66:   loading: boolean; error: string; sourceError: string; choose: (id: string) => void;
+67: }) {
+68:   const index = ids.indexOf(selected)
+69:   return <section aria-label="候选正文预览"><h3>候选正文预览</h3><p className="muted">这里展示暂存候选。候选 ID 不代表正式发布或内容审核通过。</p>
+70:     <label>选择预览候选<select value={selected} onChange={event => choose(event.target.value)}>{ids.map((id, position) => <option key={id} value={id}>候选 {position + 1} / {ids.length} · {id}</option>)}</select></label>
+71:     <div className="import-buttons"><button disabled={index <= 0 || loading} onClick={() => choose(ids[index - 1])}>上一候选</button><button disabled={index < 0 || index >= ids.length - 1 || loading} onClick={() => choose(ids[index + 1])}>下一候选</button></div>
+72:     {loading && <p role="status">读取候选正文…</p>}
+73:     {error && <div className="import-error" role="alert"><p>{error}</p><button onClick={() => choose(selected)}>重试读取候选</button></div>}
+74:     {draft && <><div className="import-preview" tabIndex={0} aria-label="当前候选正文"><CandidateContent draft={draft} /></div><details><summary>候选修订与校验信息</summary><dl className="import-details"><dt>候选 ID</dt><dd>{draft.id}</dd><dt>候选对象 ID</dt><dd>{'metadata' in draft.payload ? draft.payload.metadata.id : draft.payload.id}</dd><dt>候选修订</dt><dd>{draft.revision}</dd><dt>候选 SHA-256</dt><dd><code className="import-hash">{draft.candidate_sha256}</code></dd></dl></details></>}
+75:     {draft && 'metadata' in draft.payload && <SourceProvenance citations={draft.payload.citations ?? []} />}
+76:     {sourceError && <div className="import-warning" role="status"><p>原件暂不可读取：{sourceError}</p><p>安全候选正文已单独读取。需要作者权限时，可在窗口顶部显式切换角色；这不会自动认证候选内容。</p><button type="button" disabled={loading} onClick={() => choose(selected)}>重试读取原件信息</button></div>}
+77:     {source && <OriginalDownload key={source.id} source={source} accessEpoch={accessEpoch} />}
+78:   </section>
+79: }
+
+== services/api/app/application/imports.py @ 83daf55c1d536ab018182fc2419f3424faaba1e2 ==
+158:             raise invalid()
+159:         filename = safe_filename(filename)
+160:         digest = sha256_bytes(data)
+161:         with self._access(identity) as repository:
+162:             def operation() -> dict[str, Any]:
+163:                 target = None
+164:                 if target_course_id is not None:
+165:                     target_value = ContentRepository(repository.connection, identity.workspace_id).current(target_course_id).value
+166:                     if not isinstance(target_value, dm.Course):
+167:                         raise invalid()
+168:                     target = reference(target_value).model_dump(mode="json")
+169:                 info = self.blobs.write(data, expected_sha256=digest)
+170:                 repository.add_blob(info)
+171:                 import_id, source_id, job_id, artifact_id = (identifier(prefix) for prefix in ("import", "source", "job", "artifact"))
+172:                 from .import_parsing import detect_import_visibility
+173:                 archive_detected = zipfile.is_zipfile(io.BytesIO(data))
+174:                 raw_visibility = "author_private" if archive_detected or kind == "docx" else detect_import_visibility(data, kind, filename)
+175:                 media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+176:                 now = utc_now()
+177:                 source_metadata = {"artifact_id": artifact_id, "filename": filename, "visibility": raw_visibility,
+178:                                    "visibility_verified": False, "warnings": [], "origin": "user_supplied"}
+179:                 repository.connection.execute(
+180:                     "INSERT INTO sources(id,workspace_id,blob_sha256,media_type,title,rights,metadata_json,created_at) VALUES(?,?,?,?,?,?,?,?)",
+181:                     (source_id, identity.workspace_id, digest, media_type, filename, "user_supplied; rights_not_verified", json_text(source_metadata), now),
+182:                 )
+183:                 job_input = {"source_id": source_id, "kind": kind, "filename": filename, "target_ref": target, "archive_detected": archive_detected, "budgets": asdict(self.database.settings.import_budgets)}
+184:                 repository.connection.execute(
+185:                     "INSERT INTO jobs(id,workspace_id,kind,status,revision,input_sha256,input_json,created_at,updated_at) VALUES(?,?,'import','queued',1,?,?,?,?)",
+186:                     (job_id, identity.workspace_id, digest, json_text(job_input), now, now),
+187:                 )
+188:                 repository.artifact(info=info, filename=filename, media_type=media_type, visibility=raw_visibility,

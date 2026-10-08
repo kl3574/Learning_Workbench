@@ -1,0 +1,75 @@
+{
+  "status": "SCOPED_V315_STRUCTURAL_CONTRACTS_PASS",
+  "recorded_at": "2026-10-04T01:58:16.090152+00:00",
+  "head": "50ec27381c4e98513bf8aac48128c201e933423f",
+  "complete_nonprogress_git_files": 1386,
+  "before_after_git_exact": true,
+  "gates": [
+    {
+      "gate": "structural",
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--no-sync",
+        "python",
+        "scripts/verify_spec.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.8107219930097926,
+      "log_sha256": "9c96d1e416ae562cabcc5f521feba3c623ae628394a244cafeb5f46c04ee51e1"
+    },
+    {
+      "gate": "contracts",
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--no-sync",
+        "pytest",
+        "tests/unit/test_spec_catalog.py",
+        "tests/unit/test_spec_extraction.py",
+        "tests/contract/test_api_projection.py",
+        "tests/contract/test_codex_bootstrap_dto.py",
+        "tests/contract/test_codex_bootstrap_routes.py",
+        "-q",
+        "--basetemp=$HOME/.cache/learning-workbench-acceptance/m63-v315-adoption-oct04/pytest-runtime"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 136.1078464309976,
+      "log_sha256": "e39206efb2af8248e8f4eae298fd32c4f675cae49e9184080d8e402614efddb4"
+    },
+    {
+      "gate": "ruff",
+      "command": [
+        "uv",
+        "run",
+        "--frozen",
+        "--no-sync",
+        "ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.0248213710001437,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "gate": "web-types",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "typecheck"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.6143584370001918,
+      "log_sha256": "2226e6b8da4fc06b00505a3719b993d066233c300edc12ea80fa62988b33dd6d"
+    }
+  ],
+  "elapsed_seconds": 140.31976960398606,
+  "boundary": "Only normative extraction/derived catalog, original runtime/DTO contract and TypeScript structural checks. No new Codex turn/Provider/tools/runtime acceptance; v315 actual implementation and production proof not yet complete. Exact4ecc CI receipts remain older source."
+}

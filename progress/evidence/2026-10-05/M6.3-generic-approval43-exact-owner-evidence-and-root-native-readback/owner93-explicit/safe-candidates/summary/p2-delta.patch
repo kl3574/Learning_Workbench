@@ -1,0 +1,80 @@
+diff --git a/apps/web/src/features/codex/CodexApprovalsPanel.test.tsx b/apps/web/src/features/codex/CodexApprovalsPanel.test.tsx
+index 1b5d2968..e6415eb3 100644
+--- a/apps/web/src/features/codex/CodexApprovalsPanel.test.tsx
++++ b/apps/web/src/features/codex/CodexApprovalsPanel.test.tsx
+@@ -142,3 +142,45 @@ test('original form restore rereads actor before showing safe identifiers or sav
+  fireEvent.click(screen.getByText(`恢复审批表单 ${original.draft_id} · 1`)); await screen.findByText(/审批当前权限或原 actor 已变化/)
+  expect((screen.getByLabelText('审批来源 turn ID') as HTMLInputElement).value).toBe(''); expect(Object.keys(await forms.load(approvalWorkspace))).toEqual([original.snapshot_id]); expect(p.decide).not.toHaveBeenCalled()
+ })
++
++test.each(['learner', 'independent', 'open_book'] as const)('prior rejected approve preserves its original facts while %s can explicitly decline a fresh pending safe control', async mode => {
++ const p = port(), store = local(), forms = local()
++ vi.mocked(p.decide).mockRejectedValueOnce(new ApiError(503, 'runtime became unavailable', 'CODEX_RUNTIME_UNAVAILABLE')).mockResolvedValue(approvalAck('decline'))
++ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await readDetail(); approve(); await screen.findByText(/BLOCKED：当前操作或固定运行证明不可用/)
++ const first = vi.mocked(p.decide).mock.calls[0], original = (await store.load(approvalWorkspace))[first[2]].text
++ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), role: mode === 'learner' ? 'learner' : 'author', active_independent_attempt_id: mode === 'independent' ? 'attempt_independent' : null, active_open_book_attempt_id: mode === 'open_book' ? 'attempt_open_book' : null })
++ view.rerender(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted={false} port={p} store={store} formStore={forms} />)
++ await readControl(); const reads = vi.mocked(p.read).mock.calls.length
++ const decline = screen.getByText('明确拒绝这一次操作 approval_synthetic') as HTMLButtonElement
++ expect(decline.disabled, 'a prior academic approve command must not block explicit safe decline of a still-pending operation').toBe(false)
++ fireEvent.click(decline); await screen.findByText(/审批原 ACK 已保存/)
++ expect(p.decide).toHaveBeenCalledTimes(2); const second = vi.mocked(p.decide).mock.calls[1]
++ expect(second[2]).not.toBe(first[2]); expect(second[1]).toEqual({ expected_revision: 1, operation_sha256: '5'.repeat(64), decision: 'decline' })
++ expect((await store.load(approvalWorkspace))[first[2]].text).toBe(original); expect(p.read).toHaveBeenCalledTimes(reads)
++ const reduced = readApprovalCommand((await store.load(approvalWorkspace))[second[2]], approvalWorkspace)
++ expect(reduced.basis).toEqual({ kind: 'decline', control: approvalControl() }); expect(reduced.ack).toEqual(approvalAck('decline'))
++})
++
++test('unknown approve also permits explicit safe decline while its exact pending journal stays unchanged', async () => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.decide).mockRejectedValueOnce(new Error('response unavailable')).mockResolvedValue(approvalAck('decline'))
++ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await readDetail(); approve(); await screen.findByText(/审批结果或本机保存未知/)
++ const first = vi.mocked(p.decide).mock.calls[0], original = (await store.load(approvalWorkspace))[first[2]].text
++ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), role: 'learner' }); view.rerender(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted={false} port={p} store={store} formStore={forms} />)
++ await readControl(); fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic')); await screen.findByText(/审批原 ACK 已保存/)
++ expect(p.decide).toHaveBeenCalledTimes(2); expect(vi.mocked(p.decide).mock.calls[1][2]).not.toBe(first[2]); expect((await store.load(approvalWorkspace))[first[2]].text).toBe(original)
++ fireEvent.click(screen.getByText('独立读取审批安全控制')); await screen.findByLabelText('审批安全控制 GET')
++ expect((screen.getByText('明确拒绝这一次操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true); expect(p.decide).toHaveBeenCalledTimes(2)
++})
++
++test('unknown prior decline still blocks a new approve while retaining explicit original decline replay', async () => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.decide).mockRejectedValueOnce(new Error('decline response unavailable'))
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await readControl(); fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic')); await screen.findByText(/审批结果或本机保存未知/)
++ const original = vi.mocked(p.decide).mock.calls[0], before = (await store.load(approvalWorkspace))[original[2]].text
++ fireEvent.click(screen.getByText('独立读取完整操作 approval_synthetic')); await screen.findByLabelText('审批当前详情 GET')
++ expect((screen.getByText('明确仅批准这一次完整操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true)
++ expect((screen.getByText(`显式回放审批原 key ${original[2]}`) as HTMLButtonElement).disabled).toBe(false)
++ expect(p.decide).toHaveBeenCalledTimes(1); expect((await store.load(approvalWorkspace))[original[2]].text).toBe(before)
++})
+diff --git a/apps/web/src/features/codex/CodexApprovalsPanel.tsx b/apps/web/src/features/codex/CodexApprovalsPanel.tsx
+index 2b80f5cb..cdac52a8 100644
+--- a/apps/web/src/features/codex/CodexApprovalsPanel.tsx
++++ b/apps/web/src/features/codex/CodexApprovalsPanel.tsx
+@@ -48,7 +48,7 @@ export function CodexApprovalsPanel({ workspace, writeAdmitted, port, store, for
+    {!state.control.approval_controls.length && <p>本次控制没有审批记录；没有构造或猜测操作。</p>}
+    {state.control.approval_controls.map(a => <article key={a.id}><p>{a.id} · 审批 r{a.revision} · {a.decision} · {a.validity}</p><p>操作 SHA <code>{a.operation_sha256}</code></p>
+     <button disabled={blocked || !state.allowed} onClick={() => void state.read(a.id)}>独立读取完整操作 {a.id}</button>
+-    <button disabled={blocked || a.decision !== 'pending' || state.hasCommand(a.id)} onClick={() => void state.decide(a.id, 'decline')}>明确拒绝这一次操作 {a.id}</button>
++    <button disabled={blocked || a.decision !== 'pending' || state.hasCommand(a.id, 'decline')} onClick={() => void state.decide(a.id, 'decline')}>明确拒绝这一次操作 {a.id}</button>
+     <p>拒绝以本次完整安全控制的审批 revision/hash 为基准；无需读取操作正文，也不证明远端已经停止。</p>
+    </article>)}
+   </section>}
+diff --git a/apps/web/src/features/codex/useCodexApprovals.ts b/apps/web/src/features/codex/useCodexApprovals.ts
+index c9eaf7a0..0830d459 100644
+--- a/apps/web/src/features/codex/useCodexApprovals.ts
++++ b/apps/web/src/features/codex/useCodexApprovals.ts
+@@ -140,9 +140,10 @@ export function useCodexApprovals(workspace: string, writeAdmitted: boolean, por
+  }
+  const held = heldApprovalCommands(workspace), heldForms = heldApprovalForms(workspace), all = new Map(commands.map(v => [v.command_id, v]))
+  for (const value of held) if (!all.get(value.command_id)?.ack || value.ack) all.set(value.command_id, value)
+- const hasCommand = (id: string) => [...all.values()].some(c => c.actor_session_id === identity?.actor_session_id && c.target_id === id)
++ // Prior academic approval facts never remove the separate safe decline action.
++ const hasCommand = (id: string, decision?: 'decline') => [...all.values()].some(c => c.actor_session_id === identity?.actor_session_id && c.target_id === id && (!decision || c.body.decision === decision))
+  const decide = async (id: string, decision: 'approve_once' | 'decline') => {
+-  if (!ready || hasCommand(id) || decision === 'approve_once' && !allowed) return
++  if (!ready || hasCommand(id, decision === 'decline' ? 'decline' : undefined) || decision === 'approve_once' && !allowed) return
+   const basis: ApprovalCommand['basis'] | null = decision === 'decline' && control ? { kind: 'decline', control } : decision === 'approve_once' && detail?.id === id ? { kind: 'approve', view: detail } : null
+   if (!basis) return
+   const token = begin(); if (token === null) return

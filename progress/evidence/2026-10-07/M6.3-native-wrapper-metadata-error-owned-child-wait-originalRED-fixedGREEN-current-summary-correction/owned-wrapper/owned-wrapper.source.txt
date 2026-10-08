@@ -1,0 +1,124 @@
+from pathlib import Path
+import datetime
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import time
+import sys
+
+B = Path(__file__).parent.parent
+O = B / 'm63-grading-snapshot-current93c-storage-isolated-native-private-oct08'
+R = B / 'm63-grading-snapshot-current93c-complete-native-worktree-oct08'
+C = '93c44303f9635067d2fae44a40986ba947e75e21'
+H = lambda b: hashlib.sha256(b).hexdigest()
+def now(): return datetime.datetime.now(datetime.timezone.utc).isoformat()
+def put(n, v): (O / n).write_text(json.dumps(v, ensure_ascii=False, indent=2) + '\n')
+def git(*args): return subprocess.check_output(['git', *args], cwd=R)
+BOOKKEEPING_ERRORS = []
+def execute(name, argv, cwd, extra=None):
+    extra = extra or {}
+    assert not (O / (name + '.receipt.json')).exists()
+    put(name + '.command.json', {'argv': argv, 'cwd': str(cwd), 'explicit_environment': extra, 'HOME_CODEX_HOME_override': False, 'started_utc': now()})
+    out = O / (name + '.stdout'); err = O / (name + '.stderr')
+    def record_started_child(filename, value):
+        try:
+            put(filename, value)
+        except OSError as failure:
+            event = {'phase': name, 'metadata_file': filename, 'error_class': type(failure).__name__, 'errno': failure.errno}
+            if event not in BOOKKEEPING_ERRORS:
+                BOOKKEEPING_ERRORS.append(event)
+    with out.open('xb') as a, err.open('xb') as e:
+        child = subprocess.Popen(argv, cwd=cwd, env={**os.environ, **extra}, stdout=a, stderr=e)
+        record_started_child(name + '.start.json', {'owned_wrapper_pid': os.getpid(), 'owned_child_pid': child.pid, 'started_utc': now(), 'state': 'RUNNING'})
+        while True:
+            actual = child.poll()
+            try:
+                sizes = {'stdout_bytes': out.stat().st_size, 'stderr_bytes': err.stat().st_size}
+            except OSError as failure:
+                sizes = {'stdout_bytes': None, 'stderr_bytes': None}
+                event = {'phase': name, 'metadata_file': 'owned-stream-size', 'error_class': type(failure).__name__, 'errno': failure.errno}
+                if event not in BOOKKEEPING_ERRORS: BOOKKEEPING_ERRORS.append(event)
+            record_started_child('LIVE.json', {'phase': name, 'owned_wrapper_pid': os.getpid(), 'owned_child_pid': child.pid, 'observed_utc': now(), 'state': 'RUNNING' if actual is None else 'COMPLETED', 'actual_exit': actual, **sizes, 'probe': 'retained owned child Popen.poll only'})
+            if actual is not None: break
+            time.sleep(5)
+        child.wait()
+    receipt = {'actual_exit': actual, 'finished_utc': now(), 'stdout_bytes': out.stat().st_size, 'stdout_sha256': H(out.read_bytes()), 'stderr_bytes': err.stat().st_size, 'stderr_sha256': H(err.read_bytes()), 'bookkeeping_errors': list(BOOKKEEPING_ERRORS)}
+    record_started_child(name + '.receipt.json', receipt)
+    print(json.dumps({'phase': name, 'actual_exit': actual, 'bookkeeping_errors': list(BOOKKEEPING_ERRORS)}), flush=True)
+    return actual
+def mapping(phase):
+    assert git('rev-parse', 'HEAD').decode().strip() == C
+    heads = {}
+    for line in git('ls-tree', '-rz', C).split(b'\0'):
+        if not line: continue
+        left, name = line.split(b'\t'); mode, kind, blob = left.decode().split(); name = name.decode()
+        if not name.startswith('progress/'):
+            assert kind == 'blob'; heads[name] = (mode, blob)
+    index = {}
+    for line in git('ls-files', '--stage', '-z').split(b'\0'):
+        if not line: continue
+        left, name = line.split(b'\t'); mode, blob, stage = left.decode().split(); name = name.decode()
+        if not name.startswith('progress/'):
+            assert stage == '0'; index[name] = (mode, blob)
+    assert len(heads) == 1565 and set(heads) == set(index)
+    ids = list(dict.fromkeys(x[1] for x in heads.values()))
+    raw = subprocess.check_output(['git', 'cat-file', '--batch'], input=('\n'.join(ids)+'\n').encode(), cwd=R)
+    blobs = {}; offset = 0
+    for expected in ids:
+        end = raw.index(b'\n', offset); blob, kind, length = raw[offset:end].decode().split(); length = int(length)
+        assert blob == expected and kind == 'blob'
+        data = raw[end+1:end+1+length]; assert len(data) == length and raw[end+1+length:end+2+length] == b'\n'
+        blobs[blob] = (length, H(data)); offset = end+2+length
+    assert offset == len(raw)
+    rows = []; diffs = []
+    for name in sorted(heads):
+        mode, blob = heads[name]; p = R / name; info = p.lstat(); assert stat.S_ISREG(info.st_mode)
+        live_mode = '100755' if info.st_mode & 0o111 else '100644'; data = p.read_bytes(); size, digest = blobs[blob]
+        row = {'path': name, 'git_mode': mode, 'git_blob': blob, 'git_bytes': size, 'git_sha256': digest, 'index_mode': index[name][0], 'index_blob': index[name][1], 'live_mode': live_mode, 'live_bytes': len(data), 'live_sha256': H(data)}
+        equal = index[name] == (mode, blob) and live_mode == mode and len(data) == size and H(data) == digest
+        rows.append(row)
+        if not equal: diffs.append(row)
+    value = {'phase': phase, 'head': C, 'source_count': 1565, 'all_equal': not diffs, 'differences': diffs, 'rows': rows, 'observed_utc': now(), 'scope': 'all tracked Git/index/live paths except literal progress/; ignored dependencies/environment NOT_CAPTURED'}
+    put(phase + '-SOURCE-MAP.json', value)
+    return value
+assert not O.exists() and R.exists()
+O.mkdir(mode=0o700)
+python_receipt = B / 'm63-current93c-storage-isolated-complete-python-once-private-evidence-oct08/01-complete-python.receipt.json'
+assert python_receipt.exists(), 'Sequential gate requires actual Python terminal first'
+py = json.loads(python_receipt.read_bytes())
+assert py['actualexit'] == 0, 'Python FAIL needs diagnosis before this native gate'
+assert not git('status', '--porcelain', '-uall')
+before = mapping('before-native'); assert before['all_equal']
+private_tmp = Path('$HOME/.cache/lw93c-native-1008')
+assert private_tmp.is_dir() and not private_tmp.is_symlink() and stat.S_IMODE(private_tmp.stat().st_mode) == 0o700
+allowed = ['docs/ui/m1-after-1440.png', 'docs/ui/m1-after-1920.png', 'docs/ui/m1-after-390-agent.png', 'docs/ui/m1-native-zoom-metrics.json', 'docs/ui/m1-session-three-way-conflict.png', 'docs/ui/m1-after-200-percent-native.png', 'docs/ui/m1-after-390-directory.png', 'docs/ui/m1-after-390-long-formula.png', 'docs/ui/m1-after-390.png', 'docs/ui/m1-after-900.png']
+put('FREEZE.json', {'head': C, 'source_count': 1565, 'before_native_sha256': H((O / 'before-native-SOURCE-MAP.json').read_bytes()), 'native_argv': ['make', 'test-e2e'], 'timeout_ms': 30000, 'workers': 1, 'retry_default': 0, 'attempts_this_changed_environment': 1, 'filters_exclusions_fallback': False, 'guarded_generated_allowlist': allowed, 'model_calls_by_root': 0, 'environment_change_only': 'task-private TMPDIR; original failed gate preserved', 'previous_original_native': '65PASS68FAIL make2; retained', 'qualified_python_terminal_receipt_sha256': H(python_receipt.read_bytes()), 'original_build': '03-build actual0 on unchanged93c; dependencies retained in owned worktree'})
+extra = {'LEARNING_E2E_OUTPUT_DIR': str(O / 'native-output'), 'LEARNING_E2E_DATA_DIR': str(O / 'native-data'), 'TMPDIR': str(private_tmp)}
+for n in ['native-output', 'native-data']: (O / n).mkdir(mode=0o700)
+actual = execute('01-native', ['make', 'test-e2e'], R, extra)
+rawmap = mapping('after-raw'); changed = rawmap['differences']; unknown = [x['path'] for x in changed if x['path'] not in allowed]
+index_changes = [x['path'] for x in rawmap['rows'] if (x['git_mode'], x['git_blob']) != (x['index_mode'], x['index_blob'])]
+frozen = O / 'raw-generated'; frozen.mkdir(mode=0o700); plans = []
+for x in changed:
+    if x['path'] not in allowed: continue
+    target = R / x['path']; data = target.read_bytes(); assert H(data) == x['live_sha256'] and len(data) == x['live_bytes']
+    saved = frozen / x['path']; saved.parent.mkdir(parents=True, exist_ok=True); saved.write_bytes(data)
+    original = git('cat-file', 'blob', x['git_blob']); assert H(original) == x['git_sha256']
+    plans.append((x, target, saved, original))
+record = {'native_actual_exit': actual, 'mutated_count': len(changed), 'mutated_paths': [x['path'] for x in changed], 'unknown_paths': unknown, 'index_changes': index_changes, 'raw_frozen': [x for x, _, _, _ in plans], 'restored': [], 'reset_stash_unknown_overwrite': False}
+if not unknown and not index_changes:
+    for x, target, saved, original in plans:
+        assert H(target.read_bytes()) == H(saved.read_bytes()) == x['live_sha256']
+        assert ('100755' if target.stat().st_mode & 0o111 else '100644') == x['live_mode']
+        temp = target.with_name(target.name + '.owned-guarded-restore'); assert not temp.exists()
+        temp.write_bytes(original); temp.chmod(0o755 if x['git_mode'] == '100755' else 0o644); temp.replace(target)
+        assert H(target.read_bytes()) == x['git_sha256']; record['restored'].append(x['path'])
+    record['restoration'] = 'PASS' if plans else 'NOT_NEEDED'
+else: record['restoration'] = 'BLOCKED; unknown mutation or index change, no source overwritten'
+put('GUARDED-RESTORATION.json', record)
+restored = mapping('after-restored')
+put('TERMINAL.json', {'head': C, 'actual_native_exit': actual, 'source1565_after_restored_equal': restored['all_equal'], 'restoration': record['restoration'], 'model_calls_by_root': 0, 'full_M63': 'NOT_ACCEPTED', 'M7': 'todo', 'bookkeeping_errors': list(BOOKKEEPING_ERRORS), 'finished_utc': now()})
+print(json.dumps({'native_actual_exit': actual, 'restored_equal': restored['all_equal'], 'mutated_count': len(changed)}), flush=True)
+sys.exit(actual if actual else (0 if restored['all_equal'] and not BOOKKEEPING_ERRORS else 20))

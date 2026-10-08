@@ -1,0 +1,227 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { IDBFactory } from 'fake-indexeddb'
+import { afterEach, expect, test, vi } from 'vitest'
+import { ApiError, request } from '../../api/client'
+import { DraftStore } from '../../workbench/DraftStore'
+import { CodexBootstrapPanel } from './CodexBootstrapPanel'
+import { actor, bootstrapPort, codexSession, deferred, preparation, session, workspace } from './bootstrapTestFixtures'
+import { createCommand, persistBootstrapCommand, prepareCommand } from './bootstrapCommands'
+import { heldBootstrapCommands, releaseBootstrapCommand } from './bootstrapMemory'
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); for (const value of heldBootstrapCommands(workspace)) releaseBootstrapCommand(value) })
+const store = () => new DraftStore({ name: `bootstrap-test-${crypto.randomUUID()}`, factory: new IDBFactory() })
+const click = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }))
+
+test('explicit preparation, independent current GET, decision and creation preserve originals', async () => {
+ const port = bootstrapPort(), db = store(), state = vi.fn()
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} onState={state} />)
+ expect(port.session).not.toHaveBeenCalled(); expect(port.prepare).not.toHaveBeenCalled()
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await screen.findByText('准备原 ACK 已保存；须另读当前资格。')
+ expect(port.preparation).not.toHaveBeenCalled(); expect(screen.queryByRole('button', { name: '仅批准这一次本地建会话' })).toBeNull()
+ click('读取准备当前状态 preparation_test'); await screen.findByText('冻结范围：仅本地控制建会话')
+ expect(screen.getByText('允许 actions：[]；零模型、零工具、零学科读取、零网络。')).toBeTruthy()
+ port.preparation = vi.fn(async () => preparation('approved'))
+ click('仅批准这一次本地建会话'); await screen.findByText('决定原 ACK 已保存；须另读当前资格。')
+ expect(port.create).not.toHaveBeenCalled()
+ click('读取准备当前状态 preparation_test'); await screen.findByRole('button', { name: '明确创建这次本地会话' })
+ click('明确创建这次本地会话'); await screen.findByText('原 201 ACK 已保存；ready 仅表示已核验映射。')
+ expect(port.prepare).toHaveBeenCalledTimes(1); expect(port.decide).toHaveBeenCalledTimes(1); expect(port.create).toHaveBeenCalledTimes(1)
+ const records = Object.values(await db.load(workspace)).map(v => v.text).join('\n')
+ expect(records).not.toContain('csrf'); expect(records).not.toContain('synthetic-only-not-persisted')
+ expect(records).toContain('actor_session_id'); expect(records).toContain('operation_sha256')
+ await act(async () => {})
+})
+
+test('unknown prepare ACK survives reload; only same actor explicitly replays identical key/body', async () => {
+ const port = bootstrapPort(), db = store(); port.prepare = vi.fn(async () => { throw new Error('response lost') })
+ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await screen.findByText(/本次操作或结果尚未确认/)
+ const original = vi.mocked(port.prepare).mock.calls[0], saved = Object.values(await db.load(workspace))[0]
+ view.unmount()
+ const refreshed = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ expect(port.prepare).toHaveBeenCalledTimes(1)
+ click('读取本地会话记录'); await screen.findByRole('button', { name: `显式回放原 key ${saved.objectId}` })
+ port.prepare = vi.fn(async () => preparation())
+ click(`显式回放原 key ${saved.objectId}`); await screen.findByText('准备原 ACK 已保存；须另读当前资格。')
+ expect(port.prepare).toHaveBeenCalledExactlyOnceWith(...original)
+ refreshed.unmount()
+})
+
+test.each(['learner', 'independent', 'open_book', 'other_actor'] as const)('fresh %s cannot write or take over, while a valid reader can GET safe metadata', async mode => {
+ const port = bootstrapPort(), db = store()
+ const command = prepareCommand(workspace, actor)
+ await persistBootstrapCommand({ ...command, ack: preparation() } as typeof command, db)
+ port.session = vi.fn(async () => ({ ...session(), ...(mode === 'learner' ? { role: 'learner' as const } : mode === 'independent' ? { active_independent_attempt_id: 'attempt_test' } : mode === 'open_book' ? { active_open_book_attempt_id: 'attempt_test' } : { actor_session_id: 'session_other' }) }))
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await screen.findByRole('button', { name: '读取准备当前状态 preparation_test' })
+ click('读取准备当前状态 preparation_test'); await screen.findByText('冻结范围：仅本地控制建会话')
+ expect((screen.getByRole('button', { name: '仅批准这一次本地建会话' }) as HTMLButtonElement).disabled).toBe(true)
+ expect(port.decide).not.toHaveBeenCalled(); expect(port.create).not.toHaveBeenCalled()
+})
+
+test('new actor cannot replay an original unknown command after refresh', async () => {
+ const port = bootstrapPort(), db = store(), command = prepareCommand(workspace, actor)
+ await persistBootstrapCommand(command, db)
+ port.session = vi.fn(async () => ({ ...session(), actor_session_id: 'session_other' }))
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await screen.findByText('其他原会话的命令仅只读保留，当前 actor 不能接管。')
+ const button = screen.getByRole('button', { name: `显式回放原 key ${command.command_id}` }) as HTMLButtonElement
+ expect(button.disabled).toBe(true); fireEvent.click(button); expect(port.prepare).not.toHaveBeenCalled()
+ expect(Object.values(await db.load(workspace))[0].text).toContain(actor)
+})
+
+test('fresh session is checked again after durable command save and immediately before POST', async () => {
+ const port = bootstrapPort(), db = store()
+ port.session = vi.fn().mockResolvedValueOnce(session()).mockResolvedValueOnce(session()).mockResolvedValue({ ...session(), role: 'learner' })
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await screen.findByText(/当前会话无权继续/)
+ expect(port.prepare).not.toHaveBeenCalled(); expect(Object.values(await db.load(workspace))).toHaveLength(1)
+})
+
+test.each(['permission', 'workspace', 'port'] as const)('late ACK after %s change stays in original actor memory, recovery saves only ACK', async mode => {
+ const port = bootstrapPort(), db = store(), pending = deferred<ReturnType<typeof preparation>>()
+ port.prepare = vi.fn(() => pending.promise)
+ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+ view.rerender(<CodexBootstrapPanel workspace={mode === 'workspace' ? 'workspace_other' : workspace} writeAdmitted={mode !== 'permission'} port={mode === 'port' ? bootstrapPort() : port} store={db} />)
+ await act(async () => pending.resolve(preparation()))
+ expect(screen.queryByText('准备原 ACK 已保存；须另读当前资格。')).toBeNull()
+ expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
+ view.rerender(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await screen.findByRole('button', { name: '仅保存原会话已收到的事实' })
+ click('仅保存原会话已收到的事实'); await screen.findByText('仅保存已收到的原事实；未发送任何写请求。')
+ expect(port.prepare).toHaveBeenCalledOnce()
+ expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toEqual(preparation())
+})
+
+test('lost create ACK discovers consumed/closed unknown via preparation then session GET; new prepare retains unknown', async () => {
+ const port = bootstrapPort(), db = store(), basis = preparation('approved'), command = createCommand(workspace, actor, basis)
+ await persistBootstrapCommand(command, db)
+ port.preparation = vi.fn(async () => preparation('consumed')); port.read = vi.fn(async () => codexSession('unknown'))
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await screen.findByRole('button', { name: '读取准备当前状态 preparation_test' })
+ click('读取准备当前状态 preparation_test'); await screen.findByText('旧实例结果未知。不会自动再启动；如需另试，须另建准备并重新批准。')
+ expect(port.read).toHaveBeenCalledExactlyOnceWith('codex_session_test'); expect(port.create).not.toHaveBeenCalled()
+ expect(screen.getByText(/已消费许可，绑定 session/)).toBeTruthy()
+ click('准备本地控制会话'); await screen.findByText('准备原 ACK 已保存；须另读当前资格。')
+ expect(screen.getByText(/旧实例结果未知/)).toBeTruthy(); expect(port.create).not.toHaveBeenCalled()
+})
+
+test('unavailable pending scope permits explicit decline but never approval or creation', async () => {
+ const port = bootstrapPort(), db = store(), command = prepareCommand(workspace, actor)
+ await persistBootstrapCommand({ ...command, ack: preparation() } as typeof command, db)
+ port.preparation = vi.fn(async () => ({ ...preparation(), validity: 'unavailable' }))
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await screen.findByRole('button', { name: '读取准备当前状态 preparation_test' }); click('读取准备当前状态 preparation_test')
+ await screen.findByRole('button', { name: '拒绝这次本地建会话' })
+ expect((screen.getByRole('button', { name: '仅批准这一次本地建会话' }) as HTMLButtonElement).disabled).toBe(true)
+ click('拒绝这次本地建会话'); await screen.findByText('决定原 ACK 已保存；须另读当前资格。')
+ expect(port.decide).toHaveBeenCalledWith('preparation_test', { expected_revision: 1, decision: 'decline', operation_sha256: 'b'.repeat(64) }, expect.any(String))
+ expect(port.create).not.toHaveBeenCalled()
+})
+
+test('storage failure after a strict ACK retains it; explicit memory recovery sends zero extra POST', async () => {
+ const port = bootstrapPort(), db = store(), realSave = db.save.bind(db), state = vi.fn()
+ vi.spyOn(db, 'save').mockImplementationOnce(realSave).mockRejectedValueOnce(new Error('synthetic IDB commit failure'))
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} onState={state} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await screen.findByRole('button', { name: '仅保存原会话已收到的事实' })
+ await waitFor(() => expect(state).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true }))
+ expect(port.prepare).toHaveBeenCalledOnce(); expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
+ vi.mocked(db.save).mockImplementation(realSave)
+ click('仅保存原会话已收到的事实'); await screen.findByText('仅保存已收到的原事实；未发送任何写请求。')
+ expect(port.prepare).toHaveBeenCalledOnce(); expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toEqual(preparation())
+ await waitFor(() => expect(state).toHaveBeenLastCalledWith({ dirty: false, safe: true, isolated: false }))
+})
+
+test('in-flight access mutation invalidates callbacks, with received ACK retained under original actor only', async () => {
+ const port = bootstrapPort(), db = store(), pending = deferred<ReturnType<typeof preparation>>()
+ port.prepare = vi.fn(() => pending.promise)
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...session(), role: 'learner' }), { status: 200 })))
+ await act(async () => { await request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic-role-key' }) })
+ await act(async () => pending.resolve(preparation()))
+ expect(screen.queryByText(/准备原 ACK 已保存/)).toBeNull(); expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
+ port.session = vi.fn(async () => ({ ...session(), actor_session_id: 'session_other', role: 'learner', active_independent_attempt_id: 'attempt_current_reader' }))
+ click('读取本地会话记录'); await screen.findByText(/其他原会话的命令仅只读保留/)
+ expect(heldBootstrapCommands(workspace, actor)[0].ack).toEqual(preparation())
+ click('仅保存原会话已收到的事实'); await screen.findByText('仅保存已收到的原事实；未发送任何写请求。')
+ const original = JSON.parse(Object.values(await db.load(workspace))[0].text)
+ expect(original.actor_session_id).toBe(actor); expect(original.ack).toEqual(preparation())
+ expect((screen.getByRole('button', { name: `显式回放原 key ${original.command_id}` }) as HTMLButtonElement).disabled).toBe(true)
+ expect(port.prepare).toHaveBeenCalledOnce(); expect(port.decide).not.toHaveBeenCalled(); expect(port.create).not.toHaveBeenCalled()
+})
+
+test('unmount retains a late ACK without GET or POST and same actor can persist it on remount', async () => {
+ const port = bootstrapPort(), db = store(), pending = deferred<ReturnType<typeof preparation>>()
+ port.prepare = vi.fn(() => pending.promise)
+ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+ const count = vi.mocked(port.session).mock.calls.length
+ view.unmount(); await act(async () => pending.resolve(preparation()))
+ expect(port.session).toHaveBeenCalledTimes(count); expect(heldBootstrapCommands(workspace, actor)[0].ack).toEqual(preparation())
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await screen.findByRole('button', { name: '仅保存原会话已收到的事实' })
+ click('仅保存原会话已收到的事实'); await screen.findByText(/仅保存已收到的原事实/); expect(port.prepare).toHaveBeenCalledOnce()
+})
+
+test('malformed late ACK cannot be retained or shown and original unknown command remains replayable', async () => {
+ const port = bootstrapPort(), db = store(), pending = deferred<ReturnType<typeof preparation>>()
+ port.prepare = vi.fn(() => pending.promise)
+ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+ view.rerender(<CodexBootstrapPanel workspace={workspace} writeAdmitted={false} port={port} store={db} />)
+ await act(async () => pending.resolve({ ...preparation(), actor_session_id: 'session_other' }))
+ expect(heldBootstrapCommands(workspace, actor)).toEqual([])
+ expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
+ expect(screen.queryByText('session_other')).toBeNull()
+})
+
+test.each([401, 403, 409, 412, 503])('safe HTTP %s error never leaks raw detail or allocates a second command', async status => {
+ const port = bootstrapPort(), db = store(); port.prepare = vi.fn(async () => { throw new ApiError(status, 'PRIVATE_RAW_SERVER_DETAIL', status === 503 ? 'CODEX_SESSION_OUTCOME_UNKNOWN' : 'SYNTHETIC_REJECTION') })
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await waitFor(() => expect(screen.queryByText('正在处理；不自动重发命令。')).toBeNull())
+ expect(port.prepare).toHaveBeenCalledOnce(); expect(Object.values(await db.load(workspace))).toHaveLength(1)
+ expect(screen.queryByText(/PRIVATE_RAW_SERVER_DETAIL/)).toBeNull(); expect(JSON.stringify(await db.load(workspace))).not.toContain('PRIVATE_RAW_SERVER_DETAIL')
+})
+
+test('a late local record read cannot publish original workspace commands into a new workspace', async () => {
+ const port = bootstrapPort(), other = bootstrapPort(), db = store(), realLoad = db.load.bind(db)
+ const pending = deferred<Awaited<ReturnType<typeof db.load>>>()
+ let originalReads = 0
+ vi.spyOn(db, 'load').mockImplementation(async selected => selected === workspace && ++originalReads === 3 ? pending.promise : realLoad(selected))
+ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await waitFor(() => expect(originalReads).toBe(3))
+ const original = await realLoad(workspace), id = Object.keys(original)[0]
+ other.session = vi.fn(async () => ({ ...session(), workspace_id: 'workspace_other' }))
+ view.rerender(<CodexBootstrapPanel workspace="workspace_other" writeAdmitted port={other} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ await act(async () => pending.resolve(original))
+ expect(screen.queryByText(`核对原控制命令 ${id}`)).toBeNull()
+ expect(port.prepare).not.toHaveBeenCalled(); expect(other.prepare).not.toHaveBeenCalled()
+})
+
+test('expired original actor after received ACK may be replaced by a reader who only saves original ownership', async () => {
+ const port = bootstrapPort(), db = store()
+ port.session = vi.fn().mockResolvedValueOnce(session()).mockResolvedValueOnce(session()).mockResolvedValueOnce(session()).mockRejectedValueOnce(new ApiError(401, 'session expired'))
+ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
+ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
+ click('准备本地控制会话'); await screen.findByText(/当前会话无权继续/)
+ expect(heldBootstrapCommands(workspace, actor)[0].ack).toEqual(preparation())
+ const before = JSON.parse(Object.values(await db.load(workspace))[0].text)
+ port.session = vi.fn(async () => ({ ...session(), actor_session_id: 'session_replacement', role: 'learner', active_open_book_attempt_id: 'attempt_read_only' }))
+ click('读取本地会话记录'); await screen.findByRole('button', { name: '仅保存原会话已收到的事实' })
+ click('仅保存原会话已收到的事实'); await screen.findByText('仅保存已收到的原事实；未发送任何写请求。')
+ const after = JSON.parse(Object.values(await db.load(workspace))[0].text)
+ expect({ ...after, ack: null }).toEqual(before); expect(after.actor_session_id).toBe(actor)
+ expect(port.prepare).toHaveBeenCalledOnce(); expect(port.decide).not.toHaveBeenCalled(); expect(port.create).not.toHaveBeenCalled()
+})

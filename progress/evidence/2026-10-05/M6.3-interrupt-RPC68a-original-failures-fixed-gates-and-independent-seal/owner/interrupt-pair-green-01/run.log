@@ -1,0 +1,52 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___ test_local_interrupt_reply_and_terminal_are_separate_exact_observations ____
+
+    def test_local_interrupt_reply_and_terminal_are_separate_exact_observations():
+        package = Path(__file__).parents[2] / 'services/api/app/infrastructure/codex_interrupt_protocol'
+        assert (package / 'source-summary.json').is_file(), 'Interrupt RPC/event originals are not packaged'
+    
+        from services.api.app.infrastructure.codex_interrupt_protocol import (
+            observe_interrupt, prepare_interrupt, read_interrupt_source,
+        )
+    
+        source = read_interrupt_source()
+        request = b'{"id":7,"method":"turn/interrupt","params":{"threadId":"thread-fixture","turnId":"turn-fixture"}}'
+>       exchange = prepare_interrupt(source, request)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_codex_interrupt_rpc_pairing.py:15: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = InterruptProtocolSource()
+raw_request = b'{"id":7,"method":"turn/interrupt","params":{"threadId":"thread-fixture","turnId":"turn-fixture"}}'
+
+    def prepare_interrupt(source: InterruptProtocolSource, raw_request: bytes) -> InterruptExchange:
+        """Check locally supplied request bytes, not an owned mapping or send grant."""
+        checked = verify_interrupt_source(source)
+        frame = _frame(raw_request)
+        body = strict_json(frame.raw)
+        wire = InterruptRequest.model_validate(body)
+        _validate_request(_schemas(checked), body)
+        return InterruptExchange(version='codex-local-interrupt-exchange-v1', scope='locally_supplied_frames_only',
+            implemented=False, production_qualification='unregistered', source_summary_sha256=checked.source_summary_sha256,
+>           request=CapturedInterruptRequest(frame=frame, wire=wire), observations=[])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 4 validation errors for CapturedInterruptRequest
+E       wire.params.threadId
+E         Field required [type=missing]
+E           For further information visit https://errors.pydantic.dev/2.13/v/missing
+E       wire.params.turnId
+E         Field required [type=missing]
+E           For further information visit https://errors.pydantic.dev/2.13/v/missing
+E       wire.params.thread_id
+E         Extra inputs are not permitted [type=extra_forbidden]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+E       wire.params.turn_id
+E         Extra inputs are not permitted [type=extra_forbidden]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+services/api/app/infrastructure/codex_interrupt_protocol.py:77: ValidationError
+=========================== short test summary info ============================
+FAILED tests/unit/test_codex_interrupt_rpc_pairing.py::test_local_interrupt_reply_and_terminal_are_separate_exact_observations
+1 failed in 0.20s

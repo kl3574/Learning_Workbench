@@ -1,0 +1,43 @@
+# M6.3 local interrupt RPC/event pairing — owner candidate
+
+Fixed HEAD `68a280b9cf251bbf79c2ca188ac8b4aefe7562e0`, base `27f549ff5a8fd67b0a601b67a5ba51ef35f6765f`. Sole PRODUCT_DESIGN v3.0.15 SHA `b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`. Twelve new paths: two private modules (277/141 lines), 502-line unit test, eight byte-exact schema originals and a nonsecret reviewed projection. All1,541 prior engineering inputs preserve mode/type/blob/size/SHA; final1,553. All prior progress Git entries also match. No canonical/remote changes. This is implementation-owner readback; root independent review is separate.
+
+## Implemented local behavior
+
+`read_interrupt_source/verify_interrupt_source` bind original selected9 plus eight additional historical nonexperimental originals (473,257 bytes/655 complete internalrefs). Full ClientRequest/ServerNotification closures contain the actual turn/interrupt and turn/completed method-to-params branches. Source-summary is a1,833-byte versioned manually checked historical source projection, SHA9bbb226ad6cf51c1d5fee39beb389ba37d5438d0722cd308c642bdc0fd0cf9c9. The original55,893-byte receipt, physical paths/argv, stays private and excluded. Runtime reads verify these selected bytes/summary, not the entire original receipt/current CLI or all314 historical files.
+
+`prepare_interrupt` checks a complete locally supplied id/method/params request. `observe_interrupt` preserves original raw request and bounded1..16,384-byte incoming raw frames, each with exact SHA. Integer IDs require actual int64 literals, bool/float/coercion rejected; string and integer IDs never compare equal by convenience. Empty result ACK pairs only to the original request ID. Terminal notification pairs exact thread and turn; known terminal status is kept separately from the ACK. Either order is admitted without inventing upstream timing guarantees. Received order is preserved. A count/hash binds the complete locally supplied observation membership so a deleted/reordered member is detected relative to that original in-memory head; it is not an authoritative persistent owner head.
+
+This finite decoder supports only empty items and absent/null error, the actual three terminal statuses and optional int64 timing/actual itemsView enum. Nonempty items, TurnError objects, inProgress, unknown/nested fields, methods, RPC errors, mismatched binding and duplicate observations are rejected. There is no trace/jsonrpc-version compatibility guessing. Optional missing facts are not fabricated real receipts; empty/notLoaded items never proves no persisted files or items. A rejected bounded frame returns a private safe-reason receipt and unchanged prior exchange. Empty/nonbytes/overbound inputs are not admitted as complete frames and are not truncated. Bad packaged source/state reads failclosed without repair.
+
+All models retain strictfalse/unregistered and scope locally_supplied_frames_only. An ACK proves only a local checked control reply; a terminal notification is only an observed upstream shape. Neither proves actual dispatch, owned live process, process/child shutdown, stable files, unique local Job terminal, charges or a usable manifest. Module has no SessionIdentity/owner SQL/Job/Run/Provider registration or send action. Main ProofRegistry empty and executorNone, HTTP/routes/54core/0001/bootstrap/v4/oldACK/oldcatalog/schema/dependency/CI bytes remain unchanged. §20.17.5/.7/.8/.9 authorizes this internal representation; no new normative or HTTP contract.
+
+## Original failures and precise qualification
+
+Initialce064 complete33-line test1FAIL at missing package; first723 implementation still1FAIL on typed nested aliases. ef048 uses typed wire-alias conversion and the same complete33-line test1PASS, raw JSON dict Python aliases stay forbidden. Original240 membership test assumed a field and was incorrectly placed in the first function:1F1P AttributeError, not proof that actual deletion was rejected. The author repaired the test without changing production; afcd whole48-line test then truly1F1P DID NOT RAISE after removing a member. e8fd same48-line test2P after complete count/hash binding.
+
+Expandedfec1 and797 each3F109P: two nonbytes inputs leaked TypeError; the third is an author oracle mistake, because a valid deep root array was already rejected as unsupported_shape. Increasing its depth did not establish a parser defect. 046 same complete407-line test fixes the two TypeErrors, but remains aggregate1F111P due that oracle. 589 changes the oracle to either supported safe classification and adds source/named-seam cases;118P. RecursionError parser handling is defensive, not established by those array cases. mypy589 original1 import-untyped diagnostic is preserved; precise existing-pattern ignore added, no package/config relaxation.
+
+Root review off81 found a different gap: parser-accepted bounded root object could overflow recursive typed-alias conversion before rejection. This is not closed by the root-array test. f134 new test-only keeps actual parsed reply/terminal object inputs bounded (<16,384 bytes), no globalrecursionlimit changes; actual2FAIL118PASS RecursionError leaked from decoder. Fixed68a changes only one production except line to include RecursionError. The same full502-line test now120PASS; exact raw offending bytes/hash and old ACK/membership remain preserved, all unknown fields still forbidden. f81 original7gates remain immutable historical qualified subsets with the depth finding OPEN there; no retrospective zero-finding statement. Root independent closure for68a is pending.
+
+Fixed68a actual seven gates (full1,553 Git before/after exact each):
+
+| gate | actual terminal | scope |
+|---|---|---|
+| decoder-depth-green-01 |120PASS, pytest3.91s/wrapper4.1076s | full new unit, same502-line red/green file |
+| related-fixed-final-01 |290 passed, 3 warnings in 98.22s (0:01:38) | six exact files: selected9catalog, v4 HTTP/SQLite preparation, Provider synthetic profile, CodexDTO, old interrupt boundaries and HTTP |
+| ruff-fixed-final-01 |exit/wrapper0 | ruff check . whole project invocation |
+| mypy-fixed-final-01 |exit/wrapper0 | configured noarg mypy,292 sourcefiles |
+| spec-fixed-final-01 |exit/wrapper0 | M0 structural checker only, not product acceptance |
+| generated-fixed-final-01 |exit/wrapper0 | checked82 artifacts, existing generated bytes unchanged |
+| diff-fixed-final-01 |exit/wrapper0 | base27f→HEAD diff --check |
+
+One explicit unit actually fences/asserts8named seams zero: process, bootstrap freeze/validity/execute, capabilityprobe, model-transport, FileSecretStore.read and SQLite.connect. It only qualifies that local source/read/pair/reject case; not a host monitor, all fixtures or related synthetic setup. Root-object recursion counters are also pure memory, no subprocess/secret/SQLite/bootstrap/model/network. UV frozenoffline local37 dependencies were installed as tooling setup, not a product or environment gate. No complete backend/Web/native/realCLI/model/tool run is borrowed.
+
+## Evidence and remaining gaps
+
+14 complete fixed Git source maps/21719 bindings/1547 distinct blobs; 27 actual stages/54 original before/after maps/83840 bindings. All original command/runner/receipt/log size/SHA/Git inputs checked. Four exact whole-test pairs are explicit; the frame-type pair closes only the two real defects while the old aggregate remains FAIL. Initial inventory KeyError was author receipt-path indexing error, only tool stdout recorded, no fake original file.
+
+Safe sharing admits only exact listed text candidates plus two outermetadata. Transformations are identity or literal~→~ prefix only, with both raw/candidate size/SHA. All ordinary original logs are preserved; the292,734-byte recursion trace has5,879 lines/53 distinct lines, all distinct content reviewed plus full-byte bounded scan, only repeated static source frames omitted from review display, not from the admitted original. No DB/profile/runtime/secret/private original receipt admission. Owner sealing is not independent review.
+
+Complete ThreadItem/TurnError/RPC-error/callback/approval decoding, live owner/transport mapping, initialization/resume, framing/timing, full hidden-request InputProof and real runtime/resource qualification remain unimplemented or NOT_RUN. This offline slice is not a production turn profile. Current environment capability is NOT_EXAMINED; no aborted historical host probe implies any ENV conclusion. Production stays unavailable, wholeM6.3 NOT_ACCEPTED. Root must independently review the fixed source/evidence before any normal integration; owner did not merge/push.

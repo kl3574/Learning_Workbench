@@ -1,0 +1,61 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/authoring/LocalTaskDocument.test.tsx
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m63-local-task-document-oct04/apps/web
+
+ ❯ src/features/authoring/LocalTaskDocument.test.tsx (18 tests | 2 failed) 547ms
+   × the document and its explanation state only non-execution with unknown Broker status 31ms
+   × the document and its explanation state only non-execution with authorized Broker status 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/authoring/LocalTaskDocument.test.tsx > the document and its explanation state only non-execution with unknown Broker status
+ FAIL  src/features/authoring/LocalTaskDocument.test.tsx > the document and its explanation state only non-execution with authorized Broker status
+AssertionError: expected '# 离线创作需求说明\n\n未连接 Codex。本文件仅包含作者当前输入的…' not to contain '未连接 Codex'
+
+- Expected
++ Received
+
+- 未连接 Codex
++ # 离线创作需求说明
++
++ 未连接 Codex。本文件仅包含作者当前输入的四项需求，不含已选材料或其他任务设置；没有创建服务器任务、授权或生成结果。
++
++ ## 主题
++
++ 合成主题 α
++ 第二行
++
++ ## 已声明先修
++
++ 线性代数
++   保留空格
++
++ ## 学习目标
++
++ 写出完整证明
++ 核对边界
++
++ ## 证明策略
++
++ full（完整证明）
++
+
+ ❯ src/features/authoring/LocalTaskDocument.test.tsx:117:20
+    115|   fireEvent.click(button); await waitFor(() => expect(createURL).toHav…
+    116|   const text = await readBlob(createURL.mock.calls[0][0])
+    117|   expect(text).not.toContain('未连接 Codex')
+       |                    ^
+    118|   expect(text).toContain('本次下载未调用 Codex。')
+    119|   expect(screen.queryByText(/^未连接 Codex：仅下载/)).toBeNull()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 16 passed (18)
+   Start at  01:58:26
+   Duration  1.32s (tests 44%, transform 31%, environment 16%, import 10%)
+

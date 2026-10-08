@@ -1,0 +1,238 @@
+{
+  "schema": "learning-workbench.m63-dependency-security.v1",
+  "created_utc": "2026-10-07T14:40:56.066477+00:00",
+  "task_id": "M6.3 auxiliary dependency security repair",
+  "requirement_basis": [
+    "PRODUCT_DESIGN v3.0.15 §§17,18,19",
+    "§18.3 safety/data-loss priority and one main active task",
+    "M0.1 lock/engine compatibility engineering prerequisite"
+  ],
+  "spec_sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec",
+  "source": {
+    "frozen_utc": "2026-10-07T14:36:46.659013+00:00",
+    "implementation_commit": "2323558615803830049a02ddfade49450d3fd77e",
+    "parent": "079a008cf88b37e4517cb391503a1e7393ccf374",
+    "changed_paths": [
+      "apps/web/package-lock.json"
+    ],
+    "all_other_23174_git_entries_identical_mode_type_blob": true,
+    "all_old_progress_identical_mode_type_blob": true,
+    "source_tracked_clean": true,
+    "canonical_remote_and_existing_trees": "NOT_MUTATED",
+    "publication": "NOT_PUSHED",
+    "merge": "PENDING_ROOT_SOURCE_INDEPENDENT_REVIEW",
+    "package_json_sha256": "e85da5d6def7c75073f1642d895af8ebec4bec54d11db9122adca9b452372aaa",
+    "package_lock_sha256": "ae43fcb0a0a0eaf2a1981eb5c1c5523d530c80980f15e50fa10380190d05f23d"
+  },
+  "status": "READY_FOR_ROOT_SOURCE_INDEPENDENT_REVIEW_WITH_RESIDUAL_LOW_GAP",
+  "changed_contracts": "NONE",
+  "migrations": "NONE",
+  "product_semantics": "UNCHANGED",
+  "ci_test_budgets": "UNCHANGED",
+  "original_audit": {
+    "receipt": "06-original-audit-receipt.json",
+    "exit_code": 1,
+    "counts": {
+      "info": 0,
+      "low": 3,
+      "moderate": 0,
+      "high": 1,
+      "critical": 0,
+      "total": 4
+    },
+    "status": "ORIGINAL_AUDIT_FINDINGS_NOT_CLEAN",
+    "lock_sha256_before": "283f10246c2c8a9483257135e4552ec6523eb929caf61d69e73c56a74ec8b672",
+    "original_lock_after_same": true
+  },
+  "lock_update": {
+    "status": "PASS_SINGLE_LOCKED_PACKAGE_PATCH_ONLY",
+    "package_json_unchanged": true,
+    "changed_package_entries": [
+      "node_modules/source-map-js"
+    ],
+    "old_entry": {
+      "version": "1.2.1",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
+      "dev": true,
+      "license": "BSD-3-Clause",
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "new_entry": {
+      "version": "1.2.2",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+      "integrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==",
+      "dev": true,
+      "license": "BSD-3-Clause",
+      "engines": {
+        "node": ">=0.10.0"
+      }
+    },
+    "original_lock_sha256": "283f10246c2c8a9483257135e4552ec6523eb929caf61d69e73c56a74ec8b672",
+    "patched_lock_sha256": "ae43fcb0a0a0eaf2a1981eb5c1c5523d530c80980f15e50fa10380190d05f23d",
+    "compatible_parent_constraints": [
+      "postcss ^1.2.1",
+      "css-tree ^1.2.1"
+    ]
+  },
+  "post_patch_audit": {
+    "receipt": "16-patched-audit-receipt.json",
+    "exit_code": 1,
+    "counts": {
+      "info": 0,
+      "low": 3,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 3
+    },
+    "status": "NOT_CLEAN; HIGH_ADVISORY_REMOVED; LOW_CHAIN_REMAINS"
+  },
+  "security_applicability": {
+    "high": {
+      "package": "source-map-js",
+      "original_version": "1.2.1",
+      "patched_version": "1.2.2",
+      "ghsa": "GHSA-68fv-2mgg-jv7q",
+      "dev_only_in_lock": true,
+      "parents": {
+        "postcss": "^1.2.1",
+        "css-tree": "^1.2.1"
+      },
+      "actual_attack_path": "NOT_ESTABLISHED_FROM_AUDIT_SUMMARY_OR_THIS_BOUND_READBACK",
+      "action": "COMPATIBLE_LOCK_PATCH_APPLIED"
+    },
+    "low": {
+      "affected_package_entries": [
+        "katex",
+        "micromark-extension-math",
+        "remark-math"
+      ],
+      "distinct_upstream_advisory_count": 1,
+      "ghsa": "GHSA-238p-pmpm-9mq7",
+      "locked_katex": "0.16.47",
+      "fixed_katex": "0.18.2",
+      "current_parent_range": "^0.16.0",
+      "current_latest_parent": "micromark-extension-math 3.1.0",
+      "production_dependency_presence": true,
+      "project_integration_observation": "remark-math syntax/AST integration and custom MathJax SVG; no identified KaTeX HTML rendering call in inspected path",
+      "exploitability_claim": "NOT_ESTABLISHED; prerequisites and renderer call path must be independently assessed",
+      "status": "GAP_NO_COMPATIBLE_PATCH_ON_CURRENT_MATH_CHAIN"
+    }
+  },
+  "actual_validation": {
+    "npm_ci": {
+      "exit_code": 0,
+      "receipt": "17-patched-npm-ci-receipt.json",
+      "qualification": "locked install with lifecycle scripts disabled in fresh environment; package lock unchanged"
+    },
+    "lint": {
+      "exit_code": 0,
+      "receipt": "18-frontend-lint-receipt.json"
+    },
+    "typecheck": {
+      "exit_code": 0,
+      "receipt": "19-frontend-typecheck-receipt.json"
+    },
+    "full_vitest": {
+      "exit_code": 0,
+      "test_files_passed": 167,
+      "tests_passed": 1421,
+      "receipt": "20-frontend-vitest-full-receipt.json"
+    },
+    "build": {
+      "exit_code": 0,
+      "modules_transformed": 879,
+      "actual_footer": "built in 455ms",
+      "warnings": [
+        "Some chunks exceed 500 kB after minification"
+      ],
+      "receipt": "22-frontend-build-receipt.json"
+    },
+    "native_initial_selection": {
+      "exit_code": 1,
+      "executed_tests": 0,
+      "actual_result": "No tests found",
+      "receipt": "24-native-reader-math-receipt.json",
+      "diagnosis": "anchored test selection; not product failure proof"
+    },
+    "native_corrected": {
+      "exit_code": 0,
+      "tests_passed": 1,
+      "test_name": "real imported directory, title search, worked-example link, long formula and frozen original download",
+      "receipt": "26-native-reader-math-selected-receipt.json",
+      "new_owned_dirs": true,
+      "source_budget_unchanged": true
+    },
+    "scanner": {
+      "exit_code": 0,
+      "result": "PASS: scanned 23175 staged/tracked files against path and credential rules. Manual provenance review remains required.",
+      "scanned_file_count": 23175,
+      "manual_provenance_review": "REMAINS_REQUIRED",
+      "receipt": "34-source-publication-scanner-receipt.json"
+    }
+  },
+  "maps": {
+    "tracked_before": "13-TRACKED-BEFORE-MAP.json",
+    "tracked_after": "27-TRACKED-AFTER-MAP.json",
+    "base_git_mode_type_blob": "28-BASE-GIT-META-MAP.json",
+    "frozen_git_mode_type_blob": "35-FROZEN-GIT-META-MAP.json",
+    "checked_tracked_files": 23175,
+    "only_changed_tracked_live_file": "apps/web/package-lock.json",
+    "all_other_23174_git_mode_type_blob_equal": true,
+    "all_old_progress_equal": true,
+    "scope_note": "new auxiliary source maps only; does not convert earlier CI working maps from NOT_CAPTURED",
+    "post_scanner_tracked_live": "38-POSTSCANNER-LIVE-MAP.json",
+    "postfreeze_source_stability": "PASS_ALL_23175_LIVE_HASHES_MATCH"
+  },
+  "sources": [
+    {
+      "url": "https://github.com/advisories/GHSA-68fv-2mgg-jv7q",
+      "support": "official reviewed affected range >=1.0.0 <1.2.2 and patched 1.2.2",
+      "captured_raw": "08-source-map-ghsa.stdout"
+    },
+    {
+      "url": "https://github.com/7rulnik/source-map-js/releases/tag/v1.2.2",
+      "support": "upstream release identifies indexed source-map DoS fix",
+      "capture": "browsed 2026-10-07"
+    },
+    {
+      "url": "https://github.com/KaTeX/KaTeX/security/advisories/GHSA-238p-pmpm-9mq7",
+      "support": "upstream prerequisites and fixed 0.18.2",
+      "captured_raw": "09-katex-ghsa.stdout"
+    },
+    {
+      "url": "https://registry.npmjs.org/source-map-js/1.2.2",
+      "support": "public official package version, tarball and integrity metadata",
+      "captured_raw": "10-source-map-patch-metadata.stdout"
+    },
+    {
+      "url": "https://registry.npmjs.org/micromark-extension-math/latest",
+      "support": "currently 3.1.0 still requires katex ^0.16.0",
+      "captured_raw": "11-math-extension-latest-metadata.stdout"
+    }
+  ],
+  "private_evidence_policy": {
+    "raw_original_commands_receipts_stdout_stderr": "RETAIN_PRIVATE",
+    "allowlist": "REVIEW-ALLOWLIST.json",
+    "excluded_from_allowlist": [
+      "owned npm/browser cache contents",
+      "owned browser profiles",
+      "owned synthetic runtime DB/data",
+      "TMPDIR contents"
+    ],
+    "uploaded": false,
+    "canonical_copy": false
+  },
+  "not_run": [
+    "full original browser suite on patched source",
+    "complete Python suite on patched source (no Python source changed)",
+    "new remote CI",
+    "real provider/Codex/model",
+    "production learning-effectiveness acceptance"
+  ],
+  "whole_M6_3_model_CI_acceptance": "NOT_ACCEPTED",
+  "next_dependency": "root source-independent review of frozen one-file patch and finite private evidence; normal integration only after review and current original CI policy"
+}

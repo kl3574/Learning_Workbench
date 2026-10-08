@@ -1,0 +1,9 @@
+# Withdrawal of the 5c static newline finding
+
+Status: FALSE_POSITIVE / WITHDRAWN. The earlier Spec P2 in the fixed 5c static review was based on an incorrect statement about JavaScript end-anchor behavior without the multiline flag. That static claim is withdrawn. No production correction occurred and none is required for this claimed counterexample.
+
+Fixed `97f8ca60a202973751b1fc2ac6344dbfab43cc48` differs from `5c845a0bb259fe0ccb36c08f62d6999e58f10a37` only by 21 added test lines. Both turnClient.ts and providerSchema.ts are byte-identical, including their original regular expressions. The added tests explicitly require rejection of trailing-newline UTC, actor/Job/ref IDs, preparation and nested SHA fields, and a route ID with zero GETs. All ten new cases passed with unchanged production, yielding 41 focused tests. The directory named pattern-red was provisional; its actual exit is zero and it is not RED evidence.
+
+The separately recorded pinned Node v24.21.0 primitive check reports false for ID, UTC and SHA trailing-newline matches, with all three regex flags empty. Its exact stdout hash matches the counterevidence receipt. This directly contradicts this peer's original static reasoning. The original OPEN report, locator errata and all test setup/fixture failures remain unchanged, with this separate withdrawal superseding that finding.
+
+Independent readback verified all 1407 nonprogress before/after entries against the fixed Git tree, unchanged production blobs, focused log/receipt, primitive log/receipt, complete Web 1109 PASS, strict and build exit-zero log hashes. Those tests were executed by root, not rerun by this peer. No product, CLI, model, browser, DB or system probe was executed during this readback. This removes the only confirmed finding from the original helper review; it does not attest page integration or whole M6.3 completion.

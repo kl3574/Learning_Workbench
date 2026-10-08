@@ -1,0 +1,24 @@
+176: 2026-10-04T18:56:26.1380461Z [command]/usr/bin/git log -1 --format=%H
+177: 2026-10-04T18:56:26.1407388Z 35aebd3039241abb3393300affd593f4826a4a0c
+604: 2026-10-04T18:57:04.2353255Z ##[group]Run make build
+636: 2026-10-04T18:57:07.4862754Z ##[group]Run make test-e2e
+775: 2026-10-04T19:29:05.7993531Z   ✘   97 ../../tests/e2e/review.spec.ts:36:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload (30.7s)
+776: 2026-10-04T19:29:31.6190945Z   ✓   98 ../../tests/e2e/review.spec.ts:77:1 › a delayed old review response cannot restore history or academic context after another page starts a real independent attempt (25.3s)
+814: 2026-10-04T19:35:30.0450526Z   1) ../../tests/e2e/review.spec.ts:36:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload 
+815: 2026-10-04T19:35:30.0451642Z 
+816: 2026-10-04T19:35:30.0451821Z     Test timeout of 30000ms exceeded.
+817: 2026-10-04T19:35:30.0452027Z 
+818: 2026-10-04T19:35:30.0452580Z     Error: page.setViewportSize: Target page, context or browser has been closed
+819: 2026-10-04T19:35:30.0453158Z 
+820: 2026-10-04T19:35:30.0453620Z       66 |   await expect(page.locator(`#block-${fixture.block.id}-r${fixture.block.revision}`)).toBeVisible()
+821: 2026-10-04T19:35:30.0457536Z       67 |   const reviewTab = page.getByRole('tab', { name: /测试复盘/ }); await reviewTab.click(); await expect(history.getByLabel('选择评分版本')).toHaveValue('1')
+822: 2026-10-04T19:35:30.0460905Z     > 68 |   await page.setViewportSize({ width: 390, height: 844 }); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1); await page.screenshot({ path: info.outputPath('review-history-after-390.png') })
+823: 2026-10-04T19:35:30.0463472Z          |              ^
+824: 2026-10-04T19:35:30.0467810Z       69 |   await page.getByRole('button', { name: '切换 Agent 栏', exact: true }).click(); const drawer = page.getByRole('dialog', { name: 'Agent 助教', exact: true }); await expect(drawer).toContainText('当前测试复盘上下文'); await expect(drawer).toContainText('评分版本 1：待复核'); await expect(drawer).toContainText('此版本没有当前获准的反馈正文'); await expect(drawer.getByRole('button', { name: '创建本次问答任务 ↑' })).toBeDisabled(); await drawer.getByRole('button', { name: '关闭Agent 助教', exact: true }).click()
+825: 2026-10-04T19:35:30.0471693Z       70 |   const evidence: PageEvidence = await page.request.get('/api/v1/learning/evidence?limit=100').then(response => response.json())
+826: 2026-10-04T19:35:30.0473222Z       71 |   const latestIds = final.history[1].items.flatMap(item => item.evidence_ids)
+827: 2026-10-04T19:35:30.0474507Z         at $RUNNER_HOME/work/Learning_Workbench/Learning_Workbench/tests/e2e/review.spec.ts:68:14
+828: 2026-10-04T19:35:30.0476058Z 
+835: 2026-10-04T19:35:30.0483211Z   1 failed
+837: 2026-10-04T19:35:30.0486718Z   132 passed (38.4m)
+839: 2026-10-04T19:35:30.0788747Z ##[error]Process completed with exit code 2.

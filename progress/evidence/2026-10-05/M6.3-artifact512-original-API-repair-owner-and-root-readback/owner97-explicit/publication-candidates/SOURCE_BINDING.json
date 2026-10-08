@@ -1,0 +1,81 @@
+{
+  "base": "9a2c8d032977411ce94724fd3be33403694c46e1",
+  "head": "51205a75c401911d98d54a42387fbaa43583da7f",
+  "source_files": [
+    {
+      "path": "migrations/0035_codex_import_immutable.sql",
+      "sha256": "4e7090d2463d396d58387ba3fffc9e29b2f724c0dcc305efa31fcf8ac79c7af9",
+      "git_blob": "4ca4f98734c30c1c2218babaa58d7f59649ae2c2"
+    },
+    {
+      "path": "services/api/app/application/artifacts.py",
+      "sha256": "85bdfefea3da898a603c80fe9a09ccfa97fc7ebb770036a3cdb2c9b2959b3b66",
+      "git_blob": "7fba0660ae74804d7eb0d4cf634018752cdf6891"
+    },
+    {
+      "path": "services/api/app/application/codex_artifacts.py",
+      "sha256": "b36a3210bbb63f40b851e238d23dadb8137427de219bb1852c520b60b7ed2e59",
+      "git_blob": "846e305f4a326e1f83478b3821a0ab211846282b"
+    },
+    {
+      "path": "services/api/app/main.py",
+      "sha256": "2aa687bbefc66aa7b6e917cd8c2c04fd5af950039044b8405601c290120f60ca",
+      "git_blob": "7b97e55482db2aa3157194ee6b4e59db6f56c8c2"
+    },
+    {
+      "path": "tests/integration/test_codex_artifact_repair_boundaries.py",
+      "sha256": "685421fc6d9e116f57c0da869cf42a7c6a2ec7a30c4f5712ac25f67948b79ec1",
+      "git_blob": "cb7161fbaa52baef91137dd5fdfa219e363a63ac"
+    },
+    {
+      "path": "tests/integration/test_codex_import_owner.py",
+      "sha256": "d02e86a7f2405c1f31a7b377fe0ff8fdcbd3aad1b124c900af48ff218e9d9596",
+      "git_blob": "60a23db9eada38061a259d03ab5df9175eb05069"
+    }
+  ],
+  "patch_sha256": "0861aec7ecb4b6477bdffe9922e422c03aa645dce6a7e8bfa01809149f04b0f5",
+  "red_function_comparison": [
+    {
+      "original_run": "migration-red-01",
+      "name": "test_original_import_source_rows_reject_normal_mutation_and_preserve_full_http_readback",
+      "body_source_exact_final": true
+    },
+    {
+      "original_run": "delivery-red-01",
+      "name": "test_original_import_source_rows_reject_normal_mutation_and_preserve_full_http_readback",
+      "body_source_exact_final": true
+    },
+    {
+      "original_run": "delivery-red-01",
+      "name": "pause_after_download_transaction",
+      "body_source_exact_final": true
+    },
+    {
+      "original_run": "delivery-red-01",
+      "name": "test_download_rechecks_actor_after_original_transaction_has_closed",
+      "body_source_exact_final": false
+    },
+    {
+      "original_run": "delivery-red-02",
+      "name": "test_original_import_source_rows_reject_normal_mutation_and_preserve_full_http_readback",
+      "body_source_exact_final": true
+    },
+    {
+      "original_run": "delivery-red-02",
+      "name": "pause_after_download_transaction",
+      "body_source_exact_final": true
+    },
+    {
+      "original_run": "delivery-red-02",
+      "name": "test_download_rechecks_actor_after_original_transaction_has_closed",
+      "body_source_exact_final": true
+    },
+    {
+      "original_run": "delivery-red-02",
+      "name": "test_download_rechecks_real_policy_started_after_original_transaction",
+      "body_source_exact_final": true
+    }
+  ],
+  "unchanged_old_migrations": true,
+  "note": "delivery-red-01 had an unreachable ROLE_REQUIRED expectation corrected to actual POLICY_DENIED in red-02 before production repair. Both original red-01 cases failed at status 200 vs expected 403/401; red-02 functions are exact final. New coverage added after the four cases first turned GREEN."
+}

@@ -1,0 +1,9 @@
+# Numeric 690 publication transform errata
+
+The earlier 24-candidate package description was insufficiently precise. Exactly one candidate, SAFE_SHARE/SEAL.py, applies two textual substitutions to its original bytes: the local home prefix to `$HOME`, and the runner home prefix to `$RUNNER_HOME`. The second substitution occurs in the sealer's own source literal. It does not equal the raw source with only the first substitution, as root correctly detected. The independent first readback had explicitly checked both substitutions; its broad exact-prefix label did not establish the narrower one-prefix claim.
+
+The raw and candidate SHA/size still match their sealed descriptors. The original sealer line 31 contained chained local-home and runner-home replacements; its candidate line has alias-to-identical-alias replacements. No claim is made that the transformed source is semantically equivalent or suitable to rerun as the original sealer. Raw source is the authority for reproducing the historical publication step. Original report, manifests, candidate, readback and root's failed narrower assertion remain unchanged.
+
+QUALIFIED_ALLOWLIST.json explicitly permits the other 23 existing candidates and excludes SAFE_SHARE/SEAL.py. Every one of those 23 independently equals its raw bytes with only the local-home prefix substitution. All six actual numeric JSON files are byte-identical to their raw originals. Existing archive digest/size, upload/source binding, BLOCKED/409 results and zero ZIP persistence are unaffected. The original explicit outer metadata may accompany the qualified package with this errata; its old count of 24 is a historical record, not authorization to include the excluded candidate.
+
+This is an offline byte-level correction, not application execution. No sealed file was overwritten and no replacement artifact was fetched.

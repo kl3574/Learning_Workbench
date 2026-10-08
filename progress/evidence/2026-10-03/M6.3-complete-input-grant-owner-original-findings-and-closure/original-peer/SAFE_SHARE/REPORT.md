@@ -1,0 +1,22 @@
+# f36 grant independent static review
+
+Fixed `f36b650ebd1ebce413608d55b482d152a4c59132` compared with `6f3f8107991c9fd35460d1617597988a3c6aa09d`. Sole PRODUCT_DESIGN v3.0.15 SHA256 `b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`. One peer reviewed Standards and Spec separately; no application, CLI, model, DB, browser or system probe execution.
+
+## Standards
+
+No confirmed Standards blocker. The named Provider subregistry stays separate from ordinary text proofs. Source facts and cross-owner witness writes pass through explicit transaction ports. Generated HTTP registration matches the five declared preview/proposal/grant/consent/revoke operations. Versioned v2 records preserve v1 decoders. Unused future dispatch event types do not register start, execute a model or claim functionality.
+
+## Spec
+
+Two P2 issues are OPEN at this fixed source. One was already reported by owner/root, one was independently found here.
+
+1. **Grant expiry crossing is misclassified as damaged history (known).** `provider_codex_consents.py:228–236` validates current eligibility, then obtains a later durable event timestamp. If that second instant reaches proposal expiry, append/revalidation rolls the transaction back as history damage rather than normal expired consent. Spec L1637 requires expiry refusal, and L1826 separates intact original history from current eligibility. The subsequently supplied test-only 13654 record reproduces this boundary; this peer did not run it.
+2. **Non-object valid JSON escapes safe history classification (new static finding).** `codex_turn_repository.py:128–129` calls `.get()` on `strict_json(record_json)` before validating object shape. The JSON decoder in `canonical.py:44–57` accepts arrays/null/scalars; the repository's catch list at L84 omits AttributeError. An event row changed to `[]`, `null` or `1` therefore throws before hash/DTO rejection, yielding an unhandled 500 instead of `CODEX_HISTORY_DAMAGED` 409 on GET or original command replay. The DB JSON-validity constraint permits these JSON values. Spec L1684/L1832 requires rejecting the damaged owner projection without repair, with the safe error boundary in L1826. A local dict-shape check before version selection is sufficient; do not broadly suppress unrelated implementation errors. Owner subsequently reported three controlled HTTP failures on test-only 349c; those are not this peer's execution.
+
+The rest of the inspected slice has no additional confirmed blocker: current Session/Policy access precedes replay and is rechecked in a fresh delivery transaction; original actor alone can create/approve, while valid same-workspace learner/new actor can safely revoke. Original preview/grant ACKs remain immutable across derived expiry and registry withdrawal. Provider events, heads, command registrations and complete membership are independently witnessed in Codex history/Run projection within the same transaction, so deleting one full ledger family does not yield empty defaults. Same-key/body comparison, cross-target revoke check, CAS and single-proposal/grant constraints are explicit. Current source/proof/config/secret checks remain separate from historical ACK validation.
+
+The production Codex registry is empty and refuses missing complete-input proof. Positive profiles are explicitly synthetic in-memory protocol registrations, with complete request bytes and a synthetic byte-count language. They are not proofs for CLI0.160.0 or an actual model, and existing ordinary official_responses proof cannot implicitly become Codex permission. This source implements local permission records only; start/dispatch, approvals, artifacts, actual outbound execution and full M6.3 acceptance are not established. Context/history types reserve future completed-turn integration but this slice produces no completed model turns.
+
+Owner's f36 receipt/log were read: nine related files, 290 PASS, exit 0, receipt reports 1413 unchanged inputs. This peer did not rerun those tests or independently audit all 1413 execution-map entries. Test source for safe reads, actor/Policy, original ACK, expiry, corruption, atomic rollback, same-key concurrency and empty registry was inspected. Tests do not establish production model proof. The original f36 results remain valid only for their recorded scope; they do not close either issue.
+
+Status at f36: NOT_ACCEPTED. Standards 0 confirmed; Spec 2 P2 OPEN. Later fixes require separate source-bound closure and do not overwrite this record.

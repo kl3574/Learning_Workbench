@@ -1,0 +1,21 @@
+# 7820199b: narrow static closure of the two control-basis findings
+
+Fixed revision: `7820199bb7418a1de0b9a18913be135bdd76e2bf`; parent: `4e8d4f79f7090af997b48926a0a9050fe2170b7d`. Live HEAD and clean worktree verified. The only changed file is `docs/proposals/m63-controlled-turn-approvals-artifacts.md` (42 added, 8 removed lines); final SHA256 `79bcb378cbd756651f44098648c045e0e0c711e6f2c7b32295d1bc02903e0611`. The review is against the original two P2 findings and sole v3.0.14 SHA256 `bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`; engineering baseline remains 4ecc. No product/DB/test/CLI/model/browser/system probe or external network was executed, and no proposal/canonical/spec/remote file was changed.
+
+## Standards
+
+No confirmed new documented-standard finding in this narrow document delta. Owner-based readback, permanent original history, old wire preservation and separate control versus academic access remain explicit. This is a single-reviewer static addendum, not additional runtime or independent implementation testing.
+
+## Spec and internal contract
+
+**P2-A CLOSED_STATIC.** Lines 178–182 add the closed approval control tuple containing actual ID, revision and operation SHA, with decision/validity. Lines 192 and 208 require approval_controls to match approval_ids uniquely, completely and in creation order, including closed members; fields come from the same turn's checked owner rather than the current reader. Lines 206/210 allow the existing safe list/detail GET to provide the exact basis to a fresh learner/independent/open-book page. Line 267 explicitly replaces the former ID-only claim. A lawful decline can now be constructed without guessing or reading the academic operation. Full GET /approvals/{id} remains author/academic, and the new tuple cannot confer approve/start authority.
+
+**P2-B CLOSED_STATIC.** Lines 183–185/193 add the closed consent ID/current revision/status control binding. Line 208 states null only before a consent is actually established; after establishment it survives consumption, revoke, expiry and turn termination. The binding must be the true consent for this turn/preparation/Job and cannot be substituted with bootstrap or another turn's consent. Active is explicitly not proof of unconsumed/executable authority. Lines 210–212 let a fresh same-workspace reader construct revoke with actual CAS while keeping the full consent summary author/academic only. Expired consent can be revoked, and already-revoked/current-basis handling remains the existing applied=false behavior.
+
+The shared rules in 208–212 require complete history and membership, reject damaged or missing facts rather than replacing them with empty/null defaults, preserve no-write GET/derived expiry, and preserve stale revision 412/hash-or-binding 409. They prohibit silently changing and resending an old command with a new basis. Already approved operations use interrupt/cancel rather than a second decision; original actor approval restrictions and decided-ACK attribution remain unchanged. The existing decision/admission/ACK transaction requirements elsewhere in the proposal are not relaxed by the read projection.
+
+The minimum acceptance matrix at line 386 now explicitly covers fresh learner/independent/open-book pages, safe GET-to-decline/revoke, continued refusal of academic details and approve/consume, changed CAS, bad hash/binding, wrong-order/missing members, retained consumed consent and damaged history. These are specified future tests, NOT tests run by this review.
+
+No HTTP route or academic-content permission is added by this correction. The adoption index points to mechanical normative integration; it does not implement the route owners. The original single-model-request limit and prohibition on automatic tool-result continuation at lines 29–43 are byte-unchanged. No broader execution authorization or real CLI feasibility is inferred.
+
+Result: the two original findings are CLOSED_STATIC for fixed 7820199b; no new confirmed finding within this delta. The original 4e8 OPEN receipt and all its hashes remain unchanged. Contract implementation, enforcement, model/tool operation and real runtime acceptance remain NOT_RUN by this review.

@@ -1,0 +1,1043 @@
+diff --git a/apps/web/src/features/authoring/AuthoringPanel.tsx b/apps/web/src/features/authoring/AuthoringPanel.tsx
+index 0cec1ffa..2ed12ae7 100644
+--- a/apps/web/src/features/authoring/AuthoringPanel.tsx
++++ b/apps/web/src/features/authoring/AuthoringPanel.tsx
+@@ -17,6 +17,7 @@ import type { BootstrapPort } from '../codex/bootstrapClient'
+ import type { DraftStore } from '../../workbench/DraftStore'
+ import { CodexBootstrapPanel, type BootstrapPanelState } from '../codex/CodexBootstrapPanel'
+ import { CodexTurnPanel, type TurnPanelState } from '../codex/CodexTurnPanel'
++import { CodexApprovalsPanel, type ApprovalPanelState } from '../codex/CodexApprovalsPanel'
+ import type { TurnPort } from '../codex/turnClient'
+ import { CodexArtifactsPanel, type ArtifactsPanelState } from '../codex/CodexArtifactsPanel'
+ import type { ArtifactPort } from '../codex/artifactClient'
+@@ -30,14 +31,15 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port
+   const [bootstrapState, setBootstrapState] = useState<BootstrapPanelState>({ dirty: false, safe: true, isolated: false })
+   const [turnState, setTurnState] = useState<TurnPanelState>({ dirty: false, safe: true, isolated: false }), [selectedCodexSession, setSelectedCodexSession] = useState<string | null>(null)
+   const [artifactState, setArtifactState] = useState<ArtifactsPanelState>({ dirty: false, safe: true, isolated: false })
++  const [approvalState, setApprovalState] = useState<ApprovalPanelState>({ dirty: false, safe: true, isolated: false })
+   const callback = useRef(onState); callback.current = onState
+   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
+   const heldReviewForms = pendingReviewForms(workspace, 'authoring')
+   const discardForms = useCallback(() => { reviewState.discardForms(); artifactState.discardForms?.(); discardReviewForms(workspace, 'authoring') }, [workspace, reviewState.discardForms, artifactState.discardForms])
+   useEffect(() => { if (!state.academic) { setFormDirty(false); setConsentState({ dirty: false, safe: true }) } }, [state.academic, workspace, access])
+   useEffect(() => { setSelectedCodexSession(null) }, [workspace, access, bootstrap, turn])
+-  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty || turnState.dirty || artifactState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe && turnState.safe && artifactState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated || turnState.isolated || artifactState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated) && (turnState.safe || turnState.isolated) && (artifactState.safe || artifactState.isolated)
+-  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated || turnState.isolated || artifactState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated, turnState.isolated, artifactState.isolated])
++  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty || turnState.dirty || artifactState.dirty || approvalState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe && turnState.safe && artifactState.safe && approvalState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated || turnState.isolated || artifactState.isolated || approvalState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated) && (turnState.safe || turnState.isolated) && (artifactState.safe || artifactState.isolated) && (approvalState.safe || approvalState.isolated)
++  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated || turnState.isolated || artifactState.isolated || approvalState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated, turnState.isolated, artifactState.isolated, approvalState.isolated])
+   const detail = state.detail, draft = state.draft, numeric = state.numeric
+   return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。</p>
+     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
+@@ -64,6 +66,7 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port
+     <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
+     <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} onSessionSelect={setSelectedCodexSession} />
+     <CodexTurnPanel port={turn} store={turnStore} formStore={turnFormStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} currentBlock={state.academic ? currentBlock : null} selectedSession={selectedCodexSession} onState={setTurnState} />
++    <CodexApprovalsPanel workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setApprovalState} />
+     <CodexArtifactsPanel workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} port={artifact} store={artifactStore} formStore={artifactFormStore} onState={setArtifactState} />
+     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
+     {reviewOpen && (draft && 'root' in draft
+diff --git a/apps/web/src/features/codex/CodexApprovalsPanel.test.tsx b/apps/web/src/features/codex/CodexApprovalsPanel.test.tsx
+new file mode 100644
+index 00000000..e6415eb3
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexApprovalsPanel.test.tsx
+@@ -0,0 +1,186 @@
++import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { ApiError } from '../../api/client'
++import { deferred } from './bootstrapTestFixtures'
++import { heldApprovalCommands, heldApprovalForms, releaseApprovalCommand, releaseApprovalForm } from './approvalMemory'
++import { persistApprovalForm, snapshotApprovalForm } from './approvalForms'
++import { approvalAck, approvalControl, approvalSession, approvalView, approvalWorkspace } from './approvalFixtures'
++import type { ApprovalPort } from './approvalClient'
++import { CodexApprovalsPanel } from './CodexApprovalsPanel'
++import { readApprovalCommand } from './approvalCommands'
++const stores: DraftStore[] = []
++const local = () => { const s = new DraftStore({ name: `approval-panel-${crypto.randomUUID()}`, factory: new IDBFactory() }); stores.push(s); return s }
++const port = (): ApprovalPort => ({ session: vi.fn(async () => approvalSession()), control: vi.fn(async () => approvalControl()), read: vi.fn(async () => approvalView()), decide: vi.fn(async () => approvalAck()) })
++afterEach(async () => { cleanup(); heldApprovalCommands(approvalWorkspace).forEach(releaseApprovalCommand); heldApprovalForms(approvalWorkspace).forEach(releaseApprovalForm); await Promise.all(stores.splice(0).map(s => s.close())); vi.restoreAllMocks() })
++const refresh = async () => { fireEvent.click(screen.getByText('读取审批记录与权限')); await screen.findByText(/审批本机记录已读取/); await waitFor(() => expect((screen.getByText('读取审批记录与权限') as HTMLButtonElement).disabled).toBe(false)) }
++async function readControl() {
++ await refresh(); fireEvent.change(screen.getByLabelText('审批来源 turn ID'), { target: { value: 'turn_approval_synthetic' } })
++ fireEvent.click(screen.getByText('独立读取审批安全控制')); await screen.findByLabelText('审批安全控制 GET')
++}
++test('learner can decline from the complete safe control without subject GET; durable ACK binds the actual deciding actor', async () => {
++ const p = port(), store = local(), forms = local(), actor = 'learner_deciding_actor'
++ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), actor_session_id: actor, role: 'learner', active_independent_attempt_id: 'attempt_independent' })
++ vi.mocked(p.decide).mockImplementation(async (id, body, key) => {
++  const c = readApprovalCommand((await store.load(approvalWorkspace))[key], approvalWorkspace)
++  expect(c.actor_session_id).toBe(actor); expect(c.basis).toEqual({ kind: 'decline', control: approvalControl() })
++  expect(id).toBe('approval_synthetic'); expect(body).toEqual({ expected_revision: 1, operation_sha256: '5'.repeat(64), decision: 'decline' })
++  return approvalAck('decline', actor)
++ })
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted={false} port={p} store={store} formStore={forms} />)
++ await readControl(); fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic'))
++ await screen.findByText(/审批原 ACK 已保存/)
++ expect(p.read).not.toHaveBeenCalled(); expect(p.decide).toHaveBeenCalledTimes(1)
++ const saved = Object.values(await store.load(approvalWorkspace)).map(r => readApprovalCommand(r, approvalWorkspace))
++ expect(saved[0].ack).toEqual(approvalAck('decline', actor))
++})
++
++async function readDetail() { await readControl(); fireEvent.click(screen.getByText('独立读取完整操作 approval_synthetic')); await screen.findByLabelText('审批当前详情 GET') }
++const approve = () => fireEvent.click(screen.getByText('明确仅批准这一次完整操作 approval_synthetic'))
++test('original author explicitly sees the complete operation; approval ACK does not become execution, independent GET keeps original ACK', async () => {
++ const p = port(), store = local(), forms = local()
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ expect(p.session).not.toHaveBeenCalled(); await readDetail()
++ expect(screen.getByLabelText('完整实际命令').textContent).toBe(approvalView().operation.kind === 'command' ? (approvalView().operation as { command_text: string }).command_text : '')
++ expect(p.decide).not.toHaveBeenCalled(); approve(); await screen.findByText(/审批原 ACK 已保存/)
++ expect(p.read).toHaveBeenCalledTimes(1); expect(within(screen.getByLabelText('审批当前详情 GET')).getByText(/执行 not_started/)).toBeTruthy()
++ const before = Object.values(await store.load(approvalWorkspace))[0].text
++ vi.mocked(p.read).mockResolvedValue({ ...approvalView(), revision: 4, decision: 'approve_once', validity: 'closed', execution: 'completed', decided_at: '2026-10-05T00:00:01Z', started_at: '2026-10-05T00:00:02Z', finished_at: '2026-10-05T00:00:03Z', result_sha256: '6'.repeat(64), job: { id: 'job_approval_synthetic', status: 'completed' }, job_revision: 20 })
++ fireEvent.click(screen.getByText('独立刷新操作执行事实 approval_synthetic')); await screen.findByText(/执行 completed/)
++ expect(Object.values(await store.load(approvalWorkspace))[0].text).toBe(before); expect(p.decide).toHaveBeenCalledTimes(1)
++})
++test('lost approval ACK survives remount, refresh sends zero POST, explicit original key/body replays even after current closes', async () => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.decide).mockRejectedValueOnce(new Error('lost ACK'))
++ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await readDetail(); approve(); await screen.findByText(/审批结果或本机保存未知/)
++ const call = vi.mocked(p.decide).mock.calls[0], original = readApprovalCommand((await store.load(approvalWorkspace))[call[2]], approvalWorkspace)
++ view.unmount(); render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await refresh(); expect(p.decide).toHaveBeenCalledTimes(1)
++ // No new operation GET is necessary for recovery of this exact original command.
++ vi.mocked(p.read).mockRejectedValue(new Error('current may already be closed'))
++ fireEvent.click(screen.getByText(`显式回放审批原 key ${call[2]}`)); await screen.findByText(/审批原 ACK 已保存/)
++ expect(vi.mocked(p.decide).mock.calls[1]).toEqual(call)
++ expect(readApprovalCommand((await store.load(approvalWorkspace))[call[2]], approvalWorkspace)).toEqual({ ...original, ack: approvalAck() })
++})
++test.each([412, 409])('%i preserves original approval body/key/basis and independent read neither rewrites nor retries', async status => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.decide).mockRejectedValueOnce(new ApiError(status, 'private diagnostics', 'REVISION_MISMATCH'))
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await readDetail(); approve(); await screen.findByText(status === 412 ? /审批版本已变化/ : /审批绑定或阶段冲突/)
++ const call = vi.mocked(p.decide).mock.calls[0], before = (await store.load(approvalWorkspace))[call[2]].text
++ fireEvent.click(screen.getByText('独立刷新操作执行事实 approval_synthetic')); await waitFor(() => expect(p.read).toHaveBeenCalledTimes(2))
++ expect((await store.load(approvalWorkspace))[call[2]].text).toBe(before); expect(p.decide).toHaveBeenCalledTimes(1)
++ expect((screen.getByText('明确仅批准这一次完整操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true); expect(screen.queryByText(/private diagnostics/)).toBeNull()
++})
++test.each(['learner', 'independent', 'open_book'] as const)('%s decline stays available without operation detail access', async mode => {
++ const p = port(), store = local(), forms = local()
++ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), role: mode === 'learner' ? 'learner' : 'author', active_independent_attempt_id: mode === 'independent' ? 'attempt_independent' : null, active_open_book_attempt_id: mode === 'open_book' ? 'attempt_open_book' : null })
++ vi.mocked(p.decide).mockResolvedValue(approvalAck('decline'))
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted={false} port={p} store={store} formStore={forms} />)
++ await readControl(); expect((screen.getByText('独立读取完整操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true)
++ fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic')); await screen.findByText(/审批原 ACK 已保存/)
++ expect(p.read).not.toHaveBeenCalled(); expect(p.decide).toHaveBeenCalledTimes(1)
++})
++test.each(['actor', 'learner', 'independent', 'open_book'] as const)('fresh %s change rejects new approval before write transport and hides operation', async mode => {
++ const p = port(), store = local(), forms = local()
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await readDetail()
++ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), actor_session_id: mode === 'actor' ? 'other_actor' : approvalSession().actor_session_id, role: mode === 'learner' ? 'learner' : 'author', active_independent_attempt_id: mode === 'independent' ? 'attempt_independent' : null, active_open_book_attempt_id: mode === 'open_book' ? 'attempt_open_book' : null })
++ approve(); await screen.findByText(/审批当前权限或原 actor 已变化/)
++ expect(p.decide).not.toHaveBeenCalled(); expect(screen.queryByLabelText('完整当前操作')).toBeNull()
++})
++test('unsupported operation remains readable but cannot approve, while safe decline works', async () => {
++ const p = port(), store = local(), forms = local()
++ vi.mocked(p.read).mockResolvedValue({ ...approvalView(), operation: { kind: 'unsupported', category: 'network', reason: 'CODEX_OPERATION_UNSUPPORTED' } })
++ vi.mocked(p.decide).mockResolvedValue(approvalAck('decline'))
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await readDetail()
++ expect((screen.getByText('明确仅批准这一次完整操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true)
++ fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic')); await screen.findByText(/审批原 ACK 已保存/)
++ expect(vi.mocked(p.decide).mock.calls[0][1].decision).toBe('decline')
++})
++test('complete file changes preserve order, Unicode and full diff as inert text', async () => {
++ const p = port(), store = local(), forms = local(), diff = '-旧 α\n+<img src=x onerror=alert(1)>\n'
++ vi.mocked(p.read).mockResolvedValue({ ...approvalView(), operation: { kind: 'file_change', operation_profile_sha256: '7'.repeat(64), files: [
++  { path: '旧.md', action: 'delete', before_sha256: '1'.repeat(64), before_size: 4, after_sha256: null, after_size: null, diff },
++  { path: '新.md', action: 'add', before_sha256: null, before_size: null, after_sha256: '2'.repeat(64), after_size: 0, diff: '' }] } })
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await readDetail()
++ expect(screen.getByLabelText('完整 diff 旧.md').textContent).toBe(diff); expect(screen.getByLabelText('完整 diff 新.md').textContent).toBe('')
++ expect(document.querySelector('img')).toBeNull(); expect(p.decide).not.toHaveBeenCalled()
++})
++test('late checked ACK after unmount remains original actor memory, local save performs no second POST', async () => {
++ const p = port(), store = local(), forms = local(), response = deferred<ReturnType<typeof approvalAck>>()
++ vi.mocked(p.decide).mockReturnValue(response.promise)
++ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await readDetail(); approve()
++ await waitFor(() => expect(p.decide).toHaveBeenCalledTimes(1)); view.unmount()
++ await act(async () => response.resolve(approvalAck())); await waitFor(() => expect(heldApprovalCommands(approvalWorkspace).some(c => c.ack?.id === 'approval_synthetic')).toBe(true))
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await refresh()
++ fireEvent.click(screen.getByText('仅保存审批本机事实')); await screen.findByText(/仅保存审批原 actor 的本机事实/)
++ expect(p.decide).toHaveBeenCalledTimes(1); expect(Object.values(await store.load(approvalWorkspace)).map(r => readApprovalCommand(r, approvalWorkspace))[0].ack).toEqual(approvalAck())
++})
++test('actual actor loss before ACK delivery isolates full original ACK and denies new actor replay or disclosure', async () => {
++ const p = port(), store = local(), forms = local(), response = deferred<ReturnType<typeof approvalAck>>()
++ vi.mocked(p.decide).mockReturnValue(response.promise)
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await readDetail(); approve()
++ await waitFor(() => expect(p.decide).toHaveBeenCalledTimes(1)); vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), actor_session_id: 'other_actor' })
++ await act(async () => response.resolve(approvalAck())); await screen.findByText(/审批当前权限或原 actor 已变化/)
++ expect(heldApprovalCommands(approvalWorkspace)[0].ack).toEqual(approvalAck()); await refresh()
++ expect(screen.queryByLabelText('完整当前操作')).toBeNull(); expect(screen.queryByText(/显式回放审批原 key/)).toBeNull()
++ fireEvent.click(screen.getByText('仅保存审批本机事实')); await screen.findByText(/仅保存审批原 actor 的本机事实/)
++ expect(Object.values(await store.load(approvalWorkspace)).map(r => readApprovalCommand(r, approvalWorkspace))[0].ack).toEqual(approvalAck()); expect(p.decide).toHaveBeenCalledTimes(1)
++})
++test.each(['port', 'workspace'] as const)('late complete operation after %s replacement cannot appear', async mode => {
++ const p = port(), next = port(), store = local(), forms = local(), response = deferred<ReturnType<typeof approvalView>>()
++ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await readControl()
++ vi.mocked(p.read).mockReturnValue(response.promise); fireEvent.click(screen.getByText('独立读取完整操作 approval_synthetic')); await waitFor(() => expect(p.read).toHaveBeenCalledTimes(1))
++ view.rerender(<CodexApprovalsPanel workspace={mode === 'workspace' ? 'workspace_other' : approvalWorkspace} writeAdmitted port={mode === 'port' ? next : p} store={store} formStore={forms} />)
++ await act(async () => response.resolve(approvalView())); expect(screen.queryByLabelText('完整当前操作')).toBeNull(); expect(p.decide).not.toHaveBeenCalled()
++})
++test('original form restore rereads actor before showing safe identifiers or saving a new branch', async () => {
++ const p = port(), store = local(), forms = local(), original = snapshotApprovalForm(approvalWorkspace, approvalSession().actor_session_id, { turn_id: 'turn_saved_original' }, null)
++ await persistApprovalForm(original, forms)
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await refresh()
++ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), actor_session_id: 'other_actor' })
++ fireEvent.click(screen.getByText(`恢复审批表单 ${original.draft_id} · 1`)); await screen.findByText(/审批当前权限或原 actor 已变化/)
++ expect((screen.getByLabelText('审批来源 turn ID') as HTMLInputElement).value).toBe(''); expect(Object.keys(await forms.load(approvalWorkspace))).toEqual([original.snapshot_id]); expect(p.decide).not.toHaveBeenCalled()
++})
++
++test.each(['learner', 'independent', 'open_book'] as const)('prior rejected approve preserves its original facts while %s can explicitly decline a fresh pending safe control', async mode => {
++ const p = port(), store = local(), forms = local()
++ vi.mocked(p.decide).mockRejectedValueOnce(new ApiError(503, 'runtime became unavailable', 'CODEX_RUNTIME_UNAVAILABLE')).mockResolvedValue(approvalAck('decline'))
++ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await readDetail(); approve(); await screen.findByText(/BLOCKED：当前操作或固定运行证明不可用/)
++ const first = vi.mocked(p.decide).mock.calls[0], original = (await store.load(approvalWorkspace))[first[2]].text
++ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), role: mode === 'learner' ? 'learner' : 'author', active_independent_attempt_id: mode === 'independent' ? 'attempt_independent' : null, active_open_book_attempt_id: mode === 'open_book' ? 'attempt_open_book' : null })
++ view.rerender(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted={false} port={p} store={store} formStore={forms} />)
++ await readControl(); const reads = vi.mocked(p.read).mock.calls.length
++ const decline = screen.getByText('明确拒绝这一次操作 approval_synthetic') as HTMLButtonElement
++ expect(decline.disabled, 'a prior academic approve command must not block explicit safe decline of a still-pending operation').toBe(false)
++ fireEvent.click(decline); await screen.findByText(/审批原 ACK 已保存/)
++ expect(p.decide).toHaveBeenCalledTimes(2); const second = vi.mocked(p.decide).mock.calls[1]
++ expect(second[2]).not.toBe(first[2]); expect(second[1]).toEqual({ expected_revision: 1, operation_sha256: '5'.repeat(64), decision: 'decline' })
++ expect((await store.load(approvalWorkspace))[first[2]].text).toBe(original); expect(p.read).toHaveBeenCalledTimes(reads)
++ const reduced = readApprovalCommand((await store.load(approvalWorkspace))[second[2]], approvalWorkspace)
++ expect(reduced.basis).toEqual({ kind: 'decline', control: approvalControl() }); expect(reduced.ack).toEqual(approvalAck('decline'))
++})
++
++test('unknown approve also permits explicit safe decline while its exact pending journal stays unchanged', async () => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.decide).mockRejectedValueOnce(new Error('response unavailable')).mockResolvedValue(approvalAck('decline'))
++ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await readDetail(); approve(); await screen.findByText(/审批结果或本机保存未知/)
++ const first = vi.mocked(p.decide).mock.calls[0], original = (await store.load(approvalWorkspace))[first[2]].text
++ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), role: 'learner' }); view.rerender(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted={false} port={p} store={store} formStore={forms} />)
++ await readControl(); fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic')); await screen.findByText(/审批原 ACK 已保存/)
++ expect(p.decide).toHaveBeenCalledTimes(2); expect(vi.mocked(p.decide).mock.calls[1][2]).not.toBe(first[2]); expect((await store.load(approvalWorkspace))[first[2]].text).toBe(original)
++ fireEvent.click(screen.getByText('独立读取审批安全控制')); await screen.findByLabelText('审批安全控制 GET')
++ expect((screen.getByText('明确拒绝这一次操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true); expect(p.decide).toHaveBeenCalledTimes(2)
++})
++
++test('unknown prior decline still blocks a new approve while retaining explicit original decline replay', async () => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.decide).mockRejectedValueOnce(new Error('decline response unavailable'))
++ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await readControl(); fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic')); await screen.findByText(/审批结果或本机保存未知/)
++ const original = vi.mocked(p.decide).mock.calls[0], before = (await store.load(approvalWorkspace))[original[2]].text
++ fireEvent.click(screen.getByText('独立读取完整操作 approval_synthetic')); await screen.findByLabelText('审批当前详情 GET')
++ expect((screen.getByText('明确仅批准这一次完整操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true)
++ expect((screen.getByText(`显式回放审批原 key ${original[2]}`) as HTMLButtonElement).disabled).toBe(false)
++ expect(p.decide).toHaveBeenCalledTimes(1); expect((await store.load(approvalWorkspace))[original[2]].text).toBe(before)
++})
+diff --git a/apps/web/src/features/codex/CodexApprovalsPanel.tsx b/apps/web/src/features/codex/CodexApprovalsPanel.tsx
+new file mode 100644
+index 00000000..cdac52a8
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexApprovalsPanel.tsx
+@@ -0,0 +1,71 @@
++import { useEffect, useRef } from 'react'
++import type { GenericApprovalView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import type { DraftStore } from '../../workbench/DraftStore'
++import type { ApprovalPort } from './approvalClient'
++import { useCodexApprovals } from './useCodexApprovals'
++export type ApprovalPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
++function Operation({ value }: { value: GenericApprovalView }) {
++ const op = value.operation
++ return <section aria-label="完整当前操作"><p>审批 {value.id} · 原 actor {value.actor_session_id} · r{value.revision}</p>
++  <p>session {value.session_id} · turn {value.turn_id} · run {value.run_id} · Job {value.job.id} / {value.job.status} / r{value.job_revision}</p>
++  <p>操作 SHA <code>{value.operation_sha256}</code>；此 SHA 包含私有 owner 绑定，不能从显示摘要重算。</p>
++  <p>创建 {value.created_at}；期限 {value.expires_at}</p>
++  <p>当前决定 {value.decision}；有效性 {value.validity}；执行 {value.execution}</p>
++  {op.kind === 'unsupported' ? <p>不支持的操作：{op.category} · {op.reason}。仅可通过安全控制明确拒绝。</p> : <>
++   <p>固定操作 profile SHA <code>{op.operation_profile_sha256}</code>。批准仅限这一个受检操作，不授予后续操作、会话缓存权限或新的模型请求。</p>
++   {op.kind === 'command' ? <>
++    <h5>完整实际命令</h5><pre aria-label="完整实际命令">{op.command_text}</pre>
++    <p>相对工作目录 {op.cwd}；唯一写入范围 {op.writable_area}；网络 {op.network}</p>
++    <p>可执行身份 SHA <code>{op.executable_sha256}</code>；环境 SHA <code>{op.environment_sha256}</code>；文件范围 SHA <code>{op.filesystem_scope_sha256}</code></p>
++    <h5>全部可读文件</h5>{!op.read_files.length && <p>本操作无可读文件。</p>}
++    {op.read_files.map(f => <p key={f.path}>{f.path} · {f.size} bytes · <code>{f.sha256}</code></p>)}
++   </> : <><h5>完整有序文件变更</h5>{op.files.map((f, i) => <article key={f.path}><p>{i + 1}. {f.action} · {f.path}</p><p>before：{f.before_size ?? 'null'} bytes · {f.before_sha256 ?? 'null'}</p><p>after：{f.after_size ?? 'null'} bytes · {f.after_sha256 ?? 'null'}</p><pre aria-label={`完整 diff ${f.path}`}>{f.diff}</pre></article>)}<p>只允许本 turn 私有输出区；不授予网络或宿主目录写入权限。</p></>}
++  </>}
++  <p>决定时间 {value.decided_at ?? '无'}；实际开始 {value.started_at ?? '无'}；实际结束 {value.finished_at ?? '无'}</p>
++  <p>结果 SHA {value.result_sha256 ?? '无'}；安全错误 {value.error_code ?? '无'}</p>
++  <details><summary>核对完整当前审批 GET</summary><pre>{JSON.stringify(value, null, 2)}</pre></details>
++ </section>
++}
++export function CodexApprovalsPanel({ workspace, writeAdmitted, port, store, formStore, onState }: { workspace: string; writeAdmitted: boolean; port?: ApprovalPort; store?: DraftStore; formStore?: DraftStore; onState?: (value: ApprovalPanelState) => void }) {
++ const state = useCodexApprovals(workspace, writeAdmitted, port, store, formStore), callback = useRef(onState); callback.current = onState
++ useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe, isolated: state.isolated }) }, [state.dirty, state.safe, state.isolated])
++ const blocked = state.busy || !state.ready, detail = state.detail
++ const approvable = !!detail && detail.actor_session_id === state.actor && detail.decision === 'pending' && detail.validity === 'current' && detail.execution === 'not_started' && detail.operation.kind !== 'unsupported' && !state.hasCommand(detail.id)
++ return <section aria-label="Codex 逐操作审批" style={{ overflowWrap: 'anywhere' }}><h3>Codex 逐操作审批</h3>
++  <p>逐项工具许可独立于 Provider 外发批准、数值检查和人工审校。读取与恢复不会自动决定或执行；默认未注册的操作不能批准。</p>
++  <button disabled={!workspace || state.busy} onClick={() => void state.refresh()}>读取审批记录与权限</button>
++  {!state.ready && <p>先读取当前权限和本机记录；没有自动 POST。</p>}
++  {state.ready && !state.allowed && <p>当前仅开放安全控制与明确拒绝；操作正文和原批准详情已收起。有效 learner/author 在测试策略限制下仍可减权。</p>}
++  {state.error && <p role="status">{state.error}</p>}{state.message && <p role="status">{state.message}</p>}
++  {state.busy && <p role="status">正在处理这次明确操作。</p>}
++  {state.retained > 0 && <p>有尚未落盘的原 actor 审批事实或表单；保留在隔离内存，离开前请仅保存本机事实。</p>}
++  {state.canSave && <button disabled={state.busy} onClick={() => void state.saveMemory()}>仅保存审批本机事实</button>}
++  <label>审批来源 turn ID<input disabled={blocked} value={state.fields.turn_id} onChange={e => state.edit({ turn_id: e.target.value })} /></label>
++  <button disabled={blocked || !state.fields.turn_id} onClick={() => void state.readControl()}>独立读取审批安全控制</button>
++  <p>来源 ID 的未发送输入独立保存；恢复需明确选择原 actor 的快照。</p>
++  {state.forms.map(f => <button key={f.snapshot_id} disabled={state.busy} onClick={() => void state.restore(f)}>恢复审批表单 {f.draft_id} · {f.sequence}</button>)}
++  {state.control && <section aria-label="审批安全控制 GET"><h4>本次安全控制 GET</h4><p>session {state.control.session_id} · turn {state.control.id} · Job {state.control.job.id} · {state.control.execution}</p>
++   {!state.control.approval_controls.length && <p>本次控制没有审批记录；没有构造或猜测操作。</p>}
++   {state.control.approval_controls.map(a => <article key={a.id}><p>{a.id} · 审批 r{a.revision} · {a.decision} · {a.validity}</p><p>操作 SHA <code>{a.operation_sha256}</code></p>
++    <button disabled={blocked || !state.allowed} onClick={() => void state.read(a.id)}>独立读取完整操作 {a.id}</button>
++    <button disabled={blocked || a.decision !== 'pending' || state.hasCommand(a.id, 'decline')} onClick={() => void state.decide(a.id, 'decline')}>明确拒绝这一次操作 {a.id}</button>
++    <p>拒绝以本次完整安全控制的审批 revision/hash 为基准；无需读取操作正文，也不证明远端已经停止。</p>
++   </article>)}
++  </section>}
++  {detail && <section aria-label="审批当前详情 GET"><Operation value={detail} />
++   {detail.validity !== 'current' && <p>BLOCKED：当前操作为 {detail.validity}；原历史仍保留，不能据此新增批准。</p>}
++   {detail.actor_session_id !== state.actor && <p>这是其他原 actor 的操作；当前作者可读取，但不能接管批准。</p>}
++   <button disabled={blocked || !state.allowed || !approvable} onClick={() => void state.decide(detail.id, 'approve_once')}>明确仅批准这一次完整操作 {detail.id}</button>
++   <button disabled={blocked || !state.allowed} onClick={() => void state.read(detail.id, detail)}>独立刷新操作执行事实 {detail.id}</button>
++   <p>approve_once ACK 只记录决定；实际开始、结束与结果只能以上方独立 GET 为准。已开始后未知不能通过再次批准来补跑。</p>
++  </section>}
++  <section aria-label="审批原命令与完整 ACK"><h4>原决定命令与完整历史 ACK</h4>
++   {state.commands.map(c => <article key={c.command_id}><p>{c.body.decision} · {c.ack ? '原 ACK 已记录，不是当前执行状态' : c.error ? `安全错误 ${c.error.status} ${c.error.code ?? ''}；原基准保留` : '结果未知；原 key 与完整命令保留'}</p>
++    {c.actor_session_id !== state.actor && <p>其他 actor 的减权事实只读；不能接管或重放。</p>}
++    <details><summary>核对原审批命令 {c.command_id}</summary><p>原 actor {c.actor_session_id}</p><pre>{JSON.stringify({ route: c.route, target_id: c.target_id, body: c.body, basis: c.basis, ack: c.ack }, null, 2)}</pre></details>
++    <button disabled={state.busy || !state.canReplay(c)} onClick={() => void state.execute(c)}>显式回放审批原 key {c.command_id}</button>
++    <button disabled={blocked || !state.allowed} onClick={() => void state.read(c.target_id, c.basis.kind === 'approve' ? c.basis.view : c.basis.control)}>独立读取原审批当前事实 {c.target_id}</button>
++   </article>)}
++  </section>
++ </section>
++}
+diff --git a/apps/web/src/features/codex/approvalClient.ts b/apps/web/src/features/codex/approvalClient.ts
+new file mode 100644
+index 00000000..f813bc0c
+--- /dev/null
++++ b/apps/web/src/features/codex/approvalClient.ts
+@@ -0,0 +1,55 @@
++import type { ApprovalDecision, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexTurnControlView, GenericApprovalView, GenericApprovalDecisionAck } from '../../../../../packages/contracts/generated/codex-turn-types'
++import schemas from '../../../../../packages/contracts/generated/codex-turn-schemas.json'
++import { request } from '../../api/client'
++import { checkedProvider } from '../providers/providerSchema'
++import { turnClient } from './turnClient'
++import { turnIdentity } from './turnCommands'
++import { outboundTime } from './turnOutboundClient'
++
++type Wire = { GenericApprovalView: GenericApprovalView; GenericApprovalDecisionAck: GenericApprovalDecisionAck }
++const fail = (): never => { throw new Error('逐操作审批记录不符合完整合同；原命令保留。') }
++const id = (value: string) => { if (!turnIdentity(value)) fail(); return value }
++const path = (value: string) => { if (/[\\:\x00-\x1f\x7f]/.test(value) || value.split('/').some(p => ['', '.', '..'].includes(p))) fail() }
++const unique = (values: string[]) => { if (new Set(values).size !== values.length) fail() }
++/** Public relationships only. The operation SHA includes private owner facts and is never recomputed here. */
++export function checkedApproval<N extends keyof Wire>(name: N, raw: unknown): Wire[N] {
++ const v = checkedProvider<Wire[N]>(name, raw, schemas.schemas)
++ if (v.run_id !== v.job.id) fail()
++ if (name === 'GenericApprovalView') {
++  const a = v as GenericApprovalView, op = a.operation
++  if (outboundTime(a.expires_at) <= outboundTime(a.created_at)
++   || (a.decision === 'pending') !== (a.decided_at === null) || a.decision !== 'pending' && a.revision < 2
++   || a.execution === 'started' && a.revision < 3 || ['completed', 'failed', 'unknown'].includes(a.execution) && a.revision < 4
++   || op.kind === 'unsupported' && a.decision === 'approve_once' || a.execution !== 'not_started' && a.decision !== 'approve_once'
++   || (a.execution === 'not_started') !== (a.started_at === null)
++   || ['completed', 'failed', 'unknown'].includes(a.execution) !== (a.finished_at !== null)
++   || ['not_started', 'started'].includes(a.execution) && a.result_sha256 !== null
++   || a.execution === 'completed' && (a.result_sha256 === null || a.error_code !== null)) fail()
++  let previous = outboundTime(a.created_at)
++  for (const value of [a.decided_at, a.started_at, a.finished_at]) if (value !== null) { const next = outboundTime(value); if (next < previous) fail(); previous = next }
++  if (op.kind === 'command') { path(op.cwd); unique(op.read_files.map(f => f.path)); op.read_files.forEach(f => path(f.path)); if (!op.command_text.trim()) fail() }
++  if (op.kind === 'file_change') {
++   unique(op.files.map(f => f.path))
++   for (const f of op.files) { path(f.path); if ((f.before_sha256 !== null) !== (f.action !== 'add') || (f.before_size !== null) !== (f.action !== 'add')
++    || (f.after_sha256 !== null) !== (f.action !== 'delete') || (f.after_size !== null) !== (f.action !== 'delete')) fail() }
++  }
++ }
++ return v
++}
++export type ApprovalPort = {
++ session(): Promise<SessionResponse>
++ control(turn: string): Promise<CodexTurnControlView>
++ read(id: string): Promise<GenericApprovalView>
++ decide(id: string, body: ApprovalDecision, key: string): Promise<GenericApprovalDecisionAck>
++}
++export const approvalClient: ApprovalPort = {
++ session: turnClient.session, control: turnClient.control,
++ read: async identifier => { const v = checkedApproval('GenericApprovalView', await request('GET /api/v1/approvals/{id}', undefined, undefined, { path: { id: id(identifier) } })); if (v.id !== identifier) fail(); return v },
++ decide: async (identifier, body, key) => {
++  const checked = checkedProvider<ApprovalDecision>('ApprovalDecision', body)
++  const v = checkedApproval('GenericApprovalDecisionAck', await request('POST /api/v1/approvals/{id}/decision', checked, { 'Idempotency-Key': id(key) }, { path: { id: id(identifier) } }))
++  if (v.id !== identifier || v.operation_sha256 !== checked.operation_sha256 || v.decision !== checked.decision) fail()
++  return v
++ },
++}
+diff --git a/apps/web/src/features/codex/approvalCommands.test.ts b/apps/web/src/features/codex/approvalCommands.test.ts
+new file mode 100644
+index 00000000..c6f5fad5
+--- /dev/null
++++ b/apps/web/src/features/codex/approvalCommands.test.ts
+@@ -0,0 +1,236 @@
++import { IDBFactory } from 'fake-indexeddb'
++import { expect, test, vi } from 'vitest'
++import type { ApprovalDecision } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexFileOperation, GenericApprovalView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { DraftStore } from '../../workbench/DraftStore'
++import { checkedApproval } from './approvalClient'
++import { decodeApprovalCommand, dispatchApprovalCommand, makeApprovalCommand, persistApprovalCommand, readApprovalCommand, type ApprovalCommand } from './approvalCommands'
++import { approvalAck, approvalActor, approvalControl, approvalView, approvalWorkspace } from './approvalFixtures'
++
++const learner = 'learner_approval_synthetic'
++const command = () => {
++ const view = approvalView()
++ return makeApprovalCommand(approvalWorkspace, approvalActor, { kind: 'approve', view }, view.id)
++}
++const decline = (validity: GenericApprovalView['validity'] = 'unavailable') => {
++ const control = approvalControl()
++ control.approval_controls[0].validity = validity
++ return makeApprovalCommand(approvalWorkspace, learner, { kind: 'decline', control }, control.approval_controls[0].id)
++}
++const decode = (value: ApprovalCommand) => decodeApprovalCommand(JSON.stringify(value), approvalWorkspace)
++const store = () => new DraftStore({ name: `approval-command-${crypto.randomUUID()}`, factory: new IDBFactory() })
++const fileView = (): GenericApprovalView & { operation: CodexFileOperation } => ({
++ ...approvalView(),
++ operation: { kind: 'file_change', operation_profile_sha256: '4'.repeat(64), files: [
++  { path: 'turn_outputs/old.md', action: 'delete', before_sha256: '6'.repeat(64), before_size: 0, after_sha256: null, after_size: null, diff: '' },
++  { path: 'turn_outputs/新 α.md', action: 'add', before_sha256: null, before_size: null, after_sha256: '7'.repeat(64), after_size: 0, diff: '' },
++  { path: 'turn_outputs/update.md', action: 'update', before_sha256: '8'.repeat(64), before_size: 1, after_sha256: '9'.repeat(64), after_size: 2, diff: '-α\n+β\n' },
++ ] },
++})
++
++test('learner decline retains the complete safe control and the actual deciding actor in the full ACK', async () => {
++ const db = store(), original = decline(), ack = approvalAck('decline', learner)
++ const port = { decide: vi.fn(async (id: string, body: ApprovalDecision, key: string) => {
++  const durable = readApprovalCommand((await db.load(approvalWorkspace))[key], approvalWorkspace)
++  expect(durable).toEqual(original)
++  expect(id).toBe(original.target_id)
++  expect(body).toEqual({ expected_revision: 1, operation_sha256: approvalView().operation_sha256, decision: 'decline' })
++  return ack
++ }) }
++ try {
++  expect(original.basis).toEqual({ kind: 'decline', control: { ...approvalControl(), approval_controls: [{ ...approvalControl().approval_controls[0], validity: 'unavailable' }] } })
++  expect(original.actor_session_id).not.toBe(approvalControl().actor_session_id)
++  const saved = await dispatchApprovalCommand(original, port, db)
++  expect(saved.ack).toEqual(ack)
++  expect(readApprovalCommand((await db.load(approvalWorkspace))[original.command_id], approvalWorkspace)).toEqual(saved)
++  expect(port.decide).toHaveBeenCalledTimes(1)
++ } finally { await db.close() }
++})
++
++test('approval CAS comes from the selected approval, never the dynamic Job revision', () => {
++ for (const original of [command(), decline()]) {
++  expect(original.body.expected_revision).toBe(1)
++  expect(approvalControl().job_revision).toBe(8)
++  expect(() => decode({ ...original, body: { ...original.body, expected_revision: 8 } })).toThrow()
++ }
++ const control = approvalControl()
++ control.approval_controls = []
++ expect(() => makeApprovalCommand(approvalWorkspace, learner, { kind: 'decline', control }, control.approval_ids[0])).toThrow()
++})
++
++test('every immutable ACK binding and the closed ACK shape are checked against the original learner command', () => {
++ const original = decline()
++ const changes: Array<[string, Record<string, unknown>]> = [
++  ['approval id', { id: 'approval_other' }], ['revision', { revision: 3 }],
++  ['actual deciding actor', { actor_session_id: approvalActor }], ['operation hash', { operation_sha256: 'a'.repeat(64) }],
++  ['decision', { decision: 'approve_once' }], ['applied', { applied: false }],
++  ['session', { session_id: 'session_other' }], ['turn', { turn_id: 'turn_other' }],
++  ['run', { run_id: 'job_other' }], ['job', { job: { id: 'job_other', status: 'running' } }],
++  ['coherent but foreign run and job', { run_id: 'job_other', job: { id: 'job_other', status: 'running' } }],
++  ['invalid Job status', { job: { id: approvalAck().job.id, status: 'unknown' } }],
++  ['additional field', { execution: 'completed' }],
++ ]
++ for (const [field, change] of changes) {
++  expect(() => decodeApprovalCommand(JSON.stringify({ ...original, ack: { ...approvalAck('decline', learner), ...change } }), approvalWorkspace), field).toThrow()
++ }
++ for (const field of Object.keys(approvalAck())) {
++  const incomplete: Record<string, unknown> = { ...approvalAck('decline', learner) }
++  delete incomplete[field]
++  expect(() => decodeApprovalCommand(JSON.stringify({ ...original, ack: incomplete }), approvalWorkspace), `missing ${field}`).toThrow()
++ }
++})
++
++test('saved basis membership, original operation actor, hash and owner identities cannot be substituted', () => {
++ const mutations: Array<[string, (value: ApprovalCommand) => void]> = [
++  ['approval membership', c => { if (c.basis.kind === 'decline') { c.basis.control.approval_controls[0].id = 'approval_other'; c.basis.control.approval_ids[0] = 'approval_other' } }],
++  ['approval revision', c => { if (c.basis.kind === 'decline') c.basis.control.approval_controls[0].revision++ }],
++  ['operation hash', c => { if (c.basis.kind === 'decline') c.basis.control.approval_controls[0].operation_sha256 = 'a'.repeat(64) }],
++  ['session owner', c => { if (c.basis.kind === 'decline') c.basis.control.session_id = 'session_other' }],
++  ['turn owner', c => { if (c.basis.kind === 'decline') c.basis.control.id = 'turn_other' }],
++  ['job owner', c => { if (c.basis.kind === 'decline') c.basis.control.job.id = 'job_other' }],
++  ['target', c => { c.target_id = 'approval_other' }],
++  ['workspace', c => { c.workspace_id = 'workspace_other' }],
++  ['route', c => { Object.assign(c, { route: 'POST /api/v1/jobs/{id}/cancel' }) }],
++ ]
++ for (const [field, mutate] of mutations) {
++  const value = { ...decline(), ack: approvalAck('decline', learner) }
++  mutate(value)
++  expect(() => decode(value), field).toThrow()
++ }
++ const preparedByAnotherActor = command()
++ if (preparedByAnotherActor.basis.kind === 'approve') preparedByAnotherActor.basis.view.actor_session_id = learner
++ expect(() => decode(preparedByAnotherActor)).toThrow()
++})
++
++test('lost ACK survives a store reopen and explicit expired decline replay sends the exact original body and key', async () => {
++ const factory = new IDBFactory(), name = `approval-reopen-${crypto.randomUUID()}`
++ const first = new DraftStore({ name, factory }), reopened = new DraftStore({ name, factory }), original = decline('expired')
++ const attempts: Array<{ id: string; body: ApprovalDecision; key: string }> = []
++ const ack = approvalAck('decline', learner)
++ const port = { decide: vi.fn(async (id: string, body: ApprovalDecision, key: string) => {
++  attempts.push({ id, body: structuredClone(body), key })
++  if (attempts.length === 1) throw new Error('decision committed but response lost')
++  return ack
++ }) }
++ try {
++  await expect(dispatchApprovalCommand(original, port, first)).rejects.toThrow('response lost')
++  await first.close()
++  const recovered = readApprovalCommand((await reopened.load(approvalWorkspace))[original.command_id], approvalWorkspace)
++  expect(recovered).toEqual(original)
++  expect(attempts).toHaveLength(1)
++  const saved = await dispatchApprovalCommand(recovered, port, reopened)
++  expect(attempts).toEqual([1, 2].map(() => ({ id: original.target_id, body: original.body, key: original.command_id })))
++  expect(saved.ack).toEqual(ack)
++  expect(await dispatchApprovalCommand(original, port, reopened)).toEqual(saved)
++  expect(attempts).toHaveLength(2)
++ } finally { await first.close(); await reopened.close() }
++})
++
++test('decline journal decoding accepts unavailable, changed, expired and closed original safe controls', () => {
++ for (const validity of ['current', 'unavailable', 'changed', 'expired', 'closed'] as const) {
++  const value = decline(validity)
++  expect(decode({ ...value, ack: approvalAck('decline', learner) }).body.decision, validity).toBe('decline')
++ }
++})
++
++test('pending closed and approved-but-never-started closed views retain their actual revision and error facts', () => {
++ const pending: GenericApprovalView = { ...approvalView(), revision: 2, validity: 'closed', error_code: 'CODEX_CANCELLED' }
++ const approved: GenericApprovalView = { ...approvalView(), revision: 3, decision: 'approve_once', validity: 'closed', decided_at: '2026-10-05T00:00:01Z', error_code: 'CODEX_CANCELLED' }
++ expect(checkedApproval('GenericApprovalView', pending)).toEqual(pending)
++ expect(checkedApproval('GenericApprovalView', approved)).toEqual(approved)
++ expect(approved.execution).toBe('not_started')
++ expect(approved.started_at).toBeNull()
++})
++
++test('current completed facts and a pending writer cannot replace the historical full decision ACK', async () => {
++ const db = store(), original = command(), port = { decide: vi.fn(async () => approvalAck()) }
++ try {
++  const saved = await dispatchApprovalCommand(original, port, db)
++  const current: GenericApprovalView = { ...approvalView(), revision: 4, decision: 'approve_once', validity: 'closed', execution: 'completed',
++   job: { ...approvalView().job, status: 'completed' }, job_revision: 13,
++   decided_at: '2026-10-05T00:00:01Z', started_at: '2026-10-05T00:00:02Z', finished_at: '2026-10-05T00:00:03Z', result_sha256: 'a'.repeat(64) }
++  expect(checkedApproval('GenericApprovalView', current).job.status).toBe('completed')
++  expect(saved.ack?.job.status).toBe('running')
++  await persistApprovalCommand(original, db)
++  expect(readApprovalCommand((await db.load(approvalWorkspace))[original.command_id], approvalWorkspace)).toEqual(saved)
++  await expect(persistApprovalCommand({ ...saved, basis: { kind: 'approve', view: current } }, db)).rejects.toThrow()
++  expect(await dispatchApprovalCommand(original, port, db)).toEqual(saved)
++  expect(port.decide).toHaveBeenCalledTimes(1)
++  const publicAck = { ...approvalAck(), job: { ...approvalAck().job, status: 'completed' as const } }
++  expect(decode({ ...original, ack: publicAck }).ack).toEqual(publicAck)
++  await expect(persistApprovalCommand({ ...saved, ack: publicAck }, db)).rejects.toThrow()
++  expect(readApprovalCommand((await db.load(approvalWorkspace))[original.command_id], approvalWorkspace)).toEqual(saved)
++ } finally { await db.close() }
++})
++
++test('command and file paths are canonical while ordered Unicode file changes, zero sizes and empty diffs survive', () => {
++ const files = fileView(), checked = checkedApproval('GenericApprovalView', files)
++ expect(checked.operation).toEqual(files.operation)
++ const unsafe = ['/absolute', '../escape', 'dir/../escape', './file', 'dir//file', 'dir/', 'C:file', 'dir\\file', 'dir/\u0000file', 'dir/\u007ffile']
++ for (const value of unsafe) {
++  const view = approvalView()
++  if (view.operation.kind !== 'command') throw new Error('command fixture required')
++  view.operation.cwd = value
++  expect(() => checkedApproval('GenericApprovalView', view), `cwd ${JSON.stringify(value)}`).toThrow()
++  const read = approvalView()
++  if (read.operation.kind !== 'command') throw new Error('command fixture required')
++  read.operation.read_files = [{ path: value, size: 0, sha256: 'a'.repeat(64) }]
++  expect(() => checkedApproval('GenericApprovalView', read), `read ${JSON.stringify(value)}`).toThrow()
++  const file = fileView(); file.operation.files[0].path = value
++  expect(() => checkedApproval('GenericApprovalView', file), `file ${JSON.stringify(value)}`).toThrow()
++ }
++ const reads = approvalView()
++ if (reads.operation.kind !== 'command') throw new Error('command fixture required')
++ reads.operation.read_files = Array.from({ length: 2 }, () => ({ path: 'inputs/α.md', size: 0, sha256: 'a'.repeat(64) }))
++ expect(() => checkedApproval('GenericApprovalView', reads)).toThrow()
++ const duplicate = fileView(); duplicate.operation.files[1].path = duplicate.operation.files[0].path
++ expect(() => checkedApproval('GenericApprovalView', duplicate)).toThrow()
++})
++
++test('file add, update and delete require paired hashes and sizes on exactly the existing sides', () => {
++ for (const [index, fields] of [[0, ['before_sha256', 'before_size']], [1, ['after_sha256', 'after_size']], [2, ['before_sha256', 'before_size', 'after_sha256', 'after_size']]] as const) {
++  for (const field of fields) {
++   const view = fileView(); Object.assign(view.operation.files[index], { [field]: null })
++   expect(() => checkedApproval('GenericApprovalView', view), `${index} missing ${field}`).toThrow()
++  }
++ }
++ for (const [index, fields] of [[0, ['after_sha256', 'after_size']], [1, ['before_sha256', 'before_size']]] as const) {
++  for (const field of fields) {
++   const view = fileView(); Object.assign(view.operation.files[index], { [field]: field.endsWith('sha256') ? 'a'.repeat(64) : 0 })
++   expect(() => checkedApproval('GenericApprovalView', view), `${index} invented ${field}`).toThrow()
++  }
++ }
++})
++
++test('same key cannot replace an independently valid original body, and stored conflicts remain inspectable', async () => {
++ const db = store(), original = decline(), changed = decline()
++ changed.command_id = original.command_id
++ changed.body.operation_sha256 = 'a'.repeat(64)
++ if (changed.basis.kind === 'decline') changed.basis.control.approval_controls[0].operation_sha256 = changed.body.operation_sha256
++ expect(decode(changed)).toEqual(changed)
++ try {
++  await persistApprovalCommand(original, db)
++  await expect(persistApprovalCommand(changed, db)).rejects.toThrow()
++  expect(readApprovalCommand((await db.load(approvalWorkspace))[original.command_id], approvalWorkspace)).toEqual(original)
++  await db.save(approvalWorkspace, original.command_id, JSON.stringify(changed), 0)
++  const conflict = (await db.load(approvalWorkspace))[original.command_id]
++  expect(conflict.conflicts).toHaveLength(1)
++  expect(() => readApprovalCommand(conflict, approvalWorkspace)).toThrow()
++  await expect(persistApprovalCommand(original, db)).rejects.toThrow()
++  expect((await db.load(approvalWorkspace))[original.command_id]).toEqual(conflict)
++ } finally { await db.close() }
++})
++
++test('two individually valid full ACKs for the same key are rejected without erasing either candidate', async () => {
++ const db = store(), original = command(), acknowledged = { ...original, ack: approvalAck() }
++ const changed = decode({ ...acknowledged, ack: { ...approvalAck(), job: { ...approvalAck().job, status: 'completed' } } })
++ try {
++  await persistApprovalCommand(acknowledged, db)
++  await db.save(approvalWorkspace, original.command_id, JSON.stringify(changed), 0)
++  const conflict = (await db.load(approvalWorkspace))[original.command_id]
++  expect(conflict.conflicts).toHaveLength(1)
++  expect(() => readApprovalCommand(conflict, approvalWorkspace)).toThrow('Conflicting approval ACK')
++  await expect(persistApprovalCommand(acknowledged, db)).rejects.toThrow()
++  expect((await db.load(approvalWorkspace))[original.command_id]).toEqual(conflict)
++ } finally { await db.close() }
++})
+diff --git a/apps/web/src/features/codex/approvalCommands.ts b/apps/web/src/features/codex/approvalCommands.ts
+new file mode 100644
+index 00000000..27c8227c
+--- /dev/null
++++ b/apps/web/src/features/codex/approvalCommands.ts
+@@ -0,0 +1,88 @@
++import type { ApprovalDecision } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexTurnControlView, GenericApprovalView, GenericApprovalDecisionAck } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { checkedProvider, exactObject, sameValue } from '../providers/providerSchema'
++import { turnIdentity } from './turnCommands'
++import { checkedTurn } from './turnClient'
++import { approvalClient, checkedApproval, type ApprovalPort } from './approvalClient'
++export type ApprovalCommand = {
++ version: 1; workspace_id: string; actor_session_id: string; command_id: string; target_id: string;
++ route: 'POST /api/v1/approvals/{id}/decision';
++ basis: { kind: 'approve'; view: GenericApprovalView } | { kind: 'decline'; control: CodexTurnControlView };
++ body: ApprovalDecision; ack: GenericApprovalDecisionAck | null; error: { status: number; code: string | null } | null
++}
++export const approvalStore = new DraftStore({ name: 'learning-workbench.codex-operation-commands.v1' })
++const fail = (): never => { throw new Error('原审批命令、只读基准或完整 ACK 无法核验；原记录保留。') }
++export function decodeApprovalCommand(raw: string, workspace: string): ApprovalCommand {
++ const c = JSON.parse(raw) as ApprovalCommand
++ if (!exactObject(c, ['version', 'workspace_id', 'actor_session_id', 'command_id', 'target_id', 'route', 'basis', 'body', 'ack', 'error']) || c.version !== 1
++  || c.workspace_id !== workspace || !turnIdentity(workspace) || !turnIdentity(c.actor_session_id) || !turnIdentity(c.command_id) || !turnIdentity(c.target_id)
++  || c.route !== 'POST /api/v1/approvals/{id}/decision') fail()
++ const b = checkedProvider<ApprovalDecision>('ApprovalDecision', c.body)
++ let binding: { session_id: string; turn_id: string; job: { id: string } }
++ if (c.basis?.kind === 'approve') {
++  if (!exactObject(c.basis, ['kind', 'view'])) fail()
++  const v = checkedApproval('GenericApprovalView', c.basis.view)
++  if (b.decision !== 'approve_once' || v.actor_session_id !== c.actor_session_id || v.id !== c.target_id
++   || v.operation_sha256 !== b.operation_sha256 || v.revision !== b.expected_revision || v.decision !== 'pending'
++   || v.validity !== 'current' || v.execution !== 'not_started' || v.operation.kind === 'unsupported') fail()
++  binding = v
++ } else if (c.basis?.kind === 'decline') {
++  if (!exactObject(c.basis, ['kind', 'control'])) fail()
++  const control = checkedTurn('CodexTurnControlView', c.basis.control), v = control.approval_controls.find(a => a.id === c.target_id)
++  if (!v || b.decision !== 'decline' || v.decision !== 'pending' || v.operation_sha256 !== b.operation_sha256 || v.revision !== b.expected_revision) fail()
++  binding = { session_id: control.session_id, turn_id: control.id, job: control.job }
++ } else return fail()
++ if (c.ack !== null) {
++  const a = checkedApproval('GenericApprovalDecisionAck', c.ack)
++  if (a.id !== c.target_id || a.actor_session_id !== c.actor_session_id || a.operation_sha256 !== b.operation_sha256 || a.decision !== b.decision
++   || a.session_id !== binding.session_id || a.turn_id !== binding.turn_id || a.run_id !== binding.job.id || a.job.id !== binding.job.id) fail()
++ }
++ if (c.error !== null && (!exactObject(c.error, ['status', 'code']) || !Number.isSafeInteger(c.error.status) || c.error.status < 400 || c.error.status > 599
++  || c.ack !== null || c.error.code !== null && (typeof c.error.code !== 'string' || !/^[A-Z][A-Z0-9_]{0,79}$/.test(c.error.code) || c.error.code.trim() !== c.error.code))) fail()
++ return c
++}
++export function makeApprovalCommand(workspace: string, actor: string, basis: ApprovalCommand['basis'], target: string): ApprovalCommand {
++ const v = basis.kind === 'approve' ? basis.view : basis.control.approval_controls.find(a => a.id === target)
++ if (!v) return fail()
++ return decodeApprovalCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor,
++  command_id: `codexapproval_${crypto.randomUUID()}`, target_id: target, route: 'POST /api/v1/approvals/{id}/decision', basis,
++  body: { expected_revision: v.revision, operation_sha256: v.operation_sha256, decision: basis.kind === 'approve' ? 'approve_once' : 'decline' }, ack: null, error: null }), workspace)
++}
++const immutable = (value: ApprovalCommand) => ({ ...value, ack: null, error: null })
++export function readApprovalCommand(record: DraftRecord, workspace: string): ApprovalCommand {
++ const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeApprovalCommand(raw, workspace)), first = values[0]
++ if (first.command_id !== record.objectId || values.some(v => !sameValue(immutable(v), immutable(first)))) throw new Error('Conflicting original approval command')
++ const confirmed = values.filter(v => v.ack)
++ if (confirmed.some(v => !sameValue(v.ack, confirmed[0].ack))) throw new Error('Conflicting approval ACK')
++ return confirmed[0] ?? values.find(v => v.error) ?? first
++}
++export async function persistApprovalCommand(command: ApprovalCommand, store = approvalStore, guard?: DraftWriteGuard): Promise<ApprovalCommand> {
++ let desired = decodeApprovalCommand(JSON.stringify(command), command.workspace_id)
++ for (let attempt = 0; attempt < 4; attempt++) {
++  assertDraftWriteAllowed(guard)
++  const old = (await store.load(command.workspace_id))[command.command_id]
++  assertDraftWriteAllowed(guard)
++  if (old) {
++   const current = readApprovalCommand(old, command.workspace_id)
++   if (!sameValue(immutable(current), immutable(desired)) || current.ack && desired.ack && !sameValue(current.ack, desired.ack)) throw new Error('Cannot replace original approval command or ACK')
++   if (current.ack || !desired.ack && !desired.error && current.error) desired = current
++   if (!old.conflicts.length && sameValue(current, desired)) return current
++  }
++  const saved = await store.save(command.workspace_id, command.command_id, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(v => v.id) ?? [], guard)
++  const actual = readApprovalCommand(saved.record, command.workspace_id)
++  if (!saved.record.conflicts.length && sameValue(actual, desired)) return actual
++ }
++ throw new Error('Concurrent approval command remains unresolved')
++}
++export async function dispatchApprovalCommand(command: ApprovalCommand, port: Pick<ApprovalPort, 'decide'> = approvalClient, store = approvalStore,
++ options: { guard?: DraftWriteGuard; beforePost?: () => Promise<void>; onAck?: (ack: ApprovalCommand) => void; beforeDelivery?: () => Promise<void> } = {}): Promise<ApprovalCommand> {
++ const original = await persistApprovalCommand(command, store, options.guard)
++ if (original.ack) { await options.beforeDelivery?.(); return original }
++ await options.beforePost?.(); assertDraftWriteAllowed(options.guard)
++ const raw = await port.decide(original.target_id, original.body, original.command_id)
++ const acknowledged = decodeApprovalCommand(JSON.stringify({ ...original, ack: raw, error: null }), original.workspace_id)
++ options.onAck?.(acknowledged)
++ await options.beforeDelivery?.()
++ return persistApprovalCommand(acknowledged, store, options.guard)
++}
+diff --git a/apps/web/src/features/codex/approvalFixtures.ts b/apps/web/src/features/codex/approvalFixtures.ts
+new file mode 100644
+index 00000000..ee4d4657
+--- /dev/null
++++ b/apps/web/src/features/codex/approvalFixtures.ts
+@@ -0,0 +1,9 @@
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexTurnControlView, GenericApprovalView, GenericApprovalDecisionAck } from '../../../../../packages/contracts/generated/codex-turn-types'
++export const approvalWorkspace = 'workspace_approval_synthetic', approvalActor = 'actor_approval_synthetic'
++export const approvalSession = (): SessionResponse => ({ workspace_id: approvalWorkspace, actor_session_id: approvalActor, role: 'author', csrf_token: 'synthetic-local-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })
++export const approvalView = (): GenericApprovalView => ({ id: 'approval_synthetic', revision: 1, actor_session_id: approvalActor, session_id: 'codex_session_synthetic', turn_id: 'turn_approval_synthetic', run_id: 'job_approval_synthetic', job: { id: 'job_approval_synthetic', status: 'running' }, job_revision: 8,
++ operation: { kind: 'command', command_text: '{"text":"合成 α\\n","version":"codex-synthetic-literal-command-v1"}', cwd: 'turn_outputs', executable_sha256: '1'.repeat(64), environment_sha256: '2'.repeat(64), read_files: [], writable_area: 'turn_outputs', filesystem_scope_sha256: '3'.repeat(64), network: 'denied', operation_profile_sha256: '4'.repeat(64) }, operation_sha256: '5'.repeat(64),
++ created_at: '2026-10-05T00:00:00Z', expires_at: '2099-10-05T00:00:00Z', decision: 'pending', validity: 'current', execution: 'not_started', decided_at: null, started_at: null, finished_at: null, result_sha256: null, error_code: null })
++export const approvalControl = (): CodexTurnControlView => ({ id: 'turn_approval_synthetic', session_id: 'codex_session_synthetic', actor_session_id: approvalActor, job: { id: 'job_approval_synthetic', status: 'running' }, job_revision: 8, run_revision: 2, last_seq: 4, cancel_requested: false, execution: 'active', outcome: null, approval_ids: ['approval_synthetic'], approval_controls: [{ id: 'approval_synthetic', revision: 1, operation_sha256: '5'.repeat(64), decision: 'pending', validity: 'current' }], consent_control: null, manifest_id: null, created_at: '2026-10-05T00:00:00Z', started_at: '2026-10-05T00:00:01Z', finished_at: null, error_code: null })
++export const approvalAck = (decision: 'approve_once' | 'decline' = 'approve_once', actor = approvalActor): GenericApprovalDecisionAck => ({ id: 'approval_synthetic', revision: 2, actor_session_id: actor, operation_sha256: '5'.repeat(64), decision, applied: true, session_id: 'codex_session_synthetic', turn_id: 'turn_approval_synthetic', run_id: 'job_approval_synthetic', job: { id: 'job_approval_synthetic', status: 'running' } })
+diff --git a/apps/web/src/features/codex/approvalForms.ts b/apps/web/src/features/codex/approvalForms.ts
+new file mode 100644
+index 00000000..545b0420
+--- /dev/null
++++ b/apps/web/src/features/codex/approvalForms.ts
+@@ -0,0 +1,36 @@
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { exactObject, sameValue } from '../providers/providerSchema'
++import { turnIdentity } from './turnCommands'
++export type ApprovalFields = { turn_id: string }
++export type ApprovalForm = { version: 1; workspace_id: string; actor_session_id: string; snapshot_id: string; draft_id: string; sequence: number; fields: ApprovalFields }
++export const approvalFormStore = new DraftStore({ name: 'learning-workbench.codex-approval-forms.v1' })
++export const emptyApprovalFields = (): ApprovalFields => ({ turn_id: '' })
++const fail = (): never => { throw new Error('审批表单快照无法核验；原记录保留。') }
++export function decodeApprovalForm(raw: string, workspace: string): ApprovalForm {
++ const value = JSON.parse(raw) as ApprovalForm
++ if (!exactObject(value, ['version', 'workspace_id', 'actor_session_id', 'snapshot_id', 'draft_id', 'sequence', 'fields']) || value.version !== 1
++  || !turnIdentity(workspace) || value.workspace_id !== workspace || !turnIdentity(value.actor_session_id) || !turnIdentity(value.snapshot_id)
++  || !turnIdentity(value.draft_id) || !Number.isSafeInteger(value.sequence) || value.sequence < 1
++  || !exactObject(value.fields, ['turn_id'])
++  || [value.fields.turn_id].some(v => typeof v !== 'string' || v.length > 1000)) fail()
++ return value
++}
++export function snapshotApprovalForm(workspace: string, actor: string, fields: ApprovalFields, previous: ApprovalForm | null): ApprovalForm {
++ return decodeApprovalForm(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor,
++  snapshot_id: `approvalform_${crypto.randomUUID()}`, draft_id: previous?.draft_id ?? `approvaldraft_${crypto.randomUUID()}`, sequence: (previous?.sequence ?? 0) + 1, fields }), workspace)
++}
++export function readApprovalForm(record: DraftRecord, workspace: string): ApprovalForm {
++ const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeApprovalForm(raw, workspace)), first = values[0]
++ if (record.objectId !== first.snapshot_id || values.some(v => !sameValue(v, first))) fail()
++ return first
++}
++/** Immutable edit snapshots prevent delayed saves or another tab from replacing an unsent form. */
++export async function persistApprovalForm(form: ApprovalForm, store = approvalFormStore, guard?: DraftWriteGuard): Promise<void> {
++ const checked = decodeApprovalForm(JSON.stringify(form), form.workspace_id)
++ assertDraftWriteAllowed(guard)
++ const old = (await store.load(form.workspace_id))[form.snapshot_id]
++ assertDraftWriteAllowed(guard)
++ if (old) { if (!sameValue(readApprovalForm(old, form.workspace_id), checked)) fail(); return }
++ const saved = await store.save(form.workspace_id, form.snapshot_id, JSON.stringify(checked), 0, [], guard)
++ if (!sameValue(readApprovalForm(saved.record, form.workspace_id), checked)) fail()
++}
+diff --git a/apps/web/src/features/codex/approvalMemory.ts b/apps/web/src/features/codex/approvalMemory.ts
+new file mode 100644
+index 00000000..3fdeb88c
+--- /dev/null
++++ b/apps/web/src/features/codex/approvalMemory.ts
+@@ -0,0 +1,34 @@
++import { sameValue } from '../providers/providerSchema'
++import { decodeApprovalCommand, type ApprovalCommand } from './approvalCommands'
++import { decodeApprovalForm, type ApprovalForm } from './approvalForms'
++const commands = new Map<string, ApprovalCommand>(), forms = new Map<string, ApprovalForm>(), listeners = new Set<() => void>()
++let revision = 0
++const changed = () => { revision++; listeners.forEach(listener => listener()) }
++export const subscribeApprovalMemory = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
++export const approvalMemoryVersion = () => revision
++export const heldApprovalCommands = (workspace: string) => [...commands.values()].filter(v => v.workspace_id === workspace).map(v => structuredClone(v))
++export const heldApprovalForms = (workspace: string) => [...forms.values()].filter(v => v.workspace_id === workspace).map(v => structuredClone(v))
++export function retainApprovalCommand(command: ApprovalCommand) {
++ const next = decodeApprovalCommand(JSON.stringify(command), command.workspace_id), old = commands.get(next.command_id)
++ const basis = (v: ApprovalCommand) => ({ ...v, ack: null, error: null })
++ if (old && (!sameValue(basis(old), basis(next)) || old.ack && next.ack && !sameValue(old.ack, next.ack))) throw new Error('Original turn command changed')
++ commands.set(next.command_id, old?.ack ? old : next); changed()
++}
++export function releaseApprovalCommand(command: ApprovalCommand) {
++ const old = commands.get(command.command_id), basis = (v: ApprovalCommand) => ({ ...v, ack: null, error: null })
++ // A checked durable ACK also covers an older pending copy. Never release a
++ // newer ACK merely because its earlier pending command reached storage.
++ if (old && (sameValue(old, command) || sameValue(basis(old), basis(command)) && !old.ack
++  && (command.ack || !old.error && command.error))) { commands.delete(command.command_id); changed() }
++}
++export function retainApprovalForm(form: ApprovalForm) {
++ const next = decodeApprovalForm(JSON.stringify(form), form.workspace_id), old = forms.get(next.snapshot_id)
++ if (old && !sameValue(old, next)) throw new Error('Original turn form changed')
++ forms.set(next.snapshot_id, next); changed()
++}
++export function releaseApprovalForm(form: ApprovalForm) {
++ if (sameValue(forms.get(form.snapshot_id), form)) { forms.delete(form.snapshot_id); changed() }
++}
++if (typeof window !== 'undefined') window.addEventListener('beforeunload', event => {
++ if (commands.size || forms.size) { event.preventDefault(); event.returnValue = '' }
++})
+diff --git a/apps/web/src/features/codex/approvalWire.test.ts b/apps/web/src/features/codex/approvalWire.test.ts
+new file mode 100644
+index 00000000..8bc28456
+--- /dev/null
++++ b/apps/web/src/features/codex/approvalWire.test.ts
+@@ -0,0 +1,57 @@
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { approvalClient } from './approvalClient'
++import { dispatchApprovalCommand, type ApprovalCommand } from './approvalCommands'
++import { approvalAck, approvalActor, approvalView, approvalWorkspace } from './approvalFixtures'
++afterEach(() => vi.unstubAllGlobals())
++test('actual generated decision POST persists original actor, key, complete operation basis and approval revision before transport', async () => {
++ const store = new DraftStore({ name: `approval-wire-${crypto.randomUUID()}`, factory: new IDBFactory() }), view = approvalView()
++ const command: ApprovalCommand = { version: 1, workspace_id: approvalWorkspace, actor_session_id: approvalActor, command_id: 'approval_original_key', target_id: view.id,
++  route: 'POST /api/v1/approvals/{id}/decision', basis: { kind: 'approve', view }, body: { expected_revision: 1, operation_sha256: view.operation_sha256, decision: 'approve_once' }, ack: null, error: null }
++ try {
++  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
++   expect(url).toBe('/api/v1/approvals/approval_synthetic/decision'); expect(init.method).toBe('POST')
++   expect(new Headers(init.headers).get('Idempotency-Key')).toBe('approval_original_key'); expect(JSON.parse(init.body as string)).toEqual(command.body)
++   const original = (await store.load(approvalWorkspace))[command.command_id]
++   expect(original, 'the complete original approval command must be durable before the first POST').toBeDefined()
++   expect(JSON.parse(original.text)).toEqual(command)
++   return new Response(JSON.stringify(approvalAck()))
++  }))
++  const result = await dispatchApprovalCommand(command, approvalClient, store)
++  expect(result.ack).toEqual(approvalAck())
++  expect(JSON.parse((await store.load(approvalWorkspace))[command.command_id].text)).toEqual(result)
++ } finally { await store.close() }
++})
++
++test('generated approval GET preserves the complete body and rejects wrong target, extra keys and incomplete operation', async () => {
++ const value = approvalView(), calls: Array<[string, string | undefined]> = []
++ vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => { calls.push([url, init.method]); return new Response(JSON.stringify(value)) }))
++ expect(await approvalClient.read(value.id)).toEqual(value)
++ expect(calls).toEqual([['/api/v1/approvals/approval_synthetic', 'GET']])
++ await expect(approvalClient.read('approval_other')).rejects.toThrow()
++ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...value, private_extra: 'not_allowed' }))))
++ await expect(approvalClient.read(value.id)).rejects.toThrow()
++ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...value, operation: { kind: 'command', command_text: 'partial description' } }))))
++ await expect(approvalClient.read(value.id)).rejects.toThrow()
++})
++test('actual safe decline transport retains full control and learner ACK, never requests academic approval details', async () => {
++ const { approvalControl } = await import('./approvalFixtures'), { makeApprovalCommand } = await import('./approvalCommands')
++ const store = new DraftStore({ name: `approval-decline-wire-${crypto.randomUUID()}`, factory: new IDBFactory() }), paths: string[] = [], actor = 'learner_actual_decision'
++ const original = makeApprovalCommand(approvalWorkspace, actor, { kind: 'decline', control: approvalControl() }, 'approval_synthetic')
++ try {
++  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
++   paths.push(path); expect(init.method).toBe('POST'); expect(JSON.parse(init.body as string).expected_revision).toBe(1)
++   expect(JSON.parse((await store.load(approvalWorkspace))[original.command_id].text)).toEqual(original)
++   return new Response(JSON.stringify(approvalAck('decline', actor)))
++  }))
++  const result = await dispatchApprovalCommand(original, approvalClient, store)
++  expect(result.ack).toEqual(approvalAck('decline', actor)); expect(paths).toEqual(['/api/v1/approvals/approval_synthetic/decision'])
++ } finally { await store.close() }
++})
++test('actual generated POST propagates owner CAS failure without automatic retry or replacement key', async () => {
++ const calls: RequestInit[] = [], body = { expected_revision: 1, operation_sha256: '5'.repeat(64), decision: 'approve_once' as const }
++ vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => { calls.push(init); return new Response(JSON.stringify({ error: { code: 'REVISION_MISMATCH', message: 'synthetic CAS failure' } }), { status: 412 }) }))
++ await expect(approvalClient.decide('approval_synthetic', body, 'original_cas_key')).rejects.toMatchObject({ status: 412, code: 'REVISION_MISMATCH' })
++ expect(calls).toHaveLength(1); expect(new Headers(calls[0].headers).get('Idempotency-Key')).toBe('original_cas_key'); expect(JSON.parse(calls[0].body as string)).toEqual(body)
++})
+diff --git a/apps/web/src/features/codex/useCodexApprovals.ts b/apps/web/src/features/codex/useCodexApprovals.ts
+new file mode 100644
+index 00000000..0830d459
+--- /dev/null
++++ b/apps/web/src/features/codex/useCodexApprovals.ts
+@@ -0,0 +1,173 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexTurnControlView, GenericApprovalView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
++import type { DraftStore, DraftWriteGuard } from '../../workbench/DraftStore'
++import { sameValue } from '../providers/providerSchema'
++import { checkedBootstrap } from './bootstrapClient'
++import { checkedTurn } from './turnClient'
++import { checkedApproval, approvalClient, type ApprovalPort } from './approvalClient'
++import { decodeApprovalCommand, dispatchApprovalCommand, makeApprovalCommand, approvalStore, persistApprovalCommand, readApprovalCommand, type ApprovalCommand } from './approvalCommands'
++import { decodeApprovalForm, emptyApprovalFields, approvalFormStore, persistApprovalForm, readApprovalForm, snapshotApprovalForm, type ApprovalFields, type ApprovalForm } from './approvalForms'
++import { heldApprovalCommands, heldApprovalForms, approvalMemoryVersion, releaseApprovalCommand, releaseApprovalForm, retainApprovalCommand, retainApprovalForm, subscribeApprovalMemory } from './approvalMemory'
++
++const academic = (s: SessionResponse) => s.role === 'author' && !s.active_independent_attempt_id && !s.active_open_book_attempt_id
++const denied = (e: unknown) => e instanceof ApiError && ([401, 403].includes(e.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(e.code ?? ''))
++export function useCodexApprovals(workspace: string, writeAdmitted: boolean, port: ApprovalPort = approvalClient, store: DraftStore = approvalStore, formStore: DraftStore = approvalFormStore) {
++ const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++ useSyncExternalStore(subscribeApprovalMemory, approvalMemoryVersion, approvalMemoryVersion)
++ const admission = useRef(writeAdmitted), revocation = useRef(0)
++ if (admission.current && !writeAdmitted) ++revocation.current
++ admission.current = writeAdmitted
++ const owner = JSON.stringify([workspace, access, revocation.current]), scope = useRef({ owner, port, store, formStore }); scope.current = { owner, port, store, formStore }
++ const live = useRef(false), working = useRef(false), sequence = useRef(0), writers = useRef(new Set<AbortController>())
++ const [renderScope, setRenderScope] = useState({ owner, port, store, formStore }), [identity, setIdentity] = useState<SessionResponse | null>(null), actorRef = useRef<SessionResponse | null>(null)
++ const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
++ const [commands, setCommands] = useState<ApprovalCommand[]>([]), [forms, setForms] = useState<ApprovalForm[]>([])
++ const [form, setForm] = useState<ApprovalForm | null>(null), formRef = useRef<ApprovalForm | null>(null)
++ const [control, setControl] = useState<CodexTurnControlView | null>(null), [detail, setDetail] = useState<GenericApprovalView | null>(null)
++ const currentScope = () => live.current && scope.current.owner === owner && scope.current.port === port && scope.current.store === store && scope.current.formStore === formStore && access === getSessionGeneration()
++ const valid = (token: number) => currentScope() && sequence.current === token
++ const visible = renderScope.owner === owner && renderScope.port === port && renderScope.store === store && renderScope.formStore === formStore
++ const ready = visible && identity !== null, allowed = ready && writeAdmitted && academic(identity)
++ const clearReads = () => { setControl(null); setDetail(null) }
++ const hide = () => { actorRef.current = null; setIdentity(null); clearReads(); setCommands([]); setForms([]) }
++ const begin = () => { if (!currentScope() || !workspace || working.current) return null; working.current = true; setBusy(true); setError(''); setMessage(''); return ++sequence.current }
++ const finish = (token: number) => { if (valid(token)) { working.current = false; setBusy(false) } }
++ const fail = (reason: unknown, reading = false) => {
++  if (denied(reason)) hide()
++  setError(denied(reason) ? '审批当前权限或原 actor 已变化；原命令和表单隔离保留。'
++   : reason instanceof ApiError && reason.status === 503 ? 'BLOCKED：当前操作或固定运行证明不可用；没有执行操作，也未替换原命令。'
++   : reason instanceof ApiError && reason.status === 412 ? '审批版本已变化（412）；原 key、完整 body 和只读基准保留，请独立 GET。'
++   : reason instanceof ApiError && reason.status === 409 ? '审批绑定或阶段冲突（409）；原命令保留，不自动换 key 或重新批准。'
++   : reading ? '当前审批读取未完成或完整绑定不符；没有交付新详情，原记录保留。'
++   : '审批结果或本机保存未知；原命令保留，只能显式回放原 key。')
++ }
++ async function fresh(token: number, subject: boolean, actor?: string) {
++  const value = checkedBootstrap<SessionResponse>('SessionResponse', await port.session())
++  if (!valid(token)) throw new Error('Scope changed')
++  if (value.workspace_id !== workspace || actor && value.actor_session_id !== actor || subject && (!writeAdmitted || !academic(value))) { hide(); throw new ApiError(403, 'Original approval access changed') }
++  actorRef.current = value; setIdentity(value); return value
++ }
++ function writer(check: () => boolean) {
++  const c = new AbortController(); writers.current.add(c); const unsubscribe = subscribeSessionAccess(() => c.abort())
++  return { guard: { allowed: check, signal: c.signal } satisfies DraftWriteGuard, done: () => { unsubscribe(); writers.current.delete(c) } }
++ }
++ const loadCommands = async () => Object.values(await store.load(workspace)).map(v => readApprovalCommand(v, workspace))
++ const loadForms = async () => Object.values(await formStore.load(workspace)).map(v => readApprovalForm(v, workspace))
++ useEffect(() => {
++  live.current = true; ++sequence.current; working.current = false; setRenderScope({ owner, port, store, formStore }); hide(); setForm(null); formRef.current = null; setBusy(false); setError(''); setMessage('')
++  return () => { live.current = false; ++sequence.current; working.current = false; for (const value of writers.current) value.abort() }
++ }, [owner, port, store, formStore])
++ const refresh = async () => {
++  const token = begin(); if (token === null) return
++  hide()
++  try { const session = await fresh(token, false), values = await loadCommands(), drafts = await loadForms(); await fresh(token, false, session.actor_session_id)
++   if (valid(token)) { setCommands(values); setForms(drafts); setMessage('审批本机记录已读取；只恢复原事实，没有自动 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { finish(token) }
++ }
++ const edit = (patch: Partial<ApprovalFields>) => {
++  if (!ready || !currentScope() || working.current) return
++  const previous = formRef.current?.actor_session_id === identity.actor_session_id ? formRef.current : null
++  const next = snapshotApprovalForm(workspace, identity.actor_session_id, { ...(previous?.fields ?? emptyApprovalFields()), ...patch }, previous)
++  formRef.current = next; setForm(next); retainApprovalForm(next); clearReads()
++  const sameActor = () => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id
++  const saving = writer(sameActor)
++  void persistApprovalForm(next, formStore, saving.guard).then(() => { releaseApprovalForm(next); if (sameActor()) setForms(v => [...v.filter(f => f.snapshot_id !== next.snapshot_id), next]) })
++   .catch(() => { if (sameActor()) setError('审批表单尚未落盘；原输入保留在隔离内存，离开前请仅保存本机事实。') }).finally(saving.done)
++ }
++ const restore = async (value: ApprovalForm) => {
++  if (!ready || value.workspace_id !== workspace || value.actor_session_id !== identity.actor_session_id) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  const prior = formRef.current?.snapshot_id, saving = writer(() => valid(token) && actorRef.current?.actor_session_id === actor)
++  try {
++   const original = decodeApprovalForm(JSON.stringify(value), workspace); await fresh(token, false, actor)
++   const record = (await formStore.load(workspace))[original.snapshot_id]; if (!valid(token)) return
++   const held = heldApprovalForms(workspace).find(v => v.snapshot_id === original.snapshot_id), actual = record ? readApprovalForm(record, workspace) : held
++   if (!actual || !sameValue(actual, original) || held && !sameValue(held, original)) throw new Error('Original form changed')
++   await fresh(token, false, actor)
++   const next = snapshotApprovalForm(workspace, actor, original.fields, null); retainApprovalForm(next)
++   await persistApprovalForm(next, formStore, saving.guard); releaseApprovalForm(next); await fresh(token, false, actor)
++   if (valid(token)) { setForms(v => [...v, next]); if (formRef.current?.snapshot_id === prior) { formRef.current = next; setForm(next); clearReads() }; setMessage('原审批表单已核验并保存独立分支；没有 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { saving.done(); finish(token) }
++ }
++ const readControl = async () => {
++  if (!ready || !form || form.actor_session_id !== identity.actor_session_id) return
++  const captured = form, actor = identity.actor_session_id, token = begin(); if (token === null) return
++  clearReads()
++  try {
++   await fresh(token, false, actor)
++   const v = checkedTurn('CodexTurnControlView', await port.control(captured.fields.turn_id))
++   if (v.id !== captured.fields.turn_id) throw new Error('Wrong turn control')
++   await fresh(token, false, actor)
++   if (valid(token) && formRef.current?.snapshot_id === captured.snapshot_id) setControl(v)
++  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
++ }
++ const read = async (id: string, source: CodexTurnControlView | GenericApprovalView | null = control) => {
++  if (!allowed || !source) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  setDetail(null)
++  try {
++   const basis = 'approval_controls' in source ? source.approval_controls.find(a => a.id === id) : source.id === id ? source : null
++   if (!basis) throw new Error('Missing full approval control')
++   await fresh(token, true, actor)
++   const v = checkedApproval('GenericApprovalView', await port.read(id))
++   if (v.id !== id || v.operation_sha256 !== basis.operation_sha256 || v.actor_session_id !== source.actor_session_id || v.session_id !== source.session_id
++    || v.turn_id !== ('approval_controls' in source ? source.id : source.turn_id) || v.job.id !== source.job.id) throw new Error('Wrong approval source')
++   await fresh(token, true, actor)
++   if (valid(token)) setDetail(v)
++  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
++ }
++ async function execute(command: ApprovalCommand, existingToken?: number) {
++  if (!ready || command.workspace_id !== workspace || command.actor_session_id !== identity.actor_session_id || command.ack || command.body.decision === 'approve_once' && !allowed) return
++  const token = existingToken ?? begin(); if (token === null) return
++  const saving = writer(() => valid(token)), subject = command.body.decision === 'approve_once'
++  try {
++   await fresh(token, subject, command.actor_session_id); retainApprovalCommand(command)
++   const saved = await dispatchApprovalCommand(command, port, store, { guard: saving.guard,
++    beforePost: async () => { const values = await loadCommands(); await fresh(token, subject, command.actor_session_id); if (valid(token)) setCommands(values) },
++    onAck: retainApprovalCommand, beforeDelivery: async () => { await fresh(token, subject, command.actor_session_id) } })
++   releaseApprovalCommand(saved); const values = await loadCommands(); await fresh(token, subject, command.actor_session_id)
++   if (valid(token)) { setCommands(values); setMessage('审批原 ACK 已保存：仅是决定事实；执行状态须独立 GET，拒绝也不证明远端已经停止。') }
++  } catch (e) {
++   if (e instanceof ApiError && e.status >= 400 && e.status <= 599 && !heldApprovalCommands(workspace).some(v => v.command_id === command.command_id && v.ack)) {
++    const rejected = decodeApprovalCommand(JSON.stringify({ ...command, error: { status: e.status, code: /^[A-Z][A-Z0-9_]{0,79}$/.test(e.code ?? '') && e.code?.trim() === e.code ? e.code : null } }), workspace)
++    retainApprovalCommand(rejected)
++    if (valid(token) && !denied(e)) { try { const saved = await persistApprovalCommand(rejected, store, saving.guard); releaseApprovalCommand(saved); const values = await loadCommands(); if (valid(token)) setCommands(values) } catch { /* Original remains isolated. */ } }
++   }
++   if (valid(token)) fail(e)
++  } finally { saving.done(); finish(token) }
++ }
++ const held = heldApprovalCommands(workspace), heldForms = heldApprovalForms(workspace), all = new Map(commands.map(v => [v.command_id, v]))
++ for (const value of held) if (!all.get(value.command_id)?.ack || value.ack) all.set(value.command_id, value)
++ // Prior academic approval facts never remove the separate safe decline action.
++ const hasCommand = (id: string, decision?: 'decline') => [...all.values()].some(c => c.actor_session_id === identity?.actor_session_id && c.target_id === id && (!decision || c.body.decision === decision))
++ const decide = async (id: string, decision: 'approve_once' | 'decline') => {
++  if (!ready || hasCommand(id, decision === 'decline' ? 'decline' : undefined) || decision === 'approve_once' && !allowed) return
++  const basis: ApprovalCommand['basis'] | null = decision === 'decline' && control ? { kind: 'decline', control } : decision === 'approve_once' && detail?.id === id ? { kind: 'approve', view: detail } : null
++  if (!basis) return
++  const token = begin(); if (token === null) return
++  try { await execute(makeApprovalCommand(workspace, identity.actor_session_id, basis, id), token) } catch (e) { if (valid(token)) fail(e); finish(token) }
++ }
++ const saveMemory = async () => {
++  if (!ready) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  const saving = writer(() => valid(token))
++  try { await fresh(token, false, actor)
++   for (const value of heldApprovalCommands(workspace)) { const saved = await persistApprovalCommand(value, store, saving.guard); releaseApprovalCommand(saved) }
++   for (const value of heldApprovalForms(workspace)) { await persistApprovalForm(value, formStore, saving.guard); releaseApprovalForm(value) }
++   const values = await loadCommands(), drafts = await loadForms(); await fresh(token, false, actor)
++   if (valid(token)) { setCommands(values); setForms(drafts); setMessage('仅保存审批原 actor 的本机事实和表单；未发送任何 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { saving.done(); finish(token) }
++ }
++ const allForms = new Map([...forms, ...heldForms].map(v => [v.snapshot_id, v])), latest = new Map<string, ApprovalForm>()
++ for (const value of allForms.values()) if (ready && value.actor_session_id === identity.actor_session_id && (!latest.has(value.draft_id) || latest.get(value.draft_id)!.sequence < value.sequence)) latest.set(value.draft_id, value)
++ const retained = held.length + heldForms.length
++ return { ready, allowed, busy: visible && busy, actor: ready ? identity.actor_session_id : null,
++  fields: ready && form?.actor_session_id === identity.actor_session_id ? form.fields : emptyApprovalFields(), forms: [...latest.values()],
++  commands: ready ? [...all.values()].filter(c => c.body.decision === 'decline' || allowed && c.actor_session_id === identity.actor_session_id) : [],
++  control: ready ? control : null, detail: allowed ? detail : null,
++  error: visible ? error : '', message: visible ? message : '', retained, dirty: retained > 0 || allForms.size > 0 || [...all.values()].some(v => !v.ack), safe: !working.current && retained === 0, isolated: !working.current && retained > 0,
++  canSave: ready && retained > 0, hasCommand, canReplay: (c: ApprovalCommand) => ready && c.actor_session_id === identity.actor_session_id && !c.ack && (c.body.decision === 'decline' || allowed) && !held.some(v => v.command_id === c.command_id && v.ack),
++  refresh, edit, restore, readControl, read, execute, decide, saveMemory }
++}

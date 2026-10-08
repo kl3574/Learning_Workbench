@@ -1,0 +1,29 @@
+# Session interrupt UI: bounded actual Chrome verification
+
+Source is fixed 22dade7996f13634202250ef5e1c05dc976214a5, sole PRODUCT_DESIGN v3.0.15 SHA b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec. No product, spec, dependency, tracked output or canonical file was edited, staged or committed. The Vite output is in the separate private harness directory.
+
+## Actual successful run
+
+run-02 started 2026-10-04T19:44:59.205906Z and finished 19:45:07.478729Z. Build exit0; native exit0 in7.543486384s; wrapper exit0. Native log SHA78d183295b68aa7076bb6cde05821bb24301f979bcea07d423ffef0f2d860241. The original bounded assertions used15000ms unchanged from the reviewed reference. Browser version154.0.8037.97. Build retains external-outDir and large-chunk warnings.
+
+The unchanged source was served through actual loopback Uvicorn, original app lifespan, SQLite owners and real Chrome IndexedDB. Existing pure-memory ControlledRuntime performs one explicitly synthetic bootstrap. The ordinary provider config contains example.invalid/synthetic-model and no provider secret. Two real preparations return unavailable proof/awaiting_approval; no Provider grant/start exists and the default Codex executor stays None.
+
+The learner explicitly reads current session and safe turn control. The first UI POST is intercepted only after the complete original actor/workspace/key/body/session+turn basis is in IndexedDB, then sent once to the real owner. Its real200 interrupt_requested ACK is deliberately lost. The actual turn is cancelled/terminal, started_at null, cancel_requested true. Reload and explicit local reads send zero automatic POST. Explicit original-key replay sends byte-identical body and receives byte-identical full original ACK, which is saved durably. Independent current GET shows the released session/cancelled turn without replacing the ACK.
+
+A second actual awaiting preparation produces a fresh session revision. An explicit competing HTTP interrupt advances it before the UI sends its saved basis. The UI receives real412, keeps the original actor/key/full body/basis/error, preserves it through a reload/current GET, and explicit same-key replay remains412. Switching to a separately issued learner actor leaves both records intact and disables the old unknown command replay. Four browser UI interrupt POSTs plus one explicitly separate fixture competing interrupt POST are asserted. No other browser POST is asserted; fixture bootstrap/config/role/prepare writes are separate setup actions, not omitted from the boundary.
+
+Four named application seam sentinels (SyntheticCodexExecutor.execute, ProviderTransport.stream, CodexOperationRegistry.execute, subsequent ControlledRuntime.execute) are all0. Synthetic bootstrap count1; executorNone. Terminal sentinel phase is lifespan-exited. The harness awaited Chrome close and the owned Uvicorn shutdown. These are scoped application-seam observations, not a global OS/network monitor. No actual model/Codex CLI/host tool execution, running-job interrupt, independent/open_book browser path, all-AppServer, M6.3 acceptance or M7 restore claim is made. No CI result is borrowed.
+
+## Original failures and preservation loss
+
+The first run-01 failed before Chrome at the private config setup assertion. The fixture omitted secret_store.initialize present in the existing turn_case. Its finally then read a nonexistent sentinel file and raised ENOENT; no zero count may be inferred. Its initial outcome/raw hashes were emitted in tool output, but the author accidentally ran the old absolute directory's script again while preparing run-02. This overwritten first dynamic raw is LOST, not retained or reconstructed. The second accidental execution also failed before Chrome. Current run-01 files are that second execution, not the first. LOSS_V2.json gives both exact UTC intervals, first observed hashes and the retained second receipt. Both are harness setup failures, not demonstrated product failures. Source scripts stayed byte-identical. Do not call the later PASS a same-test product RED/GREEN.
+
+run-02 only adds the missing private store initialization, records missing sentinels as NOT_AVAILABLE on early startup failure, and refuses four preexisting dynamic output paths. Root's later six-path no-overwrite requirement arrived after run-02 terminated; the recorded script was not rewritten to claim it already had that requirement. Future attempts must use a fresh numbered directory, absolute runner path and all-six guard. No further product run was needed.
+
+## Input and candidate limits
+
+All current retained before/after/terminal source maps contain all1525 non-progress Git inputs with modes, Git blob IDs, SHA256 and lengths; all agree, and the sealing script reads every corresponding Git blob plus all current files. Engineering status remains clean. The first execution's overwritten maps are not represented as separately retained raw maps.
+
+The six original PNGs (three stages at1440/390) were individually viewed by the author: awaiting learner safe control; original ACK beside independent current GET; new actor's read-only old command/412. Only synthetic safe IDs/status/idempotency keys are visible, with no cookie, CSRF token, authentication secret or academic content. The dialog/document geometry checks found no horizontal overflow. The390 screenshot viewport naturally shows a subset of the long scrollable panel; it is not a full-page content proof.
+
+Only exact entries in SAFE_CANDIDATES.json are admitted as sharing candidates, still subject to root readback. Bytes are copied exactly; no transformations. Private fixture/auth files, runtime data/DB/encryption keys/browser profile/cache, private-paths.json, built bundles and all unspecified files are excluded. Existing prior evidence and canonical trees remain untouched.

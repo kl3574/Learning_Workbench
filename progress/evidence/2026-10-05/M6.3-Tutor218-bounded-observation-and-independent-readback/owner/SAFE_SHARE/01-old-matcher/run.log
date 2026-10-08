@@ -1,0 +1,42 @@
+
+Running 3 tests using 1 worker
+
+  ✓  1 tests/e2e/tutor-completion.spec.ts:5:3 › Tutor completion observer sees synthetic visible state after 200 ms (335ms)
+  ✘  2 tests/e2e/tutor-completion.spec.ts:5:3 › Tutor completion observer sees synthetic visible state after 4900 ms (5.1s)
+  ✓  3 tests/e2e/tutor-completion.spec.ts:17:1 › Tutor completion observer rejects when the exact completed heading never appears (5.1s)
+
+
+  1) tests/e2e/tutor-completion.spec.ts:5:3 › Tutor completion observer sees synthetic visible state after 4900 ms 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: '真实问答线程与任务', exact: true }).getByRole('heading', { name: '真实任务状态：completed', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: '真实问答线程与任务', exact: true }).getByRole('heading', { name: '真实任务状态：completed', exact: true }) with timeout 5000ms
+      - waiting for getByRole('region', { name: '真实问答线程与任务', exact: true }).getByRole('heading', { name: '真实任务状态：completed', exact: true })
+
+
+       at tutorCompletion.ts:5
+
+      3 | /** Keep this one completion observation within the original five-second budget. */
+      4 | export async function expectTutorCompletion(completed: Locator): Promise<void> {
+    > 5 |   await expect(completed).toBeVisible({ timeout: 5000 })
+        |                           ^
+      6 | }
+      7 |
+        at expectTutorCompletion (<LOCAL_HOME>/.cache/learning-workbench-acceptance/m63-tutor-completion-observation-oct04/tests/e2e/tutorCompletion.ts:5:27)
+        at <LOCAL_HOME>/.cache/learning-workbench-acceptance/m63-tutor-completion-observation-oct04/tests/e2e/tutor-completion.spec.ts:12:11
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m63-tutor-completion-observation-evidence-oct04/01-old-matcher/artifacts/tutor-completion-Tutor-com-c4b9b-visible-state-after-4900-ms/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m63-tutor-completion-observation-evidence-oct04/01-old-matcher/artifacts/tutor-completion-Tutor-com-c4b9b-visible-state-after-4900-ms/error-context.md
+
+  1 failed
+    tests/e2e/tutor-completion.spec.ts:5:3 › Tutor completion observer sees synthetic visible state after 4900 ms 
+  2 passed (12.6s)

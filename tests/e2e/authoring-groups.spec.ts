@@ -3,6 +3,7 @@ import { expect, test, type BrowserType, type Locator, type Page, type TestInfo 
 import type { AuthoringGroupDraftView, AuthoringGroupJobView, AuthoringGroupNumericCheckView, AuthoringPrivateSolutionView, ConsentProposalView, JobRef, JobSnapshot, NumericCheckDecisionAck, SessionResponse } from '../../packages/contracts/generated/api-types'
 import { AuthoringRuntime } from './authoringRuntime'
 import { observeAuthoringPrepare } from './authoringDiagnostic'
+import { createAuthoringGrantDiagnostic } from './authoringGrantDiagnostic'
 
 const providerId = 'provider_authoring_group_native'
 const topic = '原创合成组合创作'
@@ -55,7 +56,7 @@ async function readPrepared(page: Page, dialog: Locator, ack: JobRef, diagnostic
   expect(result.raw_answer).toBeNull(); expect(result.consent_id).toBeNull(); expect(result.content_plan).toBeNull()
   return result
 }
-async function grant(page: Page, dialog: Locator, ack: JobRef) {
+async function grant(page: Page, dialog: Locator, ack: JobRef, diagnostic?: ReturnType<typeof createAuthoringGrantDiagnostic>) {
   const preview = dialog.getByRole('region', { name: '准备授权预览', exact: true })
   await expect(preview.getByLabel('最大输入 token', { exact: true })).toBeEnabled()
   await preview.getByLabel('最大输入 token', { exact: true }).fill('20000')
@@ -72,11 +73,14 @@ async function grant(page: Page, dialog: Locator, ack: JobRef) {
   await dialog.getByRole('button', { name: '准备批准组合草稿模型调用', exact: true }).click()
   const granting = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/consents'))
   await dialog.getByRole('button', { name: '确认发送批准授权', exact: true }).click()
-  expect((await granting).status()).toBe(201)
+  const grantStatus = (await granting).status()
+  diagnostic?.grantAck(grantStatus)
+  expect(grantStatus).toBe(201)
   let completed!: AuthoringGroupJobView
   // Preserve Playwright's actual default 5 s assertion; failure is diagnosed,
   // never converted into a longer hidden acceptance window.
-  await expect.poll(async () => { completed = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json()); return completed.summary.status }).toBe('completed')
+  diagnostic?.pollStart()
+  await expect.poll(async () => { completed = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json()); const status = completed.summary.status; diagnostic?.pollStatus(status); return status }).toBe('completed')
   await dialog.getByRole('button', { name: '重新读取本次创作任务', exact: true }).click()
   await dialog.getByRole('button', { name: '读取这份准确组合候选', exact: true }).click()
   const group = dialog.getByRole('region', { name: '组合草稿候选', exact: true })
@@ -298,6 +302,7 @@ test('native practice group replays its lost prepare ACK with one key and clears
   test.setTimeout(120_000)
   const runtime = await AuthoringRuntime.start('practice_set', 'groups'), errors: string[] = []
   let observer: Awaited<ReturnType<typeof observeAuthoringPrepare>> | undefined
+  let grantObserver: ReturnType<typeof createAuthoringGrantDiagnostic> | undefined
   try {
     const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
     observer = await observeAuthoringPrepare(page)
@@ -326,7 +331,8 @@ test('native practice group replays its lost prepare ACK with one key and clears
     await page.unroute('**/api/v1/authoring/group-jobs')
     const prepared = await readPrepared(page, dialog, originalAck, { observer, info })
     expect(prepared.preparation.targets.map(value => value.ref.entity)).toEqual(['lesson', 'concept'])
-    const { completed, draft, group, proposal } = await grant(page, dialog, originalAck)
+    grantObserver = createAuthoringGrantDiagnostic()
+    const { completed, draft, group, proposal } = await grantObserver.around(() => grant(page, dialog, originalAck, grantObserver))
     expect(draft.root.entity).toBe('practice_set')
     expect(JSON.stringify(draft)).not.toContain('accepted_answers'); expect(JSON.stringify(draft)).not.toContain('私有合成解答')
     await expect(group.getByRole('region', { name: '私有解答草稿', exact: true })).toHaveCount(0)
@@ -348,7 +354,10 @@ test('native practice group replays its lost prepare ACK with one key and clears
     const recovery = await restartAndReadOriginal(runtime, playwright.chromium, completed, draft, solution, errors)
     expect(errors).toEqual([])
     writeFileSync(info.outputPath('group-practice-actual.json'), JSON.stringify({ scope: 'Lost browser prepare response after actual server commit, then explicit identical original command replay. One original Job and one actual loopback model dispatch. Exact existing Content targets, public/private separation and real role change clearing without page reload. No review or publication.', prepare_attempts: attempts, original_prepare_ack: originalAck, prepared, completed, proposal_id: proposal.id, draft, solution, cancellation, recovery, runtime: recovery.provider_before, bounds: { wide, narrow }, page_errors: errors }, null, 2))
-  } finally { observer?.dispose(); await runtime.close() }
+  } finally {
+    if (grantObserver) await grantObserver.finallyEnter(info)
+    observer?.dispose(); await runtime.close()
+  }
 })
 
 

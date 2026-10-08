@@ -1,0 +1,1092 @@
+diff --git a/apps/web/src/features/authoring/AuthoringPanel.tsx b/apps/web/src/features/authoring/AuthoringPanel.tsx
+index 488345d2..0cec1ffa 100644
+--- a/apps/web/src/features/authoring/AuthoringPanel.tsx
++++ b/apps/web/src/features/authoring/AuthoringPanel.tsx
+@@ -18,23 +18,26 @@ import type { DraftStore } from '../../workbench/DraftStore'
+ import { CodexBootstrapPanel, type BootstrapPanelState } from '../codex/CodexBootstrapPanel'
+ import { CodexTurnPanel, type TurnPanelState } from '../codex/CodexTurnPanel'
+ import type { TurnPort } from '../codex/turnClient'
++import { CodexArtifactsPanel, type ArtifactsPanelState } from '../codex/CodexArtifactsPanel'
++import type { ArtifactPort } from '../codex/artifactClient'
+ import './authoring.css'
+ export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void; isolationLabel?: '保留本地会话隔离内存，丢弃临时表单并前往角色控制' }
+-export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider, bootstrap, bootstrapStore, turn, turnStore, turnFormStore }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort; bootstrap?: BootstrapPort; bootstrapStore?: DraftStore; turn?: TurnPort; turnStore?: DraftStore; turnFormStore?: DraftStore }) {
++export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider, bootstrap, bootstrapStore, turn, turnStore, turnFormStore, artifact, artifactStore, artifactFormStore }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort; bootstrap?: BootstrapPort; bootstrapStore?: DraftStore; turn?: TurnPort; turnStore?: DraftStore; turnFormStore?: DraftStore; artifact?: ArtifactPort; artifactStore?: DraftStore; artifactFormStore?: DraftStore }) {
+   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+   const state = useAuthoring(workspace, paused, port), [formDirty, setFormDirty] = useState(false), [consentState, setConsentState] = useState({ dirty: false, safe: true })
+   const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState)
+   const [impactsOpen, setImpactsOpen] = useState(false), [impactState, setImpactState] = useState<ImpactState>({ dirty: false, safe: true, isolated: false })
+   const [bootstrapState, setBootstrapState] = useState<BootstrapPanelState>({ dirty: false, safe: true, isolated: false })
+   const [turnState, setTurnState] = useState<TurnPanelState>({ dirty: false, safe: true, isolated: false }), [selectedCodexSession, setSelectedCodexSession] = useState<string | null>(null)
++  const [artifactState, setArtifactState] = useState<ArtifactsPanelState>({ dirty: false, safe: true, isolated: false })
+   const callback = useRef(onState); callback.current = onState
+   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
+   const heldReviewForms = pendingReviewForms(workspace, 'authoring')
+-  const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspace, 'authoring') }, [workspace, reviewState.discardForms])
++  const discardForms = useCallback(() => { reviewState.discardForms(); artifactState.discardForms?.(); discardReviewForms(workspace, 'authoring') }, [workspace, reviewState.discardForms, artifactState.discardForms])
+   useEffect(() => { if (!state.academic) { setFormDirty(false); setConsentState({ dirty: false, safe: true }) } }, [state.academic, workspace, access])
+   useEffect(() => { setSelectedCodexSession(null) }, [workspace, access, bootstrap, turn])
+-  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty || turnState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe && turnState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated || turnState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated) && (turnState.safe || turnState.isolated)
+-  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated || turnState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated, turnState.isolated])
++  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty || turnState.dirty || artifactState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe && turnState.safe && artifactState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated || turnState.isolated || artifactState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated) && (turnState.safe || turnState.isolated) && (artifactState.safe || artifactState.isolated)
++  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated || turnState.isolated || artifactState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated, turnState.isolated, artifactState.isolated])
+   const detail = state.detail, draft = state.draft, numeric = state.numeric
+   return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。</p>
+     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
+@@ -61,6 +64,7 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port
+     <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
+     <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} onSessionSelect={setSelectedCodexSession} />
+     <CodexTurnPanel port={turn} store={turnStore} formStore={turnFormStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} currentBlock={state.academic ? currentBlock : null} selectedSession={selectedCodexSession} onState={setTurnState} />
++    <CodexArtifactsPanel workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} port={artifact} store={artifactStore} formStore={artifactFormStore} onState={setArtifactState} />
+     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
+     {reviewOpen && (draft && 'root' in draft
+       ? <ReviewPanel formScope="authoring" formOwner="authoring_group" workspace={workspace} paused={paused || !state.academic} candidate={state.academic ? draft.candidate : null} candidateState="draft" onState={setReviewState} />
+diff --git a/apps/web/src/features/codex/ArtifactImportNavigation.test.tsx b/apps/web/src/features/codex/ArtifactImportNavigation.test.tsx
+new file mode 100644
+index 00000000..c6f49618
+--- /dev/null
++++ b/apps/web/src/features/codex/ArtifactImportNavigation.test.tsx
+@@ -0,0 +1,126 @@
++import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import type { ImportPreview, ImportDraftSnapshot, JobSnapshot } from '../../../../../packages/contracts/generated/api-types'
++import { DraftStore } from '../../workbench/DraftStore'
++import { CodexArtifactsPanel } from './CodexArtifactsPanel'
++import { artifactAck, artifactActor, artifactImport, artifactManifest, artifactWorkspace } from './artifactFixtures'
++import { artifactClient } from './artifactClient'
++import { makeArtifactCommand, persistArtifactCommand } from './artifactCommands'
++import { session } from './bootstrapTestFixtures'
++afterEach(() => { cleanup(); localStorage.clear(); vi.unstubAllGlobals() })
++test('explicit checked aggregate child opens actual ordinary Import GET and draft preview without commit, Review or publish POST', async () => {
++ const store = new DraftStore({ name: `artifact-nav-${crypto.randomUUID()}`, factory: new IDBFactory() }), forms = new DraftStore({ name: `artifact-navform-${crypto.randomUUID()}`, factory: new IDBFactory() })
++ const command = { ...makeArtifactCommand(artifactWorkspace, artifactActor, artifactManifest(), ['artifact_synthetic_md']), ack: artifactAck }
++ const snapshot: ImportPreview = { id: 'import_artifact_child', status: 'preview_ready', input_sha256: artifactManifest().manifest.entries[0].sha256, warnings: [], candidate_summary: { course_title: '回导合成候选', lesson_count: 0, block_count: 0, unresolved_refs: [] }, preview_refs: ['draft_artifact_child'] }
++ const job: JobSnapshot = { id: 'job_artifact_child', workspace_id: artifactWorkspace, kind: 'import_parse', status: 'awaiting_approval', revision: 3, created_at: '2026-10-04T00:00:00Z', updated_at: '2026-10-04T00:00:00Z', progress: { completed: 1, total: 1, label: 'preview' }, result_refs: [], warnings: [], error: null }
++ const draft: ImportDraftSnapshot = { id: 'draft_artifact_child', kind: 'course', revision: 1, base_ref: null, state: 'draft', candidate_sha256: 'a'.repeat(64), warnings: [], payload: { id: 'course_artifact', revision: 1, entity: 'course', title: '真实普通预览组件合成正文 α', audience: '测试', lesson_refs: [] } }
++ const calls: string[] = []
++ vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
++  calls.push(`${init.method} ${path}`); expect(init.method).toBe('GET')
++  const body = path === '/api/v1/session' ? { ...session(), workspace_id: artifactWorkspace, actor_session_id: artifactActor }
++   : path.startsWith('/api/v1/courses') ? { items: [], next_cursor: null }
++    : path === '/api/v1/codex/artifact-imports/job_artifact_import' ? artifactImport()
++     : path === '/api/v1/imports/import_artifact_child' ? snapshot
++      : path === '/api/v1/jobs/job_artifact_child' ? job
++       : path === '/api/v1/drafts/draft_artifact_child' ? draft : null
++  if (!body) throw new Error(`Unexpected synthetic route ${path}`)
++  return new Response(JSON.stringify(body))
++ }))
++ try {
++  await persistArtifactCommand(command, store)
++  render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={artifactClient} store={store} formStore={forms} />)
++  expect(calls).toEqual([]); fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText(/产物本机记录已读取/)
++  fireEvent.click(screen.getByText('读取回导当前子项 job_artifact_import')); await screen.findByLabelText('回导聚合当前 GET')
++  fireEvent.click(screen.getByText('打开普通 Import 预览 import_artifact_child'))
++  const read = await screen.findByText('读取指定回导预览 import_artifact_child')
++  await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false))
++  expect(calls).not.toContain('GET /api/v1/imports/import_artifact_child')
++  fireEvent.click(read); await screen.findByText('真实普通预览组件合成正文 α')
++  expect(calls).toContain('GET /api/v1/imports/import_artifact_child'); expect(calls).toContain('GET /api/v1/jobs/job_artifact_child'); expect(calls).toContain('GET /api/v1/drafts/draft_artifact_child')
++  expect(calls.every(v => v.startsWith('GET '))).toBe(true)
++  expect((screen.getByText('确认导入当前候选') as HTMLButtonElement).disabled).toBe(true)
++  expect(JSON.parse((await store.load(artifactWorkspace))[command.command_id].text).ack).toEqual(artifactAck)
++ } finally { cleanup(); await store.close(); await forms.close() }
++})
++
++test.each(['actor', 'workspace'] as const)('a clean isolated preview does not lock the new current %s out of their own checked Import child', async scope => {
++ const store = new DraftStore({ name: `artifact-scope-${crypto.randomUUID()}`, factory: new IDBFactory() }), forms = new DraftStore({ name: `artifact-scopeform-${crypto.randomUUID()}`, factory: new IDBFactory() })
++ let currentActor = artifactActor, currentWorkspace = artifactWorkspace
++ const otherActor = scope === 'actor' ? 'session_artifact_other' : artifactActor, otherWorkspace = scope === 'workspace' ? 'workspace_artifact_other' : artifactWorkspace, otherAck = { id: 'job_artifact_other', status: 'queued' as const }
++ const first = { ...makeArtifactCommand(artifactWorkspace, artifactActor, artifactManifest(), ['artifact_synthetic_md']), ack: artifactAck }
++ const second = { ...makeArtifactCommand(otherWorkspace, otherActor, artifactManifest(), ['artifact_synthetic_md']), ack: otherAck }
++ const secondView = { ...artifactImport(), actor_session_id: otherActor, job: { ...otherAck, status: 'completed' as const }, items: [{ ...artifactImport().items[0], import_id: 'import_artifact_other', job: { id: 'job_artifact_other_child', status: 'awaiting_approval' as const } }] }
++ const calls: string[] = []
++ vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
++  calls.push(`${init.method} ${path}`); expect(init.method).toBe('GET')
++  const body = path === '/api/v1/session' ? { ...session(), workspace_id: currentWorkspace, actor_session_id: currentActor }
++   : path.startsWith('/api/v1/courses') ? { items: [], next_cursor: null }
++    : path === '/api/v1/codex/artifact-imports/job_artifact_import' ? artifactImport()
++     : path === '/api/v1/codex/artifact-imports/job_artifact_other' ? secondView : null
++  if (!body) throw new Error(`Unexpected synthetic route ${path}`)
++  return new Response(JSON.stringify(body))
++ }))
++ try {
++  await persistArtifactCommand(first, store); await persistArtifactCommand(second, store)
++  const originals = await store.load(artifactWorkspace), otherOriginals = await store.load(otherWorkspace)
++  const rendered = render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={artifactClient} store={store} formStore={forms} />)
++  fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText(/产物本机记录已读取/)
++  fireEvent.click(screen.getByText('读取回导当前子项 job_artifact_import')); await screen.findByLabelText('回导聚合当前 GET')
++  fireEvent.click(screen.getByText('打开普通 Import 预览 import_artifact_child'))
++  await waitFor(() => expect((screen.getByText('读取指定回导预览 import_artifact_child') as HTMLButtonElement).disabled).toBe(false))
++  currentActor = otherActor; currentWorkspace = otherWorkspace
++  if (scope === 'workspace') rendered.rerender(<CodexArtifactsPanel workspace={otherWorkspace} writeAdmitted port={artifactClient} store={store} formStore={forms} />)
++  fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText('读取回导当前子项 job_artifact_other')
++  fireEvent.click(screen.getByText('读取回导当前子项 job_artifact_other')); await screen.findByText(/Import import_artifact_other/)
++  const open = screen.getByText('打开普通 Import 预览 import_artifact_other')
++  expect((open as HTMLButtonElement).disabled, 'the old clean hidden preview must not lock the current actor child').toBe(false)
++  fireEvent.click(open)
++  await waitFor(() => expect((screen.getByText('读取指定回导预览 import_artifact_other') as HTMLButtonElement).disabled).toBe(false))
++  expect(await store.load(artifactWorkspace)).toEqual(originals); expect(await store.load(otherWorkspace)).toEqual(otherOriginals); expect(calls.every(v => v.startsWith('GET '))).toBe(true)
++ } finally { cleanup(); await store.close(); await forms.close() }
++})
++
++test('dirty ordinary Import settings survive actor isolation until an explicit local discard, and original journals stay unchanged', async () => {
++ const store = new DraftStore({ name: `artifact-dirty-${crypto.randomUUID()}`, factory: new IDBFactory() }), forms = new DraftStore({ name: `artifact-dirtyform-${crypto.randomUUID()}`, factory: new IDBFactory() })
++ let currentActor = artifactActor
++ const otherActor = 'session_dirty_other', otherAck = { id: 'job_dirty_other', status: 'queued' as const }
++ const commands = [{ ...makeArtifactCommand(artifactWorkspace, artifactActor, artifactManifest(), ['artifact_synthetic_md']), ack: artifactAck }, { ...makeArtifactCommand(artifactWorkspace, otherActor, artifactManifest(), ['artifact_synthetic_md']), ack: otherAck }]
++ const other = { ...artifactImport(), actor_session_id: otherActor, job: { ...otherAck, status: 'completed' as const }, items: [{ ...artifactImport().items[0], import_id: 'import_dirty_other', job: { id: 'job_dirty_child', status: 'awaiting_approval' as const } }] }
++ const snapshot: ImportPreview = { id: 'import_artifact_child', status: 'preview_ready', input_sha256: artifactManifest().manifest.entries[0].sha256, warnings: [], candidate_summary: { course_title: '未确认原预览', lesson_count: 0, block_count: 0, unresolved_refs: [] }, preview_refs: [] }
++ const job: JobSnapshot = { id: 'job_artifact_child', workspace_id: artifactWorkspace, kind: 'import_parse', status: 'awaiting_approval', revision: 3, created_at: '2026-10-04T00:00:00Z', updated_at: '2026-10-04T00:00:00Z', progress: { completed: 1, total: 1, label: 'preview' }, result_refs: [], warnings: [], error: null }
++ const onState = vi.fn()
++ vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
++  expect(init.method).toBe('GET')
++  const body = path === '/api/v1/session' ? { ...session(), workspace_id: artifactWorkspace, actor_session_id: currentActor }
++   : path.startsWith('/api/v1/courses') ? { items: [], next_cursor: null }
++    : path === '/api/v1/codex/artifact-imports/job_artifact_import' ? artifactImport()
++     : path === '/api/v1/codex/artifact-imports/job_dirty_other' ? other
++      : path === '/api/v1/imports/import_artifact_child' ? snapshot : path === '/api/v1/jobs/job_artifact_child' ? job : null
++  if (!body) throw new Error(`Unexpected route ${path}`)
++  return new Response(JSON.stringify(body))
++ }))
++ try {
++  for (const c of commands) await persistArtifactCommand(c, store)
++  const original = await store.load(artifactWorkspace)
++  render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={artifactClient} store={store} formStore={forms} onState={onState} />)
++  fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText(/产物本机记录已读取/)
++  fireEvent.click(screen.getByText('读取回导当前子项 job_artifact_import')); await screen.findByLabelText('回导聚合当前 GET')
++  fireEvent.click(screen.getByText('打开普通 Import 预览 import_artifact_child'))
++  const read = await screen.findByText('读取指定回导预览 import_artifact_child'); await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
++  await screen.findByText('未确认原预览'); fireEvent.click(screen.getByText('添加精确映射')); fireEvent.change(screen.getByLabelText('原对象 ID'), { target: { value: 'old_original' } })
++  await waitFor(() => expect(onState.mock.lastCall?.[0].dirty).toBe(true))
++  currentActor = otherActor; fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText('读取回导当前子项 job_dirty_other')
++  fireEvent.click(screen.getByText('读取回导当前子项 job_dirty_other')); await screen.findByText(/Import import_dirty_other/)
++  expect((screen.getByText('打开普通 Import 预览 import_dirty_other') as HTMLButtonElement).disabled).toBe(true)
++  expect(screen.queryByLabelText('原对象 ID')).toBeNull()
++  currentActor = artifactActor; fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText('读取回导当前子项 job_artifact_import')
++  await waitFor(() => expect((screen.getByLabelText('原对象 ID') as HTMLInputElement).value).toBe('old_original'))
++  currentActor = otherActor; fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText('读取回导当前子项 job_dirty_other')
++  fireEvent.click(screen.getByText('读取回导当前子项 job_dirty_other')); await screen.findByText(/Import import_dirty_other/)
++  fireEvent.click(screen.getByText('保留原命令，明确丢弃旧预览临时设置并关闭'))
++  await waitFor(() => expect((screen.getByText('打开普通 Import 预览 import_dirty_other') as HTMLButtonElement).disabled).toBe(false))
++  fireEvent.click(screen.getByText('打开普通 Import 预览 import_dirty_other')); await screen.findByText('读取指定回导预览 import_dirty_other')
++  expect(await store.load(artifactWorkspace)).toEqual(original)
++ } finally { cleanup(); await store.close(); await forms.close() }
++})
+diff --git a/apps/web/src/features/codex/CodexArtifactsPanel.test.tsx b/apps/web/src/features/codex/CodexArtifactsPanel.test.tsx
+new file mode 100644
+index 00000000..beb90b8a
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexArtifactsPanel.test.tsx
+@@ -0,0 +1,134 @@
++import { Blob as BinaryBlob } from 'node:buffer'
++import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { ApiError } from '../../api/client'
++import { deferred, session } from './bootstrapTestFixtures'
++import { artifactAck, artifactActor, artifactData, artifactImport, artifactManifest, artifactWorkspace, artifactUnknownManifest, artifactEmptyManifest } from './artifactFixtures'
++import type { ArtifactPort } from './artifactClient'
++import { CodexArtifactsPanel } from './CodexArtifactsPanel'
++import { heldArtifactCommands, heldArtifactForms, releaseArtifactCommand, releaseArtifactForm } from './artifactMemory'
++import { persistArtifactForm, snapshotArtifactForm } from './artifactForms'
++import { readArtifactCommand } from './artifactCommands'
++const stores: DraftStore[] = []
++const local = () => { const s = new DraftStore({ name: `artifact-panel-${crypto.randomUUID()}`, factory: new IDBFactory() }); stores.push(s); return s }
++const auth = () => ({ ...session(), workspace_id: artifactWorkspace, actor_session_id: artifactActor })
++const port = (): ArtifactPort => ({ session: vi.fn(async () => auth()), manifest: vi.fn(async () => artifactManifest()), import: vi.fn(async () => artifactAck), imports: vi.fn(async () => artifactImport()), download: vi.fn(async () => new BinaryBlob([artifactData]) as unknown as Blob) })
++afterEach(async () => { cleanup(); heldArtifactCommands(artifactWorkspace).forEach(releaseArtifactCommand); heldArtifactForms(artifactWorkspace).forEach(releaseArtifactForm); await Promise.all(stores.splice(0).map(s => s.close())); vi.unstubAllGlobals(); vi.restoreAllMocks() })
++const refresh = async () => { fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText(/产物本机记录已读取/); await waitFor(() => expect((screen.getByText('读取产物记录与权限') as HTMLButtonElement).disabled).toBe(false)) }
++async function choose() {
++ await refresh()
++ fireEvent.change(screen.getByLabelText('产物来源 session ID'), { target: { value: 'codex_session_synthetic' } })
++ fireEvent.change(screen.getByLabelText('产物来源 turn ID'), { target: { value: 'turn_artifact_synthetic' } })
++ fireEvent.click(screen.getByText('独立读取当前产物清单')); await screen.findByLabelText('当前产物清单 GET')
++ fireEvent.click(screen.getByText('使用此清单建立新选择'))
++ fireEvent.click(screen.getByLabelText('选择产物 成果/说明.md'))
++ await waitFor(() => expect((screen.getByText('明确新建所选产物的回导预览') as HTMLButtonElement).disabled).toBe(false))
++}
++test('shows failed source and all three NOT_RUN, persists explicit selection before POST, separates current from original ACK', async () => {
++ const p = port(), store = local(), forms = local()
++ vi.mocked(p.import).mockImplementation(async (target, body, key) => {
++  const c = readArtifactCommand((await store.load(artifactWorkspace))[key], artifactWorkspace)
++  expect(c.actor_session_id).toBe(artifactActor); expect(c.target_id).toBe(target); expect(c.body).toEqual(body); expect(c.basis).toEqual(artifactManifest()); expect(c.ack).toBeNull()
++  return artifactAck
++ })
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ expect(p.session).not.toHaveBeenCalled(); await choose()
++ expect(within(screen.getByLabelText('当前产物清单 GET')).getByText('failed')).toBeTruthy()
++ expect(screen.getByText('数学审校 NOT_RUN；来源核验 NOT_RUN；独立教学审校 NOT_RUN。')).toBeTruthy()
++ expect((screen.getByLabelText('选择产物 notes.txt') as HTMLInputElement).disabled).toBe(true)
++ expect(p.import).not.toHaveBeenCalled()
++ fireEvent.click(screen.getByText('明确新建所选产物的回导预览')); await screen.findByText(/回导原 202 ACK 已保存；/)
++ expect(p.imports).not.toHaveBeenCalled()
++ fireEvent.click(screen.getByText(`读取回导当前子项 ${artifactAck.id}`)); await screen.findByLabelText('回导聚合当前 GET')
++ expect(within(screen.getByLabelText('回导聚合当前 GET')).getByText(/completed；原 actor/)).toBeTruthy()
++ const saved = Object.values(await store.load(artifactWorkspace)).map(r => readArtifactCommand(r, artifactWorkspace)); expect(saved[0].ack).toEqual(artifactAck)
++ expect(p.import).toHaveBeenCalledTimes(1)
++})
++test('lost ACK survives remount and refresh with zero automatic POST, explicit replay uses original actor/key/full body/manifest', async () => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.import).mockRejectedValueOnce(new Error('lost ACK'))
++ const view = render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await choose(); fireEvent.click(screen.getByText('明确新建所选产物的回导预览')); await screen.findByText(/产物结果或本机保存未知/)
++ const originalCall = vi.mocked(p.import).mock.calls[0], original = readArtifactCommand((await store.load(artifactWorkspace))[originalCall[2]], artifactWorkspace)
++ view.unmount(); render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ expect(p.import).toHaveBeenCalledTimes(1); await refresh(); expect(p.import).toHaveBeenCalledTimes(1)
++ fireEvent.click(screen.getByText(`显式回放回导原 key ${originalCall[2]}`)); await screen.findByText(/回导原 202 ACK 已保存；/)
++ expect(vi.mocked(p.import).mock.calls[1]).toEqual(originalCall)
++ expect(readArtifactCommand((await store.load(artifactWorkspace))[originalCall[2]], artifactWorkspace)).toEqual({ ...original, ack: artifactAck })
++})
++test.each([412, 409])('%i retains original selection/key/basis, independent current read never resends', async status => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.import).mockRejectedValueOnce(new ApiError(status, 'private detail', 'CODEX_SOURCE_CHANGED'))
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await choose(); fireEvent.click(screen.getByText('明确新建所选产物的回导预览')); await screen.findByText(status === 412 ? /产物版本已变化/ : /产物绑定冲突/)
++ const call = vi.mocked(p.import).mock.calls[0], before = (await store.load(artifactWorkspace))[call[2]].text
++ fireEvent.click(screen.getByText('独立读取当前产物清单')); await screen.findByText(/当前清单已读取/)
++ expect((await store.load(artifactWorkspace))[call[2]].text).toBe(before); expect(p.import).toHaveBeenCalledTimes(1); expect(screen.queryByText(/private detail/)).toBeNull()
++})
++test.each(['actor', 'learner', 'independent', 'open_book'] as const)('restore rereads fresh %s before revealing original selection or creating a branch', async mode => {
++ const p = port(), store = local(), forms = local(), original = snapshotArtifactForm(artifactWorkspace, artifactActor, { session_id: 'codex_session_synthetic', turn_id: 'turn_artifact_synthetic', selection: { basis: artifactManifest(), artifact_ids: ['artifact_synthetic_md'] } }, null)
++ await persistArtifactForm(original, forms)
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await refresh()
++ const restore = screen.getByText(`恢复产物表单 ${original.draft_id} · 1`)
++ vi.mocked(p.session).mockResolvedValue({ ...auth(), actor_session_id: mode === 'actor' ? 'actor_other' : artifactActor, role: mode === 'learner' ? 'learner' : 'author', active_independent_attempt_id: mode === 'independent' ? 'attempt_active' : null, active_open_book_attempt_id: mode === 'open_book' ? 'attempt_active' : null })
++ fireEvent.click(restore); await screen.findByText(/产物操作的当前权限或原 actor 已变化/)
++ expect(screen.queryByLabelText('原清单选择')).toBeNull(); expect(Object.keys(await forms.load(artifactWorkspace))).toEqual([original.snapshot_id]); expect(p.import).not.toHaveBeenCalled()
++})
++test('unmount retains late checked ACK under original actor and saving local facts performs no second POST', async () => {
++ const p = port(), store = local(), forms = local(), response = deferred<typeof artifactAck>()
++ vi.mocked(p.import).mockReturnValue(response.promise)
++ const view = render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await choose(); fireEvent.click(screen.getByText('明确新建所选产物的回导预览')); await waitFor(() => expect(p.import).toHaveBeenCalledTimes(1))
++ view.unmount(); await act(async () => response.resolve(artifactAck)); await waitFor(() => expect(heldArtifactCommands(artifactWorkspace).some(c => c.ack?.id === artifactAck.id)).toBe(true))
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await refresh()
++ fireEvent.click(screen.getByText('仅保存产物本机事实')); await screen.findByText(/仅保存产物原 actor 的本机事实/)
++ expect(p.import).toHaveBeenCalledTimes(1); expect(Object.values(await store.load(artifactWorkspace)).map(r => readArtifactCommand(r, artifactWorkspace))[0].ack).toEqual(artifactAck)
++})
++test('manifest arriving after port replacement is not shown and never causes import', async () => {
++ const p = port(), next = port(), store = local(), forms = local(), response = deferred<ReturnType<typeof artifactManifest>>()
++ const view = render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await refresh(); fireEvent.change(screen.getByLabelText('产物来源 session ID'), { target: { value: 'codex_session_synthetic' } }); fireEvent.change(screen.getByLabelText('产物来源 turn ID'), { target: { value: 'turn_artifact_synthetic' } })
++ vi.mocked(p.manifest).mockReturnValue(response.promise); fireEvent.click(screen.getByText('独立读取当前产物清单')); await waitFor(() => expect(p.manifest).toHaveBeenCalledTimes(1))
++ view.rerender(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={next} store={store} formStore={forms} />)
++ await act(async () => response.resolve(artifactManifest())); expect(screen.queryByLabelText('当前产物清单 GET')).toBeNull(); expect(p.import).not.toHaveBeenCalled(); expect(next.import).not.toHaveBeenCalled()
++})
++test('fresh Policy denial after actual download bytes prevents any browser download delivery', async () => {
++ const p = port(), store = local(), forms = local(), click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
++ vi.mocked(p.download).mockImplementation(async () => { vi.mocked(p.session).mockResolvedValue({ ...auth(), role: 'learner' }); return new BinaryBlob([artifactData]) as unknown as Blob })
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await choose()
++ fireEvent.click(screen.getByText('受控下载 成果/说明.md')); await screen.findByText(/产物操作的当前权限或原 actor 已变化/)
++ expect(p.download).toHaveBeenCalledTimes(1); expect(click).not.toHaveBeenCalled()
++})
++
++test('default unavailable manifest is honestly BLOCKED and never starts a model or import', async () => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.manifest).mockRejectedValue(new ApiError(503, 'private unavailable reason', 'CODEX_SOURCE_UNAVAILABLE'))
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await refresh(); fireEvent.change(screen.getByLabelText('产物来源 session ID'), { target: { value: 'codex_session_synthetic' } }); fireEvent.change(screen.getByLabelText('产物来源 turn ID'), { target: { value: 'turn_artifact_synthetic' } })
++ fireEvent.click(screen.getByText('独立读取当前产物清单')); await screen.findByText(/BLOCKED：当前产物、来源或运行证明不可用/)
++ expect(p.import).not.toHaveBeenCalled(); expect(p.download).not.toHaveBeenCalled(); expect(screen.queryByLabelText('当前产物清单 GET')).toBeNull(); expect(screen.queryByText(/private unavailable reason/)).toBeNull()
++})
++test('restore also denies when Policy changes after reading the original local form, without creating a branch', async () => {
++ const p = port(), store = local(), forms = local(), original = snapshotArtifactForm(artifactWorkspace, artifactActor, { session_id: 'codex_session_synthetic', turn_id: 'turn_artifact_synthetic', selection: { basis: artifactManifest(), artifact_ids: ['artifact_synthetic_md'] } }, null)
++ await persistArtifactForm(original, forms)
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await refresh()
++ vi.mocked(p.session).mockResolvedValueOnce(auth()).mockResolvedValue({ ...auth(), active_open_book_attempt_id: 'attempt_active' })
++ fireEvent.click(screen.getByText(`恢复产物表单 ${original.draft_id} · 1`)); await screen.findByText(/产物操作的当前权限或原 actor 已变化/)
++ expect(Object.keys(await forms.load(artifactWorkspace))).toEqual([original.snapshot_id]); expect(screen.queryByLabelText('原清单选择')).toBeNull(); expect(p.import).not.toHaveBeenCalled()
++})
++test('new submit rechecks author before any write transport and preserves unsent selected form', async () => {
++ const p = port(), store = local(), forms = local()
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await choose()
++ await waitFor(async () => expect(Object.values(await forms.load(artifactWorkspace)).some(r => JSON.parse(r.text).fields.selection?.artifact_ids.length === 1)).toBe(true))
++ vi.mocked(p.session).mockResolvedValue({ ...auth(), role: 'learner' })
++ fireEvent.click(screen.getByText('明确新建所选产物的回导预览')); await screen.findByText(/产物操作的当前权限或原 actor 已变化/)
++ expect(p.import).not.toHaveBeenCalled(); expect(Object.values(await forms.load(artifactWorkspace)).some(r => JSON.parse(r.text).fields.selection?.artifact_ids.length === 1)).toBe(true)
++})
++
++test.each([['unknown', artifactUnknownManifest], ['empty', artifactEmptyManifest]] as const)('%s manifest is shown honestly and cannot become an import command', async (_kind, fixture) => {
++ const p = port(), store = local(), forms = local(); vi.mocked(p.manifest).mockResolvedValue(fixture())
++ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
++ await refresh(); fireEvent.change(screen.getByLabelText('产物来源 session ID'), { target: { value: 'codex_session_synthetic' } }); fireEvent.change(screen.getByLabelText('产物来源 turn ID'), { target: { value: 'turn_artifact_synthetic' } })
++ fireEvent.click(screen.getByText('独立读取当前产物清单')); await screen.findByLabelText('当前产物清单 GET')
++ expect((screen.getByText('使用此清单建立新选择') as HTMLButtonElement).disabled).toBe(true)
++ expect(p.import).not.toHaveBeenCalled(); expect(screen.queryByText('明确新建所选产物的回导预览')).toBeNull()
++})
+diff --git a/apps/web/src/features/codex/CodexArtifactsPanel.tsx b/apps/web/src/features/codex/CodexArtifactsPanel.tsx
+new file mode 100644
+index 00000000..6a123ac1
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexArtifactsPanel.tsx
+@@ -0,0 +1,77 @@
++import { useEffect, useRef, useState } from 'react'
++import type { DraftStore } from '../../workbench/DraftStore'
++import { sameValue } from '../providers/providerSchema'
++import { ImportWorkflow } from '../imports/ImportWorkflow'
++import type { RecoveryId } from '../imports/recovery'
++import type { ArtifactPort } from './artifactClient'
++import { useCodexArtifacts } from './useCodexArtifacts'
++export type ArtifactsPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void }
++export function CodexArtifactsPanel({ workspace, writeAdmitted, port, store, formStore, onState }: {
++ workspace: string; writeAdmitted: boolean; port?: ArtifactPort; store?: DraftStore; formStore?: DraftStore; onState?: (value: ArtifactsPanelState) => void
++}) {
++ const state = useCodexArtifacts(workspace, writeAdmitted, port, store, formStore), callback = useRef(onState); callback.current = onState
++ const [preview, setPreview] = useState<{ workspace: string; actor: string; target: RecoveryId } | null>(null)
++ const [previewState, setPreviewState] = useState<{ dirty: boolean; safe: boolean; discardForms?: () => void }>({ dirty: false, safe: true })
++ const previewAllowed = state.allowed && preview?.workspace === workspace && preview.actor === state.actor
++ const canOpenPreview = !preview || !previewAllowed && previewState.safe && !previewState.dirty
++ const dirty = state.dirty || previewState.dirty, safe = state.safe && previewState.safe, isolated = state.isolated && previewState.safe
++ useEffect(() => { callback.current?.({ dirty, safe, isolated, discardForms: previewState.discardForms }) }, [dirty, safe, isolated, previewState.discardForms])
++ const m = state.manifest, selection = state.fields.selection, using = !!m && !!selection && sameValue(selection.basis, m)
++ const open = async (id: string) => { const actor = state.actor, target = await state.openPreview(id); if (target && actor) setPreview({ workspace, actor, target }) }
++ return <section aria-label="Codex 产物清单与回导">
++  <h3>产物清单与明确选择回导</h3>
++  <p>仅显示服务端保存的受检产物。默认没有真实模型证明或执行器时不会产生清单；无清单不代表执行成功。</p>
++  <button disabled={state.busy} onClick={() => void state.refresh()}>读取产物记录与权限</button>
++  <button disabled={state.busy || !state.canSave} onClick={() => void state.saveMemory()}>仅保存产物本机事实</button>
++  {state.retained > 0 && <p role="status">有 {state.retained} 项原 actor 的命令或表单尚在隔离内存；离开前请保存本机事实。</p>}
++  {state.error && <p role="alert">{state.error}</p>}{state.message && <p role="status">{state.message}</p>}
++  {!state.allowed ? <p>清单、选择与回导详情仅当前作者且测试策略允许后可读取。原表单与未知命令保留，没有自动 POST。</p> : <>
++   <label>产物来源 session ID<input value={state.fields.session_id} disabled={state.busy} onChange={e => state.edit({ session_id: e.target.value })} /></label>
++   <label>产物来源 turn ID<input value={state.fields.turn_id} disabled={state.busy} onChange={e => state.edit({ turn_id: e.target.value })} /></label>
++   <button disabled={state.busy || !state.fields.session_id || !state.fields.turn_id} onClick={() => void state.read()}>独立读取当前产物清单</button>
++   <details><summary>恢复本机原选择表单</summary>{state.forms.map(form => <button key={form.snapshot_id} disabled={state.busy} onClick={() => void state.restore(form)}>恢复产物表单 {form.draft_id} · {form.sequence}</button>)}</details>
++   {m && <section aria-label="当前产物清单 GET">
++    <p>来源 turn：{m.manifest.turn_id}；真实来源终态：<strong>{m.manifest.source_outcome}</strong>。受检扫描 PASS 不证明内容正确。</p>
++    <p>数学审校 {m.manifest.mathematical}；来源核验 {m.manifest.sources}；独立教学审校 {m.manifest.independent_pedagogy}。</p>
++    <p>清单 SHA-256：<code style={{ overflowWrap: 'anywhere' }}>{m.manifest_sha256}</code>；总计 {m.manifest.total_bytes} 字节。</p>
++    {m.manifest.source_outcome === 'unknown' && <p role="status">来源副作用未可靠封闭，只可诊断和受控下载，禁止回导。</p>}
++    {!m.manifest.entries.length && <p>没有可用产物，不能回导。</p>}
++    <button disabled={state.busy || !m.manifest.entries.some(e => e.import_kind !== null && e.size > 0) || m.manifest.source_outcome === 'unknown'} onClick={state.chooseManifest}>使用此清单建立新选择</button>
++    <ul>{m.manifest.entries.map(entry => <li key={entry.artifact_id}>
++     <label><input type="checkbox" aria-label={`选择产物 ${entry.logical_path}`} checked={using && selection!.artifact_ids.includes(entry.artifact_id)} disabled={state.busy || !using || entry.import_kind === null || entry.size === 0 || m.manifest.source_outcome === 'unknown'} onChange={e => state.select(entry.artifact_id, e.target.checked)} />{entry.logical_path}</label>
++     <p>{entry.media_type} · {entry.size} 字节 · 扫描 {entry.scan} · {entry.import_kind ?? '仅下载，不支持回导'}</p>
++     <code style={{ overflowWrap: 'anywhere' }}>{entry.sha256}</code>
++     <button disabled={state.busy} onClick={() => void state.download(entry)}>受控下载 {entry.logical_path}</button>
++    </li>)}</ul>
++    {m.manifest.excluded.length > 0 && <details><summary>被排除的项</summary>{m.manifest.excluded.map(e => <p key={e.entry_id}>{e.entry_id} · {e.reason}</p>)}</details>}
++   </section>}
++   {selection && <section aria-label="原清单选择"><p>保存的选择绑定清单 SHA-256：<code style={{ overflowWrap: 'anywhere' }}>{selection.basis.manifest_sha256}</code>；原来源终态 {selection.basis.manifest.source_outcome}。</p>
++    <p>数学、来源、独立教学审校均 NOT_RUN。以下文件只准备 Import 预览，不代表已审、已入库或已发布。</p>
++    <ul>{selection.artifact_ids.map(id => <li key={id}>{selection.basis.manifest.entries.find(e => e.artifact_id === id)!.logical_path} · {id}</li>)}</ul>
++    <button disabled={state.busy || !state.canSubmit} onClick={() => void state.submit()}>明确新建所选产物的回导预览</button>
++   </section>}
++   <section aria-label="原回导命令与 ACK">{state.commands.map(command => <article key={command.command_id}>
++    <p>{command.command_id} · {command.ack ? '原 202 ACK 已保存' : command.error ? `原命令收到 ${command.error.status}；基准保留` : '结果未知；原 key 与完整选择保留'}</p>
++    <details><summary>核对原回导命令与回执</summary><pre>{JSON.stringify(command, null, 2)}</pre></details>
++    <button disabled={state.busy || !state.canReplay(command)} onClick={() => void state.execute(command)}>显式回放回导原 key {command.command_id}</button>
++    {command.ack && <><p>原聚合 Job {command.ack.id} · {command.ack.status}。这是永久原 ACK，当前状态另读。</p><button disabled={state.busy} onClick={() => void state.readImports(command)}>读取回导当前子项 {command.ack.id}</button></>}
++   </article>)}</section>
++   {state.aggregate && <section aria-label="回导聚合当前 GET"><h4>回导聚合与 Import 子项</h4><p>聚合 Job {state.aggregate.view.job.id} · {state.aggregate.view.job.status}；原 actor {state.aggregate.view.actor_session_id}。</p>
++    <p>聚合 completed 仅表示预览准备完成，不授予人工质量批准。</p>
++    <ol>{state.aggregate.view.items.map(item => <li key={item.artifact_id}><p>{item.artifact_id} → Import {item.import_id}；子 Job {item.job.id} · {item.job.status}</p><code style={{ overflowWrap: 'anywhere' }}>{item.source_sha256}</code>
++     <button disabled={state.busy || !canOpenPreview} onClick={() => void open(item.import_id)}>打开普通 Import 预览 {item.import_id}</button></li>)}</ol>
++   </section>}
++  </>}
++  {preview && !previewAllowed && <section aria-label="已隔离的旧 Import 预览">
++   <p>旧作者或工作区的预览已隔离。原回导命令和表单保留；无临时设置时可明确打开当前子项。</p>
++   {previewState.dirty ? <button disabled={!previewState.safe} onClick={() => { if (previewState.safe) { previewState.discardForms?.(); setPreview(null) } }}>保留原命令，明确丢弃旧预览临时设置并关闭</button>
++    : <button disabled={!previewState.safe} onClick={() => setPreview(null)}>关闭已隔离的只读预览</button>}
++  </section>}
++  {preview && <div hidden={!previewAllowed}>
++   <p>已进入普通 Import 流程。请明确读取原候选；任何后续确认或审核仍需单独操作。</p>
++   {previewState.dirty && <button disabled={!previewState.safe} onClick={() => previewState.discardForms?.()}>保留原回导事实，丢弃当前预览临时设置</button>}
++   <button disabled={!previewState.safe || previewState.dirty} onClick={() => setPreview(null)}>关闭普通 Import 预览</button>
++   <ImportWorkflow key={`${preview.workspace}:${preview.actor}:${preview.target.importId}`} workspaceId={preview.workspace} paused={!previewAllowed} requestedImport={preview.target} close={() => { if (previewState.safe && !previewState.dirty) setPreview(null) }} onState={setPreviewState} />
++  </div>}
++ </section>
++}
+diff --git a/apps/web/src/features/codex/CodexCapabilitiesPanel.test.tsx b/apps/web/src/features/codex/CodexCapabilitiesPanel.test.tsx
+index f46b74ea..9173180a 100644
+--- a/apps/web/src/features/codex/CodexCapabilitiesPanel.test.tsx
++++ b/apps/web/src/features/codex/CodexCapabilitiesPanel.test.tsx
+@@ -19,7 +19,7 @@ test('explicit check reads session then capabilities, displays only this Broker
+   p.capabilities = vi.fn(async () => { order.push('capabilities'); return capabilities() })
+   render(<CodexCapabilitiesPanel workspace={workspace} admitted port={p} />)
+   expect(p.session).not.toHaveBeenCalled(); expect(p.capabilities).not.toHaveBeenCalled()
+-  expect(screen.getByText(/受控 Codex 任务导出与产物回导尚未实现；当前可下载四项本地需求说明；该本地需求说明不调用 Codex/)).toBeTruthy()
++  expect(screen.getByText(/受控 Codex 任务导出尚未实现；已有受检产物可从下方清单明确选择回导预览。当前可下载四项本地需求说明；该本地需求说明不调用 Codex/)).toBeTruthy()
+   check(); await screen.findByText('未连接 Codex：此工作区的隔离 Broker 尚未授权。')
+   expect(order).toEqual(['session', 'capabilities']); expect(screen.getAllByText('不可用')).toHaveLength(3)
+   expect(screen.getByText('codex-cli/0.160.0')).toBeTruthy()
+diff --git a/apps/web/src/features/codex/CodexCapabilitiesPanel.tsx b/apps/web/src/features/codex/CodexCapabilitiesPanel.tsx
+index aa4f3a0f..128aada5 100644
+--- a/apps/web/src/features/codex/CodexCapabilitiesPanel.tsx
++++ b/apps/web/src/features/codex/CodexCapabilitiesPanel.tsx
+@@ -61,6 +61,6 @@ export function CodexCapabilitiesPanel({ workspace, admitted, port = codexCapabi
+                 <dt>产物清单</dt><dd>{value.capabilities.artifacts ? '可用' : '不可用'}</dd></dl>
+               {value.sandbox_roots.length > 0 && <div><p>隔离目录</p><ul>{value.sandbox_roots.map(root => <li key={root.id}>{root.label}</li>)}</ul></div>}
+             </>}
+-    {admitted && <p>受控 Codex 任务导出与产物回导尚未实现；当前可下载四项本地需求说明；该本地需求说明不调用 Codex。已有文件可从“导入”进入预览与审核。</p>}
++    {admitted && <p>受控 Codex 任务导出尚未实现；已有受检产物可从下方清单明确选择回导预览。当前可下载四项本地需求说明；该本地需求说明不调用 Codex。已有文件可从“导入”进入预览与审核。</p>}
+   </section>
+ }
+diff --git a/apps/web/src/features/codex/artifactClient.ts b/apps/web/src/features/codex/artifactClient.ts
+new file mode 100644
+index 00000000..5d83ab88
+--- /dev/null
++++ b/apps/web/src/features/codex/artifactClient.ts
+@@ -0,0 +1,71 @@
++import { sha256 } from '@noble/hashes/sha2.js'
++import { bytesToHex } from '@noble/hashes/utils.js'
++import type { JobRef, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexArtifactEntry, CodexArtifactManifestView, CodexArtifactImportWrite, CodexArtifactImportView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import schemas from '../../../../../packages/contracts/generated/codex-turn-schemas.json'
++import { request } from '../../api/client'
++import { checkedProvider } from '../providers/providerSchema'
++import { turnClient } from './turnClient'
++import { turnIdentity } from './turnCommands'
++import { outboundTime } from './turnOutboundClient'
++
++type Wire = { CodexArtifactEntry: CodexArtifactEntry; CodexArtifactManifestView: CodexArtifactManifestView; CodexArtifactImportWrite: CodexArtifactImportWrite; CodexArtifactImportView: CodexArtifactImportView }
++const fail = (): never => { throw new Error('产物记录、来源或实际字节无法核验；原选择和命令保留。') }
++const id = (value: string) => { if (!turnIdentity(value)) fail(); return value }
++const unique = (values: string[]) => { if (new Set(values).size !== values.length) fail() }
++export const artifactHash = (bytes: Uint8Array) => bytesToHex(sha256(bytes))
++// This closed manifest contains only scalar Unicode strings and bounded integers.
++function canonical(value: unknown): string {
++ if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
++ if (value !== null && typeof value === 'object') return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical((value as Record<string, unknown>)[k])}`).join(',')}}`
++ return JSON.stringify(value)
++}
++export function checkedArtifact<N extends keyof Wire>(name: N, raw: unknown): Wire[N] {
++ const value = checkedProvider<Wire[N]>(name, raw, schemas.schemas)
++ if (name === 'CodexArtifactEntry') {
++  const entry = value as CodexArtifactEntry
++  if (/[\\:\x00-\x1f\x7f]/.test(entry.logical_path) || entry.logical_path.split('/').some(p => ['', '.', '..'].includes(p))) fail()
++ }
++ if (name === 'CodexArtifactManifestView') {
++  const v = value as CodexArtifactManifestView, m = v.manifest
++  outboundTime(m.created_at); m.entries.forEach(e => checkedArtifact('CodexArtifactEntry', e))
++  unique([...m.entries.map(e => e.artifact_id), ...m.excluded.map(e => e.entry_id)]); unique(m.entries.map(e => e.logical_path))
++  if (m.run_id !== m.source_job_id || m.entries.length + m.excluded.length > 32 || m.total_bytes !== m.entries.reduce((n, e) => n + e.size, 0)
++   || artifactHash(new TextEncoder().encode(canonical(m))) !== v.manifest_sha256) fail()
++ }
++ if (name === 'CodexArtifactImportWrite') unique((value as CodexArtifactImportWrite).artifact_ids)
++ if (name === 'CodexArtifactImportView') {
++  const v = value as CodexArtifactImportView
++  unique(v.items.map(i => i.artifact_id)); unique(v.items.map(i => i.import_id)); unique([v.job.id, ...v.items.map(i => i.job.id)])
++ }
++ return value
++}
++export function checkedArtifactAck(raw: unknown): JobRef {
++ const ack = checkedProvider<JobRef>('JobRef', raw)
++ if (ack.status !== 'queued') fail()
++ return ack
++}
++export type ArtifactPort = {
++ session(): Promise<SessionResponse>
++ manifest(session: string, turn: string): Promise<CodexArtifactManifestView>
++ import(session: string, body: CodexArtifactImportWrite, key: string): Promise<JobRef>
++ imports(job: string): Promise<CodexArtifactImportView>
++ download(entry: CodexArtifactEntry): Promise<Blob>
++}
++export const artifactClient: ArtifactPort = {
++ session: turnClient.session,
++ manifest: async (session, turn) => {
++  const v = checkedArtifact('CodexArtifactManifestView', await request('GET /api/v1/codex/sessions/{id}/turns/{turn_id}/artifacts', undefined, undefined, { path: { id: id(session), turn_id: id(turn) } }))
++  if (v.manifest.session_id !== session || v.manifest.turn_id !== turn) fail(); return v
++ },
++ import: async (session, body, key) => checkedArtifactAck(await request('POST /api/v1/codex/sessions/{id}/artifacts/import', checkedArtifact('CodexArtifactImportWrite', body), { 'Idempotency-Key': id(key) }, { path: { id: id(session) } })),
++ imports: async job => {
++  const v = checkedArtifact('CodexArtifactImportView', await request('GET /api/v1/codex/artifact-imports/{job_id}', undefined, undefined, { path: { job_id: id(job) } }))
++  if (v.job.id !== job) fail(); return v
++ },
++ download: async entry => {
++  const e = checkedArtifact('CodexArtifactEntry', entry), blob = await request('GET /api/v1/artifacts/{id}/download', undefined, undefined, { path: { id: id(e.artifact_id) } })
++  if (blob.size !== e.size || artifactHash(new Uint8Array(await blob.arrayBuffer())) !== e.sha256) fail()
++  return blob
++ },
++}
+diff --git a/apps/web/src/features/codex/artifactCommands.test.ts b/apps/web/src/features/codex/artifactCommands.test.ts
+new file mode 100644
+index 00000000..86f0b2b3
+--- /dev/null
++++ b/apps/web/src/features/codex/artifactCommands.test.ts
+@@ -0,0 +1,41 @@
++import { IDBFactory } from 'fake-indexeddb'
++import { expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { checkedArtifact } from './artifactClient'
++import { decodeArtifactCommand, dispatchArtifactCommand, makeArtifactCommand, persistArtifactCommand, readArtifactImport } from './artifactCommands'
++import { artifactAck, artifactActor, artifactImport, artifactManifest, artifactWorkspace } from './artifactFixtures'
++const command = () => makeArtifactCommand(artifactWorkspace, artifactActor, artifactManifest(), ['artifact_synthetic_md'])
++test('golden Python-hashed Unicode manifest is closed and detects byte, total, membership and path damage', () => {
++ expect(checkedArtifact('CodexArtifactManifestView', artifactManifest())).toEqual(artifactManifest())
++ for (const mutate of [(v: ReturnType<typeof artifactManifest>) => { v.manifest.entries[0].logical_path = 'else.md' }, (v: ReturnType<typeof artifactManifest>) => { v.manifest.total_bytes++ }, (v: ReturnType<typeof artifactManifest>) => { v.manifest.entries.push(v.manifest.entries[0]) }, (v: ReturnType<typeof artifactManifest>) => { v.manifest.entries[0].logical_path = '../private' }, (v: ReturnType<typeof artifactManifest>) => { Object.assign(v.manifest, { extra: true }) }]) {
++  const value = artifactManifest(); mutate(value); expect(() => checkedArtifact('CodexArtifactManifestView', value)).toThrow()
++ }
++})
++test('command rejects body, basis, closed ACK and actor shape changes', () => {
++ for (const mutate of [(c: ReturnType<typeof command>) => { c.body.turn_id = 'turn_other' }, (c: ReturnType<typeof command>) => { c.body.artifact_ids.push(c.body.artifact_ids[0]) }, (c: ReturnType<typeof command>) => { c.body.artifact_ids = ['artifact_synthetic_note'] }, (c: ReturnType<typeof command>) => { c.target_id = 'session_other' }, (c: ReturnType<typeof command>) => { c.ack = { ...artifactAck, status: 'completed' } }, (c: ReturnType<typeof command>) => { Object.assign(c, { token: 'not-allowed' }) }]) {
++  const value = command(); mutate(value); expect(() => decodeArtifactCommand(JSON.stringify(value), artifactWorkspace)).toThrow()
++ }
++})
++test('stored original full body and ACK cannot be replaced, ACK replay performs zero POST', async () => {
++ const store = new DraftStore({ name: `artifact-command-${crypto.randomUUID()}`, factory: new IDBFactory() }), original = command(), port = { import: vi.fn(async () => artifactAck) }
++ try {
++  const ack = await dispatchArtifactCommand(original, port, store)
++  expect(await dispatchArtifactCommand(original, port, store)).toEqual(ack); expect(port.import).toHaveBeenCalledTimes(1)
++  await expect(persistArtifactCommand({ ...ack, actor_session_id: 'actor_other' }, store)).rejects.toThrow()
++  await expect(persistArtifactCommand({ ...ack, ack: { ...artifactAck, id: 'job_other' } }, store)).rejects.toThrow()
++ } finally { await store.close() }
++})
++test('a checked late ACK is delivered to retention before a delivery denial and never claimed durable', async () => {
++ const store = new DraftStore({ name: `artifact-command-${crypto.randomUUID()}`, factory: new IDBFactory() }), original = command(), onAck = vi.fn()
++ try {
++  await expect(dispatchArtifactCommand(original, { import: async () => artifactAck }, store, { onAck, beforeDelivery: async () => { throw new Error('actor changed') } })).rejects.toThrow('actor changed')
++  expect(onAck).toHaveBeenCalledWith({ ...original, ack: artifactAck }); expect(JSON.parse((await store.load(artifactWorkspace))[original.command_id].text).ack).toBeNull()
++ } finally { await store.close() }
++})
++test('aggregate current GET preserves original queued ACK and checks ordered source, actor, job and child identities', () => {
++ const c = { ...command(), ack: artifactAck }
++ expect(readArtifactImport(artifactImport(), c).job.status).toBe('completed'); expect(c.ack.status).toBe('queued')
++ for (const mutate of [(v: ReturnType<typeof artifactImport>) => { v.actor_session_id = 'actor_other' }, (v: ReturnType<typeof artifactImport>) => { v.job.id = 'job_other' }, (v: ReturnType<typeof artifactImport>) => { v.items[0].source_sha256 = 'a'.repeat(64) }, (v: ReturnType<typeof artifactImport>) => { v.items.push(v.items[0]) }, (v: ReturnType<typeof artifactImport>) => { v.items[0].job.id = v.job.id }, (v: ReturnType<typeof artifactImport>) => { v.manifest_sha256 = 'a'.repeat(64) }]) {
++  const v = artifactImport(); mutate(v); expect(() => readArtifactImport(v, c)).toThrow()
++ }
++})
+diff --git a/apps/web/src/features/codex/artifactCommands.ts b/apps/web/src/features/codex/artifactCommands.ts
+new file mode 100644
+index 00000000..1e931651
+--- /dev/null
++++ b/apps/web/src/features/codex/artifactCommands.ts
+@@ -0,0 +1,75 @@
++import type { JobRef } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexArtifactManifestView, CodexArtifactImportWrite, CodexArtifactImportView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { exactObject, sameValue } from '../providers/providerSchema'
++import { turnIdentity } from './turnCommands'
++import { artifactClient, checkedArtifact, checkedArtifactAck, type ArtifactPort } from './artifactClient'
++export type ArtifactCommand = {
++ version: 1; workspace_id: string; actor_session_id: string; command_id: string; target_id: string;
++ route: 'POST /api/v1/codex/sessions/{id}/artifacts/import'; basis: CodexArtifactManifestView;
++ body: CodexArtifactImportWrite; ack: JobRef | null; error: { status: number; code: string | null } | null
++}
++export const artifactStore = new DraftStore({ name: 'learning-workbench.codex-artifact-commands.v1' })
++const fail = (): never => { throw new Error('回导原命令、完整清单或原回执无法核验；记录保留。') }
++export function decodeArtifactCommand(raw: string, workspace: string): ArtifactCommand {
++ const c = JSON.parse(raw) as ArtifactCommand
++ if (!exactObject(c, ['version', 'workspace_id', 'actor_session_id', 'command_id', 'target_id', 'route', 'basis', 'body', 'ack', 'error']) || c.version !== 1
++  || c.workspace_id !== workspace || !turnIdentity(workspace) || !turnIdentity(c.actor_session_id) || !turnIdentity(c.command_id) || !turnIdentity(c.target_id)
++  || c.route !== 'POST /api/v1/codex/sessions/{id}/artifacts/import') fail()
++ const v = checkedArtifact('CodexArtifactManifestView', c.basis), b = checkedArtifact('CodexArtifactImportWrite', c.body)
++ if (v.manifest.source_outcome === 'unknown' || c.target_id !== v.manifest.session_id || b.turn_id !== v.manifest.turn_id || b.expected_manifest_sha256 !== v.manifest_sha256
++  || b.artifact_ids.some(id => !v.manifest.entries.some(e => e.artifact_id === id && e.import_kind !== null && e.size > 0))) fail()
++ if (c.ack !== null) checkedArtifactAck(c.ack)
++ if (c.error !== null && (!exactObject(c.error, ['status', 'code']) || !Number.isSafeInteger(c.error.status) || c.error.status < 400 || c.error.status > 599
++  || c.ack !== null || c.error.code !== null && (typeof c.error.code !== 'string' || !/^[A-Z][A-Z0-9_]{0,79}$/.test(c.error.code)))) fail()
++ return c
++}
++export function makeArtifactCommand(workspace: string, actor: string, basis: CodexArtifactManifestView, ids: string[]): ArtifactCommand {
++ return decodeArtifactCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor, command_id: `artifactimport_${crypto.randomUUID()}`,
++  target_id: basis.manifest.session_id, route: 'POST /api/v1/codex/sessions/{id}/artifacts/import', basis,
++  body: { turn_id: basis.manifest.turn_id, artifact_ids: ids, expected_manifest_sha256: basis.manifest_sha256 }, ack: null, error: null }), workspace)
++}
++export function readArtifactImport(raw: unknown, command: ArtifactCommand): CodexArtifactImportView {
++ const c = decodeArtifactCommand(JSON.stringify(command), command.workspace_id), v = checkedArtifact('CodexArtifactImportView', raw)
++ if (!c.ack || v.job.id !== c.ack.id || v.session_id !== c.target_id || v.turn_id !== c.body.turn_id || v.actor_session_id !== c.actor_session_id
++  || v.manifest_sha256 !== c.body.expected_manifest_sha256 || !sameValue(v.items.map(i => i.artifact_id), c.body.artifact_ids)
++  || v.items.some(i => i.source_sha256 !== c.basis.manifest.entries.find(e => e.artifact_id === i.artifact_id)?.sha256)) fail()
++ return v
++}
++const immutable = (value: ArtifactCommand) => ({ ...value, ack: null, error: null })
++export function readArtifactCommand(record: DraftRecord, workspace: string): ArtifactCommand {
++ const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeArtifactCommand(raw, workspace)), first = values[0]
++ if (first.command_id !== record.objectId || values.some(v => !sameValue(immutable(v), immutable(first)))) throw new Error('Conflicting original artifact command')
++ const confirmed = values.filter(v => v.ack)
++ if (confirmed.some(v => !sameValue(v.ack, confirmed[0].ack))) throw new Error('Conflicting artifact ACK')
++ return confirmed[0] ?? values.find(v => v.error) ?? first
++}
++export async function persistArtifactCommand(command: ArtifactCommand, store = artifactStore, guard?: DraftWriteGuard): Promise<ArtifactCommand> {
++ let desired = decodeArtifactCommand(JSON.stringify(command), command.workspace_id)
++ for (let attempt = 0; attempt < 4; attempt++) {
++  assertDraftWriteAllowed(guard)
++  const old = (await store.load(command.workspace_id))[command.command_id]
++  assertDraftWriteAllowed(guard)
++  if (old) {
++   const current = readArtifactCommand(old, command.workspace_id)
++   if (!sameValue(immutable(current), immutable(desired)) || current.ack && desired.ack && !sameValue(current.ack, desired.ack)) throw new Error('Cannot replace original artifact command or ACK')
++   if (current.ack || !desired.ack && !desired.error && current.error) desired = current
++   if (!old.conflicts.length && sameValue(current, desired)) return current
++  }
++  const saved = await store.save(command.workspace_id, command.command_id, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(v => v.id) ?? [], guard)
++  const actual = readArtifactCommand(saved.record, command.workspace_id)
++  if (!saved.record.conflicts.length && sameValue(actual, desired)) return actual
++ }
++ throw new Error('Concurrent artifact command remains unresolved')
++}
++export async function dispatchArtifactCommand(command: ArtifactCommand, port: Pick<ArtifactPort, 'import'> = artifactClient, store = artifactStore,
++ options: { guard?: DraftWriteGuard; beforePost?: () => Promise<void>; onAck?: (ack: ArtifactCommand) => void; beforeDelivery?: () => Promise<void> } = {}): Promise<ArtifactCommand> {
++ const original = await persistArtifactCommand(command, store, options.guard)
++ if (original.ack) { await options.beforeDelivery?.(); return original }
++ await options.beforePost?.(); assertDraftWriteAllowed(options.guard)
++ const raw = await port.import(original.target_id, original.body, original.command_id)
++ const acknowledged = decodeArtifactCommand(JSON.stringify({ ...original, ack: raw, error: null }), original.workspace_id)
++ options.onAck?.(acknowledged)
++ await options.beforeDelivery?.()
++ return persistArtifactCommand(acknowledged, store, options.guard)
++}
+diff --git a/apps/web/src/features/codex/artifactFixtures.ts b/apps/web/src/features/codex/artifactFixtures.ts
+new file mode 100644
+index 00000000..50fad43f
+--- /dev/null
++++ b/apps/web/src/features/codex/artifactFixtures.ts
+@@ -0,0 +1,51 @@
++import type { CodexArtifactManifestView, CodexArtifactImportView } from '../../../../../packages/contracts/generated/codex-turn-types'
++export const artifactWorkspace = 'workspace_artifact_synthetic', artifactActor = 'session_artifact_actor'
++// Golden learning-json-1 SHA calculated independently by Python canonical JSON.
++export const artifactManifest = (): CodexArtifactManifestView => ({
++  "manifest": {
++    "version": "codex-artifact-manifest-v1",
++    "id": "manifest_synthetic",
++    "revision": 1,
++    "session_id": "codex_session_synthetic",
++    "turn_id": "turn_artifact_synthetic",
++    "run_id": "job_artifact_source",
++    "source_job_id": "job_artifact_source",
++    "source_outcome": "failed",
++    "runtime_profile_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
++    "terminal_receipt_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
++    "scan_profile_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
++    "created_at": "2026-10-04T00:00:00Z",
++    "entries": [
++      {
++        "artifact_id": "artifact_synthetic_md",
++        "logical_path": "成果/说明.md",
++        "size": 29,
++        "sha256": "a8a235866f1431163dd7cd91630cbcf15fd19f89ec2cc5739ae9ba17d1e9329f",
++        "media_type": "text/markdown",
++        "scan": "PASS",
++        "import_kind": "markdown"
++      },
++      {
++        "artifact_id": "artifact_synthetic_note",
++        "logical_path": "notes.txt",
++        "size": 15,
++        "sha256": "7453c4e3b2b0de061547249bd3071417dbb07ffaf752ad0d1fcf9f1f4e57ee87",
++        "media_type": "text/plain",
++        "scan": "PASS",
++        "import_kind": null
++      }
++    ],
++    "excluded": [],
++    "total_bytes": 44,
++    "mathematical": "NOT_RUN",
++    "sources": "NOT_RUN",
++    "independent_pedagogy": "NOT_RUN"
++  },
++  "manifest_sha256": "5456d1e4d5da60bdb66c4408aa1abd155bcda6c18462d45bf0a8589e2d7a8881"
++})
++export const artifactData = '# 合成材料 α\n\n未审。\n'
++export const artifactAck = { id: 'job_artifact_import', status: 'queued' as const }
++export const artifactImport = (): CodexArtifactImportView => ({ job: { ...artifactAck, status: 'completed' }, session_id: 'codex_session_synthetic', turn_id: 'turn_artifact_synthetic', manifest_sha256: artifactManifest().manifest_sha256, actor_session_id: artifactActor, items: [{ artifact_id: 'artifact_synthetic_md', source_sha256: artifactManifest().manifest.entries[0].sha256, import_id: 'import_artifact_child', job: { id: 'job_artifact_child', status: 'awaiting_approval' } }] })
++
++export const artifactUnknownManifest = (): CodexArtifactManifestView => { const v = artifactManifest(); v.manifest.source_outcome = 'unknown'; v.manifest_sha256 = 'bc745cf1a1807c0c5252f42a78c8f66540e308c041e8c7db4c53b2713f5de93e'; return v }
++export const artifactEmptyManifest = (): CodexArtifactManifestView => { const v = artifactManifest(); v.manifest.entries = []; v.manifest.total_bytes = 0; v.manifest_sha256 = '62e7edbba47befff0c35b4802cb2b127dcfc9fea9aa413e9bc090b45ba27a4c9'; return v }
+diff --git a/apps/web/src/features/codex/artifactForms.ts b/apps/web/src/features/codex/artifactForms.ts
+new file mode 100644
+index 00000000..cbda3687
+--- /dev/null
++++ b/apps/web/src/features/codex/artifactForms.ts
+@@ -0,0 +1,44 @@
++import type { CodexArtifactManifestView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { checkedArtifact } from './artifactClient'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { exactObject, sameValue } from '../providers/providerSchema'
++import { turnIdentity } from './turnCommands'
++export type ArtifactFields = { session_id: string; turn_id: string; selection: { basis: CodexArtifactManifestView; artifact_ids: string[] } | null }
++export type ArtifactForm = { version: 1; workspace_id: string; actor_session_id: string; snapshot_id: string; draft_id: string; sequence: number; fields: ArtifactFields }
++export const artifactFormStore = new DraftStore({ name: 'learning-workbench.codex-artifact-forms.v1' })
++export const emptyArtifactFields = (): ArtifactFields => ({ session_id: '', turn_id: '', selection: null })
++const fail = (): never => { throw new Error('产物表单快照无法核验；原记录保留。') }
++export function decodeArtifactForm(raw: string, workspace: string): ArtifactForm {
++ const value = JSON.parse(raw) as ArtifactForm
++ if (!exactObject(value, ['version', 'workspace_id', 'actor_session_id', 'snapshot_id', 'draft_id', 'sequence', 'fields']) || value.version !== 1
++  || !turnIdentity(workspace) || value.workspace_id !== workspace || !turnIdentity(value.actor_session_id) || !turnIdentity(value.snapshot_id)
++  || !turnIdentity(value.draft_id) || !Number.isSafeInteger(value.sequence) || value.sequence < 1
++  || !exactObject(value.fields, ['session_id', 'turn_id', 'selection'])
++  || [value.fields.session_id, value.fields.turn_id].some(v => typeof v !== 'string' || v.length > 1000)) fail()
++ const s = value.fields.selection
++ if (s !== null) {
++  if (!exactObject(s, ['basis', 'artifact_ids']) || !Array.isArray(s.artifact_ids) || new Set(s.artifact_ids).size !== s.artifact_ids.length) fail()
++  const m = checkedArtifact('CodexArtifactManifestView', s.basis).manifest
++  if (value.fields.session_id !== m.session_id || value.fields.turn_id !== m.turn_id || s.artifact_ids.some(id => !m.entries.some(e => e.artifact_id === id && e.import_kind !== null && e.size > 0))) fail()
++ }
++ return value
++}
++export function snapshotArtifactForm(workspace: string, actor: string, fields: ArtifactFields, previous: ArtifactForm | null): ArtifactForm {
++ return decodeArtifactForm(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor,
++  snapshot_id: `artifactform_${crypto.randomUUID()}`, draft_id: previous?.draft_id ?? `artifactdraft_${crypto.randomUUID()}`, sequence: (previous?.sequence ?? 0) + 1, fields }), workspace)
++}
++export function readArtifactForm(record: DraftRecord, workspace: string): ArtifactForm {
++ const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeArtifactForm(raw, workspace)), first = values[0]
++ if (record.objectId !== first.snapshot_id || values.some(v => !sameValue(v, first))) fail()
++ return first
++}
++/** Immutable edit snapshots prevent delayed saves or another tab from replacing an unsent form. */
++export async function persistArtifactForm(form: ArtifactForm, store = artifactFormStore, guard?: DraftWriteGuard): Promise<void> {
++ const checked = decodeArtifactForm(JSON.stringify(form), form.workspace_id)
++ assertDraftWriteAllowed(guard)
++ const old = (await store.load(form.workspace_id))[form.snapshot_id]
++ assertDraftWriteAllowed(guard)
++ if (old) { if (!sameValue(readArtifactForm(old, form.workspace_id), checked)) fail(); return }
++ const saved = await store.save(form.workspace_id, form.snapshot_id, JSON.stringify(checked), 0, [], guard)
++ if (!sameValue(readArtifactForm(saved.record, form.workspace_id), checked)) fail()
++}
+diff --git a/apps/web/src/features/codex/artifactMemory.ts b/apps/web/src/features/codex/artifactMemory.ts
+new file mode 100644
+index 00000000..d24b4a23
+--- /dev/null
++++ b/apps/web/src/features/codex/artifactMemory.ts
+@@ -0,0 +1,34 @@
++import { sameValue } from '../providers/providerSchema'
++import { decodeArtifactCommand, type ArtifactCommand } from './artifactCommands'
++import { decodeArtifactForm, type ArtifactForm } from './artifactForms'
++const commands = new Map<string, ArtifactCommand>(), forms = new Map<string, ArtifactForm>(), listeners = new Set<() => void>()
++let revision = 0
++const changed = () => { revision++; listeners.forEach(listener => listener()) }
++export const subscribeArtifactMemory = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
++export const artifactMemoryVersion = () => revision
++export const heldArtifactCommands = (workspace: string) => [...commands.values()].filter(v => v.workspace_id === workspace).map(v => structuredClone(v))
++export const heldArtifactForms = (workspace: string) => [...forms.values()].filter(v => v.workspace_id === workspace).map(v => structuredClone(v))
++export function retainArtifactCommand(command: ArtifactCommand) {
++ const next = decodeArtifactCommand(JSON.stringify(command), command.workspace_id), old = commands.get(next.command_id)
++ const basis = (v: ArtifactCommand) => ({ ...v, ack: null, error: null })
++ if (old && (!sameValue(basis(old), basis(next)) || old.ack && next.ack && !sameValue(old.ack, next.ack))) throw new Error('Original turn command changed')
++ commands.set(next.command_id, old?.ack ? old : next); changed()
++}
++export function releaseArtifactCommand(command: ArtifactCommand) {
++ const old = commands.get(command.command_id), basis = (v: ArtifactCommand) => ({ ...v, ack: null, error: null })
++ // A checked durable ACK also covers an older pending copy. Never release a
++ // newer ACK merely because its earlier pending command reached storage.
++ if (old && (sameValue(old, command) || sameValue(basis(old), basis(command)) && !old.ack
++  && (command.ack || !old.error && command.error))) { commands.delete(command.command_id); changed() }
++}
++export function retainArtifactForm(form: ArtifactForm) {
++ const next = decodeArtifactForm(JSON.stringify(form), form.workspace_id), old = forms.get(next.snapshot_id)
++ if (old && !sameValue(old, next)) throw new Error('Original turn form changed')
++ forms.set(next.snapshot_id, next); changed()
++}
++export function releaseArtifactForm(form: ArtifactForm) {
++ if (sameValue(forms.get(form.snapshot_id), form)) { forms.delete(form.snapshot_id); changed() }
++}
++if (typeof window !== 'undefined') window.addEventListener('beforeunload', event => {
++ if (commands.size || forms.size) { event.preventDefault(); event.returnValue = '' }
++})
+diff --git a/apps/web/src/features/codex/artifactWire.test.ts b/apps/web/src/features/codex/artifactWire.test.ts
+new file mode 100644
+index 00000000..3edf74a9
+--- /dev/null
++++ b/apps/web/src/features/codex/artifactWire.test.ts
+@@ -0,0 +1,44 @@
++import { Blob as BinaryBlob } from 'node:buffer'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { artifactClient } from './artifactClient'
++import { dispatchArtifactCommand, type ArtifactCommand } from './artifactCommands'
++import { artifactAck, artifactActor, artifactManifest, artifactWorkspace } from './artifactFixtures'
++afterEach(() => vi.unstubAllGlobals())
++test('actual selected-artifact POST persists the original actor, key, full manifest and ordered body before transport', async () => {
++ const store = new DraftStore({ name: `artifact-wire-${crypto.randomUUID()}`, factory: new IDBFactory() }), basis = artifactManifest()
++ const original: ArtifactCommand = { version: 1, workspace_id: artifactWorkspace, actor_session_id: artifactActor, command_id: 'artifact_original_key',
++  target_id: basis.manifest.session_id, route: 'POST /api/v1/codex/sessions/{id}/artifacts/import', basis,
++  body: { turn_id: basis.manifest.turn_id, artifact_ids: [basis.manifest.entries[0].artifact_id], expected_manifest_sha256: basis.manifest_sha256 }, ack: null, error: null }
++ try {
++  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
++   expect(path).toBe('/api/v1/codex/sessions/codex_session_synthetic/artifacts/import')
++   expect(init.method).toBe('POST'); expect(new Headers(init.headers).get('Idempotency-Key')).toBe(original.command_id)
++   expect(JSON.parse(init.body as string)).toEqual(original.body)
++   const durable = (await store.load(artifactWorkspace))[original.command_id]
++   expect(durable, 'the original selected command must exist before any actual POST').toBeDefined()
++   expect(JSON.parse(durable.text)).toEqual(original)
++   return new Response(JSON.stringify(artifactAck), { status: 202 })
++  }))
++  const result = await dispatchArtifactCommand(original, artifactClient, store)
++  expect(result.ack).toEqual(artifactAck)
++  expect(JSON.parse((await store.load(artifactWorkspace))[original.command_id].text)).toEqual(result)
++ } finally { await store.close() }
++})
++
++test('actual generated manifest, aggregate and binary download routes check original target and bytes', async () => {
++ const { artifactImport, artifactData } = await import('./artifactFixtures'), paths: string[] = []
++ vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
++  paths.push(path); expect(init.method).toBe('GET')
++  if (path.endsWith('/download')) return Object.assign(new Response(artifactData), { blob: async () => new BinaryBlob([artifactData]) })
++  return new Response(JSON.stringify(path.includes('artifact-imports') ? artifactImport() : artifactManifest()))
++ }))
++ const m = await artifactClient.manifest('codex_session_synthetic', 'turn_artifact_synthetic')
++ expect(await artifactClient.imports(artifactAck.id)).toEqual(artifactImport())
++ expect(await (await artifactClient.download(m.manifest.entries[0])).text()).toBe(artifactData)
++ expect(paths).toEqual(['/api/v1/codex/sessions/codex_session_synthetic/turns/turn_artifact_synthetic/artifacts', '/api/v1/codex/artifact-imports/job_artifact_import', '/api/v1/artifacts/artifact_synthetic_md/download'])
++ await expect(artifactClient.manifest('session_other', 'turn_artifact_synthetic')).rejects.toThrow()
++ vi.stubGlobal('fetch', vi.fn(async () => new Response('wrong bytes')))
++ await expect(artifactClient.download(m.manifest.entries[0])).rejects.toThrow()
++})
+diff --git a/apps/web/src/features/codex/useCodexArtifacts.ts b/apps/web/src/features/codex/useCodexArtifacts.ts
+new file mode 100644
+index 00000000..c6487178
+--- /dev/null
++++ b/apps/web/src/features/codex/useCodexArtifacts.ts
+@@ -0,0 +1,210 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexArtifactEntry, CodexArtifactManifestView, CodexArtifactImportView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
++import type { DraftStore, DraftWriteGuard } from '../../workbench/DraftStore'
++import { sameValue } from '../providers/providerSchema'
++import { checkedBootstrap } from './bootstrapClient'
++import { checkedArtifact, artifactHash, artifactClient, type ArtifactPort } from './artifactClient'
++import { decodeArtifactCommand, dispatchArtifactCommand, makeArtifactCommand, artifactStore, persistArtifactCommand, readArtifactCommand, readArtifactImport, type ArtifactCommand } from './artifactCommands'
++import { decodeArtifactForm, emptyArtifactFields, artifactFormStore, persistArtifactForm, readArtifactForm, snapshotArtifactForm, type ArtifactFields, type ArtifactForm } from './artifactForms'
++import { heldArtifactCommands, heldArtifactForms, artifactMemoryVersion, releaseArtifactCommand, releaseArtifactForm, retainArtifactCommand, retainArtifactForm, subscribeArtifactMemory } from './artifactMemory'
++
++const academic = (s: SessionResponse) => s.role === 'author' && !s.active_independent_attempt_id && !s.active_open_book_attempt_id
++const denied = (e: unknown) => e instanceof ApiError && ([401, 403].includes(e.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(e.code ?? ''))
++export function useCodexArtifacts(workspace: string, writeAdmitted: boolean, port: ArtifactPort = artifactClient, store: DraftStore = artifactStore, formStore: DraftStore = artifactFormStore) {
++ const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++ useSyncExternalStore(subscribeArtifactMemory, artifactMemoryVersion, artifactMemoryVersion)
++ const admission = useRef(writeAdmitted), revocation = useRef(0)
++ if (admission.current && !writeAdmitted) ++revocation.current
++ admission.current = writeAdmitted
++ const owner = JSON.stringify([workspace, access, revocation.current]), scope = useRef({ owner, port, store, formStore }); scope.current = { owner, port, store, formStore }
++ const live = useRef(false), working = useRef(false), sequence = useRef(0), writers = useRef(new Set<AbortController>())
++ const [renderScope, setRenderScope] = useState({ owner, port, store, formStore }), [identity, setIdentity] = useState<SessionResponse | null>(null), actorRef = useRef<SessionResponse | null>(null)
++ const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
++ const [commands, setCommands] = useState<ArtifactCommand[]>([]), [forms, setForms] = useState<ArtifactForm[]>([])
++ const [form, setForm] = useState<ArtifactForm | null>(null), formRef = useRef<ArtifactForm | null>(null)
++ const [manifest, setManifest] = useState<CodexArtifactManifestView | null>(null)
++ const [aggregate, setAggregate] = useState<{ command: ArtifactCommand; view: CodexArtifactImportView } | null>(null)
++ const urls = useRef(new Set<string>())
++ const currentScope = () => live.current && scope.current.owner === owner && scope.current.port === port && scope.current.store === store && scope.current.formStore === formStore && access === getSessionGeneration()
++ const valid = (token: number) => currentScope() && sequence.current === token
++ const visible = renderScope.owner === owner && renderScope.port === port && renderScope.store === store && renderScope.formStore === formStore
++ const ready = visible && identity !== null, allowed = ready && writeAdmitted && academic(identity)
++ const clearReads = () => { setManifest(null); setAggregate(null); for (const url of urls.current) URL.revokeObjectURL(url); urls.current.clear() }
++ const hide = () => { actorRef.current = null; setIdentity(null); clearReads(); setCommands([]); setForms([]) }
++ const begin = () => { if (!currentScope() || !workspace || working.current) return null; working.current = true; setBusy(true); setError(''); setMessage(''); return ++sequence.current }
++ const finish = (token: number) => { if (valid(token)) { working.current = false; setBusy(false) } }
++ const fail = (reason: unknown, reading = false) => {
++  if (denied(reason)) hide()
++  setError(denied(reason) ? '产物操作的当前权限或原 actor 已变化；原命令与表单保留。'
++   : reading && reason instanceof ApiError && reason.status === 404 ? '当前没有可读取的产物记录（404）；未宣称模型已执行或已产生文件。原选择保留。'
++   : reason instanceof ApiError && reason.status === 503 ? 'BLOCKED：当前产物、来源或运行证明不可用（503）；没有启动模型或替换原命令。'
++   : reading ? '当前产物读取或字节核验未完成；未交付新内容，原选择和命令保留。'
++   : reason instanceof ApiError && reason.status === 412 ? '产物版本已变化（412）；原 key、完整 body 和只读基准保留，请独立 GET。'
++   : reason instanceof ApiError && reason.status === 409 ? '产物绑定冲突（409）；原命令保留，不自动换 key 或替换选择。'
++   : reason instanceof ApiError && ['CODEX_INPUT_PROOF_UNAVAILABLE', 'CODEX_RUNTIME_UNAVAILABLE'].includes(reason.code ?? '') ? `BLOCKED：${reason.code}；没有完整证明或可用执行器，未宣称已执行。原命令保留。`
++   : '产物结果或本机保存未知；原命令保留，只能显式回放原 key。')
++ }
++ async function fresh(token: number, subject: boolean, actor?: string) {
++  const value = checkedBootstrap<SessionResponse>('SessionResponse', await port.session())
++  if (!valid(token)) throw new Error('Scope changed')
++  if (value.workspace_id !== workspace || actor && value.actor_session_id !== actor || subject && (!writeAdmitted || !academic(value))) { hide(); throw new ApiError(403, 'Original artifact access changed') }
++  actorRef.current = value; setIdentity(value); return value
++ }
++ function writer(check: () => boolean) {
++  const c = new AbortController(); writers.current.add(c); const unsubscribe = subscribeSessionAccess(() => c.abort())
++  return { guard: { allowed: check, signal: c.signal } satisfies DraftWriteGuard, done: () => { unsubscribe(); writers.current.delete(c) } }
++ }
++ const loadCommands = async () => Object.values(await store.load(workspace)).map(v => readArtifactCommand(v, workspace))
++ const loadForms = async () => Object.values(await formStore.load(workspace)).map(v => readArtifactForm(v, workspace))
++ useEffect(() => {
++  live.current = true; ++sequence.current; working.current = false; setRenderScope({ owner, port, store, formStore }); hide(); setForm(null); formRef.current = null; setBusy(false); setError(''); setMessage('')
++  return () => { live.current = false; ++sequence.current; working.current = false; for (const value of writers.current) value.abort(); for (const url of urls.current) URL.revokeObjectURL(url); urls.current.clear() }
++ }, [owner, port, store, formStore])
++ const refresh = async () => {
++  const token = begin(); if (token === null) return
++  hide()
++  try { const session = await fresh(token, false), values = await loadCommands(), drafts = await loadForms(); await fresh(token, false, session.actor_session_id)
++   if (valid(token)) { setCommands(values); setForms(drafts); setMessage('产物本机记录已读取；只恢复原事实，没有自动 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { finish(token) }
++ }
++ const edit = (patch: Partial<ArtifactFields>) => {
++  if (!ready || !currentScope() || !allowed || working.current) return
++  const previous = formRef.current?.actor_session_id === identity.actor_session_id ? formRef.current : null
++  const next = snapshotArtifactForm(workspace, identity.actor_session_id, { ...(previous?.fields ?? emptyArtifactFields()), ...patch, ...(patch.session_id !== undefined || patch.turn_id !== undefined ? { selection: null } : {}) }, previous)
++  formRef.current = next; setForm(next); retainArtifactForm(next)
++  if (Object.keys(patch).some(k => ['session_id', 'turn_id'].includes(k))) clearReads()
++  const saving = writer(() => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id)
++  const sameActor = () => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id
++  void persistArtifactForm(next, formStore, saving.guard).then(() => { releaseArtifactForm(next); if (sameActor()) setForms(v => [...v.filter(f => f.snapshot_id !== next.snapshot_id), next]) })
++   .catch(() => { if (sameActor()) setError('产物表单尚未落盘；原输入保留在隔离内存，离开前请仅保存本机事实。') }).finally(saving.done)
++ }
++ const restore = async (value: ArtifactForm) => {
++  if (!allowed || value.workspace_id !== workspace || value.actor_session_id !== identity.actor_session_id) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  const prior = formRef.current?.snapshot_id, saving = writer(() => valid(token) && actorRef.current?.actor_session_id === actor && academic(actorRef.current) && writeAdmitted)
++  try {
++   const original = decodeArtifactForm(JSON.stringify(value), workspace); await fresh(token, true, actor)
++   const record = (await formStore.load(workspace))[original.snapshot_id]; if (!valid(token)) return
++   const held = heldArtifactForms(workspace).find(v => v.snapshot_id === original.snapshot_id), actual = record ? readArtifactForm(record, workspace) : held
++   if (!actual || !sameValue(actual, original) || held && !sameValue(held, original)) throw new Error('Original form changed')
++   await fresh(token, true, actor)
++   const next = snapshotArtifactForm(workspace, actor, original.fields, null); retainArtifactForm(next)
++   await persistArtifactForm(next, formStore, saving.guard); releaseArtifactForm(next); await fresh(token, true, actor)
++   if (valid(token)) { setForms(v => [...v, next]); if (formRef.current?.snapshot_id === prior) { formRef.current = next; setForm(next); clearReads() }; setMessage('原产物表单已核验并保存独立分支；较新的输入保持，没有 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { saving.done(); finish(token) }
++ }
++ const read = async () => {
++  if (!allowed || !form || form.actor_session_id !== identity.actor_session_id) return
++  const captured = form, actor = identity.actor_session_id, token = begin(); if (token === null) return
++  setManifest(null)
++  try {
++   await fresh(token, true, actor)
++   const v = checkedArtifact('CodexArtifactManifestView', await port.manifest(captured.fields.session_id, captured.fields.turn_id))
++   if (v.manifest.session_id !== captured.fields.session_id || v.manifest.turn_id !== captured.fields.turn_id) throw new Error('Wrong manifest')
++   await fresh(token, true, actor)
++   if (valid(token) && formRef.current?.snapshot_id === captured.snapshot_id) { setManifest(v); setMessage('当前清单已读取；原选择和原 ACK 保持，没有 POST。') }
++  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
++ }
++ const readImports = async (command: ArtifactCommand) => {
++  if (!allowed || command.actor_session_id !== identity.actor_session_id || !command.ack) return
++  const token = begin(); if (token === null) return
++  setAggregate(null)
++  try {
++   await fresh(token, true, command.actor_session_id)
++   const v = readArtifactImport(await port.imports(command.ack.id), command)
++   await fresh(token, true, command.actor_session_id)
++   if (valid(token)) setAggregate({ command, view: v })
++  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
++ }
++ const openPreview = async (importId: string) => {
++  if (!allowed || !aggregate) return null
++  const original = aggregate, actor = identity.actor_session_id, token = begin(); if (token === null) return null
++  try {
++   await fresh(token, true, actor)
++   const view = readArtifactImport(await port.imports(original.view.job.id), original.command)
++   const item = view.items.find(i => i.import_id === importId)
++   if (!item) throw new Error('Wrong Import child')
++   await fresh(token, true, actor)
++   if (valid(token)) return { importId: item.import_id, jobId: item.job.id }
++  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
++  return null
++ }
++ const download = async (entry: CodexArtifactEntry) => {
++  if (!allowed || !manifest || !manifest.manifest.entries.some(e => sameValue(e, entry))) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  try {
++   await fresh(token, true, actor)
++   const blob = await port.download(entry), bytes = new Uint8Array(await blob.arrayBuffer())
++   if (blob.size !== entry.size || artifactHash(bytes) !== entry.sha256) throw new Error('Changed bytes')
++   await fresh(token, true, actor)
++   if (valid(token)) {
++    const url = URL.createObjectURL(blob); urls.current.add(url)
++    const a = document.createElement('a'); a.href = url; a.download = entry.logical_path.split('/').at(-1)!; a.click()
++    setTimeout(() => { URL.revokeObjectURL(url); urls.current.delete(url) }, 15000)
++    setMessage('已核对实际字节并发起受控下载；内容仍未审校。')
++   }
++  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
++ }
++ async function execute(command: ArtifactCommand, existingToken?: number) {
++  if (!ready || command.workspace_id !== workspace || command.actor_session_id !== identity.actor_session_id || command.ack || !allowed) return
++  const token = existingToken ?? begin(); if (token === null) return
++  const saving = writer(() => valid(token)), subject = true
++  try {
++   await fresh(token, subject, command.actor_session_id); retainArtifactCommand(command)
++   const saved = await dispatchArtifactCommand(command, port, store, { guard: saving.guard,
++    beforePost: async () => { const values = await loadCommands(); await fresh(token, subject, command.actor_session_id); if (valid(token)) setCommands(values) },
++    onAck: retainArtifactCommand, beforeDelivery: async () => { await fresh(token, subject, command.actor_session_id) } })
++   releaseArtifactCommand(saved); const values = await loadCommands(); await fresh(token, subject, command.actor_session_id)
++   if (valid(token)) { setCommands(values); setMessage('回导原 202 ACK 已保存；聚合和 Import 子项状态须独立 GET，未自动确认入库。') }
++  } catch (e) {
++   if (e instanceof ApiError && e.status >= 400 && e.status <= 599 && !heldArtifactCommands(workspace).some(v => v.command_id === command.command_id && v.ack)) {
++    const rejected = decodeArtifactCommand(JSON.stringify({ ...command, error: { status: e.status, code: /^[A-Z][A-Z0-9_]{0,79}$/.test(e.code ?? '') && e.code?.trim() === e.code ? e.code : null } }), workspace)
++    retainArtifactCommand(rejected)
++    if (valid(token) && !denied(e)) { try { const saved = await persistArtifactCommand(rejected, store, saving.guard); releaseArtifactCommand(saved); const values = await loadCommands(); if (valid(token)) setCommands(values) } catch { /* Keep original command isolated. */ } }
++   }
++   if (valid(token)) fail(e)
++  } finally { saving.done(); finish(token) }
++ }
++ const candidate = () => {
++  const f = form?.fields
++  if (!allowed || !form || !f?.selection || form.actor_session_id !== identity.actor_session_id) throw new Error('Read and select concrete artifacts')
++  return makeArtifactCommand(workspace, identity.actor_session_id, f.selection.basis, f.selection.artifact_ids)
++ }
++ const submit = async () => {
++  const token = begin(); if (token === null) return
++  try { await execute(candidate(), token) } catch (e) { if (valid(token)) fail(e); finish(token) }
++ }
++ const chooseManifest = () => { if (manifest && allowed) edit({ selection: { basis: manifest, artifact_ids: [] } }) }
++ const select = (id: string, selected: boolean) => {
++  const s = form?.fields.selection
++  if (!allowed || !s || !manifest || !sameValue(s.basis, manifest)) return
++  const ids = new Set(s.artifact_ids); if (selected) ids.add(id); else ids.delete(id)
++  edit({ selection: { basis: s.basis, artifact_ids: s.basis.manifest.entries.filter(e => ids.has(e.artifact_id)).map(e => e.artifact_id) } })
++ }
++ const saveMemory = async () => {
++  if (!ready) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  const saving = writer(() => valid(token))
++  try { await fresh(token, false, actor)
++   for (const value of heldArtifactCommands(workspace)) { const saved = await persistArtifactCommand(value, store, saving.guard); releaseArtifactCommand(saved) }
++   for (const value of heldArtifactForms(workspace)) { await persistArtifactForm(value, formStore, saving.guard); releaseArtifactForm(value) }
++   const values = await loadCommands(), drafts = await loadForms(); await fresh(token, false, actor)
++   if (valid(token)) { setCommands(values); setForms(drafts); setMessage('仅保存产物原 actor 的本机事实和表单；未发送任何 POST。') }
++  } catch (e) { if (valid(token)) fail(e) } finally { saving.done(); finish(token) }
++ }
++ const held = heldArtifactCommands(workspace), heldForms = heldArtifactForms(workspace), all = new Map(commands.map(v => [v.command_id, v]))
++ for (const value of held) if (!all.get(value.command_id)?.ack || value.ack) all.set(value.command_id, value)
++ const allForms = new Map([...forms, ...heldForms].map(v => [v.snapshot_id, v])), latest = new Map<string, ArtifactForm>()
++ for (const value of allForms.values()) if (allowed && value.actor_session_id === identity.actor_session_id && (!latest.has(value.draft_id) || latest.get(value.draft_id)!.sequence < value.sequence)) latest.set(value.draft_id, value)
++ const retained = held.length + heldForms.length
++ const canSubmit = (() => { try { candidate(); return !working.current } catch { return false } })()
++ return { ready, allowed, busy: visible && busy, actor: ready ? identity.actor_session_id : null,
++  fields: allowed && form?.actor_session_id === identity.actor_session_id ? form.fields : emptyArtifactFields(), forms: [...latest.values()],
++  commands: allowed ? [...all.values()].filter(v => v.actor_session_id === identity.actor_session_id) : [],
++  manifest: allowed ? manifest : null, aggregate: allowed ? aggregate : null,
++  error: visible ? error : '', message: visible ? message : '', retained, dirty: retained > 0 || allForms.size > 0 || [...all.values()].some(v => !v.ack), safe: !working.current && retained === 0, isolated: !working.current && retained > 0,
++  canSubmit, canSave: ready && retained > 0, canReplay: (c: ArtifactCommand) => allowed && c.actor_session_id === identity.actor_session_id && !c.ack && !held.some(v => v.command_id === c.command_id && v.ack),
++  refresh, edit, restore, read, readImports, openPreview, download, execute, submit, chooseManifest, select, saveMemory }
++}
+diff --git a/apps/web/src/features/imports/ImportWorkflow.tsx b/apps/web/src/features/imports/ImportWorkflow.tsx
+index 0dea06ab..d0ae4143 100644
+--- a/apps/web/src/features/imports/ImportWorkflow.tsx
++++ b/apps/web/src/features/imports/ImportWorkflow.tsx
+@@ -6,7 +6,7 @@ import { FailedOriginal } from './FailedOriginal'
+ import { ReviewWarnings } from './ReviewWarnings'
+ import { UploadForm } from './UploadForm'
+ import { useImportWorkflow } from './useImportWorkflow'
+-import { validImportId } from './recovery'
++import { validImportId, type RecoveryId } from './recovery'
+ import { emptyReviewPanelState, pendingReviewForms, discardReviewForms, subscribeReviewForms, reviewFormMemoryVersion, type ReviewPanelState } from '../draftReview/reviewFormMemory'
+ import { ReviewPanel } from '../draftReview/ReviewPanel'
+ import './imports.css'
+@@ -14,15 +14,17 @@ import './imports.css'
+ const statusLabels = { staged: '原件已暂存', parsing: '正在解析', preview_ready: '预览已就绪，等待确认', committed: '已确认入库', cancelled: '已取消', failed: '导入失败' }
+ const jobLabels = { queued: '排队中', running: '运行中', awaiting_approval: '等待确认', completed: '任务已完成', failed: '任务失败', cancelled: '任务已取消' }
+ 
+-export function ImportWorkflow({ workspaceId, paused = false, close, openCourse, onState }: { workspaceId: string; paused?: boolean; close: () => void; openCourse?: (ref: ContentRef) => void; onState?: (value: { dirty: boolean; safe: boolean; discardForms?: () => void }) => void }) {
++export function ImportWorkflow({ workspaceId, paused = false, close, openCourse, onState, requestedImport }: { workspaceId: string; paused?: boolean; requestedImport?: RecoveryId; close: () => void; openCourse?: (ref: ContentRef) => void; onState?: (value: { dirty: boolean; safe: boolean; discardForms?: () => void }) => void }) {
+   const state = useImportWorkflow(workspaceId, paused)
+   const [manualId, setManualId] = useState('')
+   const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState)
+   const callback = useRef(onState); callback.current = onState
+   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
+   const heldReviewForms = pendingReviewForms(workspaceId, 'import')
+-  const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspaceId, 'import') }, [workspaceId, reviewState.discardForms])
+-  useEffect(() => { callback.current?.({ ...reviewState, dirty: reviewState.dirty || heldReviewForms, discardForms }) }, [reviewState, heldReviewForms, discardForms])
++  const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspaceId, 'import'); if (requestedImport) { state.setAccepted([]); state.setMapping([]); state.setConfirmed(false) } }, [workspaceId, reviewState.discardForms, requestedImport, state.setAccepted, state.setMapping, state.setConfirmed])
++  const requestedDirty = !!requestedImport && (state.accepted.length > 0 || state.mapping.length > 0 || state.confirmed || !!state.originalFile)
++  const requestedSafe = !requestedImport || !state.busy && !state.draftBusy
++  useEffect(() => { callback.current?.({ ...reviewState, dirty: reviewState.dirty || heldReviewForms || requestedDirty, safe: reviewState.safe && requestedSafe, discardForms }) }, [reviewState, heldReviewForms, requestedDirty, requestedSafe, discardForms])
+   useEffect(() => () => callback.current?.({ dirty: pendingReviewForms(workspaceId, 'import'), safe: true, discardForms }), [workspaceId, discardForms])
+   const snapshot = state.snapshot
+   const blockers = snapshot?.warnings.some(warning => warning.severity === 'error') ?? false
+@@ -38,7 +40,7 @@ export function ImportWorkflow({ workspaceId, paused = false, close, openCourse,
+   if (!suspended) lastOperation.current = { role: state.auth?.role ?? lastOperation.current.role, status: snapshot?.status ?? lastOperation.current.status }
+   const operationRole = !state.roleChanging && state.auth ? state.auth.role : lastOperation.current.role
+   return <div className="import-workflow">
+-    <UploadForm suspended={suspended || !!state.active} disabled={state.busy || !state.auth || activeTest} courses={state.courses} moreCourses={!!state.courseCursor} onMoreCourses={() => void state.loadCourses()} submit={state.upload} />
++    {!requestedImport && <UploadForm suspended={suspended || !!state.active} disabled={state.busy || !state.auth || activeTest} courses={state.courses} moreCourses={!!state.courseCursor} onMoreCourses={() => void state.loadCourses()} submit={state.upload} />}
+     {suspended ? <div role="status">{operationRole && <p>操作角色：{operationRole === 'author' ? '作者' : '学习者'}（上次确认，正在重新核验）</p>}{lastOperation.current.status && <p>上次确认的流程状态：<span>{statusLabels[lastOperation.current.status]}</span>；当前不能预览或确认。</p>}<p>正在核验导入访问权限。测试限制期间，材料预览与原件下载暂不可用。</p><p>当前导入记录、已选择的本机文件与未提交设置仍保留。权限恢复后会重新读取服务端内容。</p></div> : <>
+     <div className="import-role"><span>操作角色：{state.auth ? state.auth.role === 'author' ? '作者' : '学习者' : '正在核对会话…'}</span><button disabled={!state.auth || state.busy || activeTest} onClick={() => void state.changeRole()}>{state.auth?.role === 'author' ? '切换为学习者角色' : '切换为作者角色'}</button></div>
+     <p className="muted">含私有材料的学习包及原件需要作者角色；切换角色须由你明确操作。</p>
+@@ -47,6 +49,7 @@ export function ImportWorkflow({ workspaceId, paused = false, close, openCourse,
+     {state.cacheError && <p className="import-warning" role="status">{state.cacheError}</p>}
+     {state.busy && <p role="status">正在等待服务端响应…</p>}
+     {!state.active && <>
++      {requestedImport && <button disabled={state.busy || !state.auth || activeTest || !validImportId(requestedImport.importId) || !!requestedImport.jobId && !validImportId(requestedImport.jobId)} onClick={() => void state.resume(requestedImport)}>读取指定回导预览 {requestedImport.importId}</button>}
+       <details open={state.recovery.length > 0}><summary>恢复已有导入</summary><p className="muted">浏览器只保存任务 ID。原件、正文、警告和提交结果均从服务端重新读取。</p>
+         {state.recovery.length > 0 && <div className="import-history">{state.recovery.map(item => <button key={item.importId} disabled={state.busy || !state.auth} onClick={() => void state.resume(item)}>恢复 {item.importId}</button>)}</div>}
+         <div className="import-fields"><label>服务端导入 ID<input value={manualId} onChange={event => setManualId(event.target.value)} /></label></div>

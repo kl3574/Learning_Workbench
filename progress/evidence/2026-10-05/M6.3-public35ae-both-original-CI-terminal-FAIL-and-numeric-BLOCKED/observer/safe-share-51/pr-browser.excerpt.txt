@@ -1,0 +1,34 @@
+189: 2026-10-04T18:56:29.9316469Z [command]/usr/bin/git log -1 --format=%H
+190: 2026-10-04T18:56:29.9356894Z 13ea4bd0fc6a427321320a23a5bc7950b16a5560
+617: 2026-10-04T18:57:08.8090471Z ##[group]Run make build
+649: 2026-10-04T18:57:12.2006929Z ##[group]Run make test-e2e
+788: 2026-10-04T19:29:17.6230438Z   ✘   97 ../../tests/e2e/review.spec.ts:36:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload (30.9s)
+789: 2026-10-04T19:29:44.9580072Z   ✓   98 ../../tests/e2e/review.spec.ts:77:1 › a delayed old review response cannot restore history or academic context after another page starts a real independent attempt (26.7s)
+827: 2026-10-04T19:35:40.5801739Z   1) ../../tests/e2e/review.spec.ts:36:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload 
+828: 2026-10-04T19:35:40.5802878Z 
+829: 2026-10-04T19:35:40.5803122Z     Test timeout of 30000ms exceeded.
+830: 2026-10-04T19:35:40.5803466Z 
+831: 2026-10-04T19:35:40.5803802Z     Error: expect(locator).toHaveValue(expected) failed
+832: 2026-10-04T19:35:40.5804220Z 
+833: 2026-10-04T19:35:40.5804723Z     Locator: getByRole('region', { name: '完整评分历史', exact: true }).getByLabel('选择评分版本')
+834: 2026-10-04T19:35:40.5805253Z     Expected: "1"
+835: 2026-10-04T19:35:40.5805556Z     Error: element(s) not found
+836: 2026-10-04T19:35:40.5805750Z 
+837: 2026-10-04T19:35:40.5805855Z     Call log:
+838: 2026-10-04T19:35:40.5806697Z       - Expect "toHaveValue" getByRole('region', { name: '完整评分历史', exact: true }).getByLabel('选择评分版本') with timeout 5000ms
+839: 2026-10-04T19:35:40.5808487Z       - waiting for getByRole('region', { name: '完整评分历史', exact: true }).getByLabel('选择评分版本')
+840: 2026-10-04T19:35:40.5809335Z       - Target page, context or browser has been closed
+841: 2026-10-04T19:35:40.5809752Z 
+842: 2026-10-04T19:35:40.5809762Z 
+843: 2026-10-04T19:35:40.5811147Z       65 |   const link = new URL(page.url()); const target = JSON.parse(link.searchParams.get('reader')!); expect(target.course).toEqual(fixture.course); expect(target.lesson).toEqual(fixture.lesson); expect(target.block).toEqual(fixture.block)
+844: 2026-10-04T19:35:40.5813441Z       66 |   await expect(page.locator(`#block-${fixture.block.id}-r${fixture.block.revision}`)).toBeVisible()
+845: 2026-10-04T19:35:40.5815216Z     > 67 |   const reviewTab = page.getByRole('tab', { name: /测试复盘/ }); await reviewTab.click(); await expect(history.getByLabel('选择评分版本')).toHaveValue('1')
+846: 2026-10-04T19:35:40.5816325Z          |                                                                                                                                  ^
+847: 2026-10-04T19:35:40.5818646Z       68 |   await page.setViewportSize({ width: 390, height: 844 }); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1); await page.screenshot({ path: info.outputPath('review-history-after-390.png') })
+848: 2026-10-04T19:35:40.5823138Z       69 |   await page.getByRole('button', { name: '切换 Agent 栏', exact: true }).click(); const drawer = page.getByRole('dialog', { name: 'Agent 助教', exact: true }); await expect(drawer).toContainText('当前测试复盘上下文'); await expect(drawer).toContainText('评分版本 1：待复核'); await expect(drawer).toContainText('此版本没有当前获准的反馈正文'); await expect(drawer.getByRole('button', { name: '创建本次问答任务 ↑' })).toBeDisabled(); await drawer.getByRole('button', { name: '关闭Agent 助教', exact: true }).click()
+849: 2026-10-04T19:35:40.5826718Z       70 |   const evidence: PageEvidence = await page.request.get('/api/v1/learning/evidence?limit=100').then(response => response.json())
+850: 2026-10-04T19:35:40.5828470Z         at $RUNNER_HOME/work/Learning_Workbench/Learning_Workbench/tests/e2e/review.spec.ts:67:130
+851: 2026-10-04T19:35:40.5829146Z 
+858: 2026-10-04T19:35:40.5836167Z   1 failed
+860: 2026-10-04T19:35:40.5838071Z   132 passed (38.5m)
+862: 2026-10-04T19:35:40.6787391Z ##[error]Process completed with exit code 2.

@@ -1,0 +1,33 @@
+{
+  "head": "28c92bdad181fdc0e297c05507f01234d26a86ac",
+  "review_base": "d973e71f45909722f26d477358aee4d5d7141056",
+  "standards_findings": [],
+  "spec_findings": [
+    {
+      "axis": "Spec",
+      "priority": "P2",
+      "status": "OPEN in fixed 28c",
+      "path": "apps/web/src/features/codex/CodexCapabilitiesPanel.tsx",
+      "line": 64,
+      "title": "Unconditional footer asserts disconnected even when connection is unknown or confirmed",
+      "static_counterexample": [
+        "With admitted=true and capability GET rejecting 503, lines39-41/53 display unknown while line64 still says not connected.",
+        "With admitted=true and valid available=true/authorized=true capability response, line56 confirms connection/authorization while line64 still says not connected. The validator codexClient.ts:15-18 permits this combination with all three product flags false."
+      ],
+      "normative_basis": [
+        "PRODUCT_DESIGN.md:354 makes fallback labeling conditional on unavailable/unauthorized Codex, not unknown observations.",
+        "PRODUCT_DESIGN.md:658 requires capability/authorization observation.",
+        "PRODUCT_DESIGN.md:1467 distinguishes bootstrap readiness from independently observed account authorization."
+      ],
+      "minimum_correction": "Describe the local action, e.g. this local document does not call Codex, and let the existing fresh observation own current connection status; cover unknown and authorized responses in ordinary unit tests.",
+      "verification": "STATIC_ONLY; deterministic render branches inspected, no app/test/browser/DB/network execution."
+    }
+  ],
+  "execution": "NOT_RUN",
+  "prior_review_unchanged": {
+    "head": "d973e71f45909722f26d477358aee4d5d7141056",
+    "review_sha256": "dd03d2a9c58beb256b06f25519b48d7050a33ee7b6842c2a84929e840f374ab2"
+  },
+  "reviewer_scope": "One reviewer separately applied Standards and Spec axes; no parallel-agent independence claim, same thread-capacity limitation as initial review.",
+  "safe_output_limits": "No test execution credited. No DOM diagnosis reproduction, runtime/account/secret/DB access, remote action or source mutation. Producer-reported native/Web results are outside this receipt."
+}

@@ -1,0 +1,445 @@
+diff --git a/services/api/app/application/codex_operation_execution.py b/services/api/app/application/codex_operation_execution.py
+index bc226ee2..fc8ab275 100644
+--- a/services/api/app/application/codex_operation_execution.py
++++ b/services/api/app/application/codex_operation_execution.py
+@@ -68,6 +68,7 @@ class CodexOperationExecution(ABC):
+             if state.decided is None or state.status != 'approved':
+                 raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作尚未批准。')
+             ordinal = self.admit_operation(conn, workspace, state, states, history)
++            execute = self.operations.execute
+             operation = state.operation
+             now = utc_now()
+             if instant(now) >= instant(operation.expires_at):
+@@ -78,7 +79,7 @@ class CodexOperationExecution(ABC):
+             _, _, checked = self.turns._owned_state(conn, workspace)
+             self.verify_history(conn, workspace, checked)
+         try:
+-            result = self.operations.execute(operation.closure, content_sha256(operation))
++            result = execute(operation.closure, content_sha256(operation))
+             result = LiteralOperationResult.model_validate(result.model_dump(mode='json'))
+             if result.operation_sha256 != content_sha256(operation) or result.text != operation.closure.command.text:
+                 raise ValueError('Invalid interpreter receipt')
+diff --git a/services/api/app/application/codex_operation_profile.py b/services/api/app/application/codex_operation_profile.py
+index 6b9b7bd4..fe6b1183 100644
+--- a/services/api/app/application/codex_operation_profile.py
++++ b/services/api/app/application/codex_operation_profile.py
+@@ -7,6 +7,9 @@ The original model-request profile/bytes remain a separate immutable contract.
+ """
+ from collections.abc import Iterable
+ from typing import Annotated, Literal
++from types import CodeType, FunctionType, MethodType
++import sys
++import pydantic
+ 
+ from pydantic import Field
+ from packages.contracts import domain_models as dm
+@@ -37,7 +40,7 @@ def executable_closure() -> dict:
+ 
+ 
+ class LiteralOperationProfile(dm.StrictModel):
+-    version: Literal['codex-synthetic-literal-profile-v1']
++    version: Literal['codex-synthetic-literal-profile-v1', 'codex-synthetic-literal-profile-v2']
+     executable_sha256: dm.Sha256
+     command_schema_sha256: dm.Sha256
+     max_characters: Literal[256]
+@@ -50,7 +53,7 @@ class LiteralOperationProfile(dm.StrictModel):
+ 
+     @classmethod
+     def current(cls):
+-        return cls(version='codex-synthetic-literal-profile-v1', executable_sha256=content_sha256(executable_closure()),
++        return cls(version='codex-synthetic-literal-profile-v2', executable_sha256=content_sha256(runtime_executable_closure()),
+             command_schema_sha256=content_sha256(LiteralCommand.model_json_schema()), max_characters=256,
+             shell=None, environment={'no_environment_variables': True},
+             filesystem='no_host_files; private in-memory turn_outputs namespace only', network='denied',
+@@ -85,7 +88,15 @@ class CodexOperationRegistry:
+             raise ValueError('Duplicate fixed operation profile')
+ 
+     def available(self, profile: LiteralOperationProfile) -> bool:
+-        return canonical_bytes(profile) in self._profiles and profile == LiteralOperationProfile.current()
++        # An instance replacement is not the class code frozen by current().
++        # Legacy v1 facts remain decodable but never regain an execution grant.
++        if (type(self) is not CodexOperationRegistry or any(name in self.__dict__
++                for name in ('prepare', 'projection', 'execute', 'available'))):
++            return False
++        try:
++            return canonical_bytes(profile) in self._profiles and profile == LiteralOperationProfile.current()
++        except (ApiError, TypeError, ValueError, RecursionError):
++            return False
+ 
+     def prepare(self, workspace: str, turn: str, text: str):
+         if not self._profiles:
+@@ -130,3 +141,52 @@ class CodexOperationRegistry:
+ 
+ def result_digest(result: LiteralOperationResult) -> str:
+     return sha256_bytes(canonical_bytes(result))
++
++
++def _code_value(value):
++    """Path-independent identity of loaded owned code, not source on disk."""
++    if isinstance(value, CodeType):
++        return {'code': value.co_code.hex(), 'constants': [_code_value(item) for item in value.co_consts],
++            'names': list(value.co_names), 'varnames': list(value.co_varnames),
++            'freevars': list(value.co_freevars), 'cellvars': list(value.co_cellvars),
++            'argcount': value.co_argcount, 'posonlyargcount': value.co_posonlyargcount,
++            'kwonlyargcount': value.co_kwonlyargcount, 'flags': value.co_flags,
++            'exceptiontable': value.co_exceptiontable.hex()}
++    if value is None or type(value) in (str, int, bool):
++        return value
++    if type(value) is bytes:
++        return {'bytes': value.hex()}
++    if type(value) is tuple:
++        return {'tuple': [_code_value(item) for item in value]}
++    if type(value) is dict and all(type(key) is str for key in value):
++        return {key: _code_value(item) for key, item in value.items()}
++    raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '内存解释器代码闭包不可核验。')
++
++
++def _function_binding(function):
++    if isinstance(function, MethodType):
++        function = function.__func__
++    if type(function) is not FunctionType or function.__closure__:
++        raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '内存解释器包装代码不可核验。')
++    return {'code': _code_value(function.__code__), 'defaults': _code_value(function.__defaults__),
++        'kwdefaults': _code_value(function.__kwdefaults__)}
++
++
++def runtime_executable_closure() -> dict:
++    """Freeze the actual interpreter and owned decoding/execution/receipt path.
++
++    Python/Pydantic are fixed trusted runtime libraries, not a hostile process
++    boundary. This profile grants no host action. Runtime code replacement is
++    checked before a start/debit, rather than inferred from an earlier Git hash.
++    """
++    functions = {'literal': _literal, 'prepare': CodexOperationRegistry.prepare,
++        'projection': CodexOperationRegistry.projection, 'execute': CodexOperationRegistry.execute,
++        'canonical_bytes': canonical_bytes, 'strict_json': strict_json,
++        'content_sha256': content_sha256, 'sha256_bytes': sha256_bytes, 'result_digest': result_digest}
++    return {'version': 'codex-literal-runtime-closure-v2', 'interpreter': executable_closure(),
++        'functions': {name: _function_binding(function) for name, function in functions.items()},
++        'schemas': {model.__name__: model.model_json_schema() for model in
++            (LiteralCommand, LiteralOperationClosure, LiteralOperationResult, CodexCommandOperation)},
++        'model_validate': _function_binding(LiteralCommand.model_validate),
++        'model_dump': _function_binding(LiteralOperationResult.model_dump),
++        'python': list(sys.version_info[:3]), 'pydantic': pydantic.__version__}
+diff --git a/tests/fixtures/codex-operation/literal-v1.json b/tests/fixtures/codex-operation/literal-v1.json
+new file mode 100644
+index 00000000..3ec771ce
+--- /dev/null
++++ b/tests/fixtures/codex-operation/literal-v1.json
+@@ -0,0 +1 @@
++{"closure":{"argv":["synthetic-memory-literal-v1","Original v1 synthetic result α"],"command":{"text":"Original v1 synthetic result α","version":"codex-synthetic-literal-command-v1"},"environment":{},"output_namespace":"turn_outputs","profile":{"actual_cli_claim":false,"command_schema_sha256":"f874839462513c62baccf3532a7c056bbd02bfcb7b669d9688f981dc361c5a3e","environment":{"no_environment_variables":true},"executable_sha256":"0cc9f5d145e30eff963554c02ae29754460d545539a19f0a1af5fc6f74d1adef","filesystem":"no_host_files; private in-memory turn_outputs namespace only","max_characters":256,"network":"denied","shell":null,"subprocesses":0,"version":"codex-synthetic-literal-profile-v1"},"turn_id":"turn_legacy","version":"codex-synthetic-literal-operation-v1","workspace_id":"workspace_legacy"},"operation":{"command_text":"{\"text\":\"Original v1 synthetic result α\",\"version\":\"codex-synthetic-literal-command-v1\"}","cwd":"turn_outputs","environment_sha256":"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","executable_sha256":"0cc9f5d145e30eff963554c02ae29754460d545539a19f0a1af5fc6f74d1adef","filesystem_scope_sha256":"01aa7bd69086700ce826de5dd1b7f99ac28bfb859bd3cc79ac75252133905029","kind":"command","network":"denied","operation_profile_sha256":"d367b2aab23b0dda3c599941a8dde32102c155f370a95a7a36e73c88926aea0d","read_files":[],"writable_area":"turn_outputs"},"profile":{"actual_cli_claim":false,"command_schema_sha256":"f874839462513c62baccf3532a7c056bbd02bfcb7b669d9688f981dc361c5a3e","environment":{"no_environment_variables":true},"executable_sha256":"0cc9f5d145e30eff963554c02ae29754460d545539a19f0a1af5fc6f74d1adef","filesystem":"no_host_files; private in-memory turn_outputs namespace only","max_characters":256,"network":"denied","shell":null,"subprocesses":0,"version":"codex-synthetic-literal-profile-v1"},"result":{"files_written":0,"host_actions":0,"operation_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","provider_requests":0,"text":"Original v1 synthetic result α","version":"codex-synthetic-literal-result-v1"}}
+\ No newline at end of file
+diff --git a/tests/integration/test_codex_operation_closure_http.py b/tests/integration/test_codex_operation_closure_http.py
+new file mode 100644
+index 00000000..2e28211a
+--- /dev/null
++++ b/tests/integration/test_codex_operation_closure_http.py
+@@ -0,0 +1,57 @@
++"""Original approval never authorizes changed in-memory interpreter code."""
++import json
++import pytest
++from packages.contracts.canonical import canonical_bytes
++from services.api.app.application.codex_operation_profile import CodexOperationRegistry, LiteralOperationProfile, LiteralCommand
++from services.api.app.application.errors import ApiError
++from tests.integration.test_codex_generic_approval_http import callback_turn
++from tests.integration.test_codex_generic_approval_boundaries import decision
++from tests.integration.test_codex_turn_dispatch_http import consent_case, base_consent_case
++
++__all__ = ['consent_case', 'base_consent_case']
++
++
++@pytest.mark.parametrize('scope', ['class', 'instance'])
++def test_original_approval_cannot_claim_after_execution_wrapper_changes(consent_case, monkeypatch, scope):
++    case, prepared, request, original = callback_turn(consent_case)
++    owner, worker = case.app.state.codex_turn_service.approvals, case.app.state.codex_turn_worker
++    owner.operations = CodexOperationRegistry([LiteralOperationProfile.current()])
++    raw = canonical_bytes({**json.loads(original), 'request_text': canonical_bytes(LiteralCommand(
++        version='codex-synthetic-literal-command-v1', text='Synthetic original text')).decode()})
++    invoked, failures, receipts = [], [], []
++    def peer(gate):
++        try:
++            gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
++            identifier = worker.receive_operation(raw)
++            view = case.client.get('/api/v1/approvals/'+identifier).json()
++            body = {'expected_revision': 1, 'operation_sha256': view['operation_sha256'], 'decision': 'approve_once'}
++            ack = decision(case, identifier, body)
++            assert ack.status_code == 200
++            receipts.append((identifier, body, ack.content))
++            actual = owner.operations.execute
++            def changed(*args):
++                invoked.append(True)
++                return actual(*args[-2:])
++            monkeypatch.setattr(CodexOperationRegistry if scope == 'class' else owner.operations, 'execute', changed)
++            before = case.dump()
++            with pytest.raises(ApiError) as denied:
++                worker.execute_operation(identifier)
++            assert denied.value.code == 'CODEX_RUNTIME_UNAVAILABLE'
++            assert not invoked and case.dump() == before
++            current = case.client.get('/api/v1/approvals/'+identifier).json()
++            assert current['execution'] == 'not_started' and current['revision'] == 2
++            assert current['validity'] == 'unavailable'
++            assert decision(case, identifier, body).content == ack.content
++            assert case.dump() == before
++        except Exception as error:
++            failures.append(error)
++            raise
++    case.app.state.synthetic_executor.peer = peer
++    assert worker.run_once() is True
++    if failures:
++        raise failures[0]
++    assert len(receipts) == 1 and not invoked
++    identifier, body, ack = receipts[0]
++    assert decision(case, identifier, body).content == ack
++    assert case.client.get('/api/v1/approvals/'+identifier).json()['execution'] == 'not_started'
++    assert len(case.app.state.synthetic_transport_calls) == 1
+diff --git a/tests/integration/test_codex_operation_execution_boundaries.py b/tests/integration/test_codex_operation_execution_boundaries.py
+index c5cb0e80..67f75a27 100644
+--- a/tests/integration/test_codex_operation_execution_boundaries.py
++++ b/tests/integration/test_codex_operation_execution_boundaries.py
+@@ -1,5 +1,7 @@
+ """Real owner lifecycle around an explicitly registered, memory-only interpreter."""
+ import json
++import sys
++from contextlib import contextmanager
+ from concurrent.futures import ThreadPoolExecutor
+ 
+ import pytest
+@@ -13,6 +15,28 @@ from tests.integration.test_codex_turn_dispatch_http import consent_case, base_c
+ __all__ = ['consent_case', 'base_consent_case']
+ 
+ 
++@contextmanager
++def interpreter_events(observe):
++    """Observe only the current test thread; never replace frozen tool code.
++
++    The callback targets the one actual execute code object. Return-event fault
++    injection models a lost receipt after execution, not a new licensed wrapper.
++    No external process, frame values, credential or system state is inspected.
++    """
++    code = CodexOperationRegistry.execute.__code__
++    previous = sys.getprofile()
++    def trace(frame, event, arg):
++        if previous is not None:
++            previous(frame, event, arg)
++        if frame.f_code is code:
++            observe(event)
++    sys.setprofile(trace)
++    try:
++        yield
++    finally:
++        sys.setprofile(previous)
++
++
+ def exercise(values, observe, monkeypatch):
+     case, prepared, request, old = callback_turn(values)
+     owner, worker = case.app.state.codex_turn_service.approvals, case.app.state.codex_turn_worker
+@@ -20,11 +44,6 @@ def exercise(values, observe, monkeypatch):
+     raw = canonical_bytes({**json.loads(old), 'request_text': canonical_bytes(LiteralCommand(
+         version='codex-synthetic-literal-command-v1', text='Actual synthetic memory result')).decode()})
+     executions, identifiers, errors = [], [], []
+-    actual = owner.operations.execute
+-    def counted(*args):
+-        executions.append(args[1])
+-        return actual(*args)
+-    monkeypatch.setattr(owner.operations, 'execute', counted)
+     def peer(gate):
+         try:
+             gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
+@@ -38,7 +57,8 @@ def exercise(values, observe, monkeypatch):
+             errors.append(error)
+             raise
+     case.app.state.synthetic_executor.peer = peer
+-    assert worker.run_once() is True
++    with interpreter_events(lambda event: executions.append(True) if event == 'call' else None):
++        assert worker.run_once() is True
+     if errors:
+         raise errors[0]
+     assert len(identifiers) == 1
+@@ -151,14 +171,15 @@ def test_unknown_execution_consumes_once_and_never_replays(consent_case, monkeyp
+     attempts = []
+     def observe(case, prep, worker, owner, identifier, body, *rest):
+         assert decision(case, identifier, body).status_code == 200
+-        def crash(*args):
+-            attempts.append(True)
+-            raise ValueError('Synthetic missing execution receipt')
+-        monkeypatch.setattr(owner.operations, 'execute', crash)
+-        for _ in range(2):
+-            with pytest.raises(ApiError) as error:
+-                worker.execute_operation(identifier)
+-            assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
++        def crash(event):
++            if event == 'return':
++                attempts.append(True)
++                raise ValueError('Synthetic missing execution receipt after actual interpreter')
++        with interpreter_events(crash):
++            for _ in range(2):
++                with pytest.raises(ApiError) as error:
++                    worker.execute_operation(identifier)
++                assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
+     case, prepared, identifier, _ = exercise(consent_case, observe, monkeypatch)
+     assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'unknown'
+     view = case.client.get('/api/v1/approvals/'+identifier).json()
+@@ -169,14 +190,12 @@ def test_unknown_execution_consumes_once_and_never_replays(consent_case, monkeyp
+ def test_late_actual_result_survives_actor_loss_without_subject_delivery(consent_case, monkeypatch):
+     def observe(case, prep, worker, owner, identifier, body, *rest):
+         assert decision(case, identifier, body).status_code == 200
+-        actual = owner.operations.execute
+-        def withdraw(*args):
+-            result = actual(*args)
+-            assert case.client.post('/api/v1/session/role', json={'role':'learner'},
+-                headers={**case.headers, 'Idempotency-Key':'late-role'}).status_code == 200
+-            return result
+-        monkeypatch.setattr(owner.operations, 'execute', withdraw)
+-        worker.execute_operation(identifier)
++        def withdraw(event):
++            if event == 'return':
++                assert case.client.post('/api/v1/session/role', json={'role':'learner'},
++                    headers={**case.headers, 'Idempotency-Key':'late-role'}).status_code == 200
++        with interpreter_events(withdraw):
++            worker.execute_operation(identifier)
+         before = case.dump()
+         assert case.client.get('/api/v1/approvals/'+identifier).status_code == 403
+         assert case.get('turns/'+prep['turn_id']).json()['approval_controls'][0]['revision'] == 4
+@@ -243,11 +262,12 @@ def test_committed_start_without_receipt_recovers_unknown_in_new_application(con
+         ack = decision(case, identifier, body)
+         assert ack.status_code == 200
+         receipts.append((body, ack.content))
+-        def interrupted(*args):
+-            raise Interrupted()
+-        monkeypatch.setattr(owner.operations, 'execute', interrupted)
+-        with pytest.raises(Interrupted):
+-            worker.execute_operation(identifier)
++        def interrupted(event):
++            if event == 'call':
++                raise Interrupted()
++        with interpreter_events(interrupted):
++            with pytest.raises(Interrupted):
++                worker.execute_operation(identifier)
+         view = case.client.get('/api/v1/approvals/'+identifier).json()
+         assert view['execution'] == 'started' and view['revision'] == 3
+         with pytest.raises(ApiError) as error:
+@@ -270,7 +290,7 @@ def test_committed_start_without_receipt_recovers_unknown_in_new_application(con
+     before = case.dump()
+     assert worker.recover() == 0 and worker.run_once() is False
+     assert decision(case, identifier, receipts[0][0]).content == receipts[0][1]
+-    assert case.dump() == before and calls == []
++    assert case.dump() == before and calls == [True]
+ 
+ 
+ def test_result_transaction_failure_retains_started_and_unknown_without_reexecution(consent_case, monkeypatch):
+@@ -391,15 +411,44 @@ def test_multiple_approvals_do_not_reserve_extra_tool_calls(consent_case, monkey
+ def test_start_is_committed_before_interpreter_and_cannot_be_reentered(consent_case, monkeypatch):
+     def observe(case, prep, worker, owner, identifier, body, *rest):
+         assert decision(case, identifier, body).status_code == 200
+-        actual = owner.operations.execute
+-        def checked(*args):
+-            view = case.client.get('/api/v1/approvals/'+identifier).json()
+-            assert view['revision'] == 3 and view['execution'] == 'started'
+-            with pytest.raises(ApiError) as error:
+-                worker.execute_operation(identifier)
+-            assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
+-            return actual(*args)
+-        monkeypatch.setattr(owner.operations, 'execute', checked)
+-        worker.execute_operation(identifier)
++        def checked(event):
++            if event == 'call':
++                view = case.client.get('/api/v1/approvals/'+identifier).json()
++                assert view['revision'] == 3 and view['execution'] == 'started'
++                with pytest.raises(ApiError) as error:
++                    worker.execute_operation(identifier)
++                assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
++        with interpreter_events(checked):
++            worker.execute_operation(identifier)
+     _, _, _, calls = exercise(consent_case, observe, monkeypatch)
+     assert len(calls) == 1
++
++
++def test_replacement_after_durable_claim_never_invokes_new_wrapper(consent_case, monkeypatch):
++    replacements = []
++    def observe(case, prep, worker, owner, identifier, body, *rest):
++        ack = decision(case, identifier, body)
++        assert ack.status_code == 200
++        append = owner._append
++        def after_claim(*args):
++            append(*args)
++            if args[4].kind == 'started':
++                def changed(*unused):
++                    replacements.append(True)
++                    raise AssertionError('Changed wrapper must never run')
++                monkeypatch.setattr(owner.operations, 'execute', changed)
++        monkeypatch.setattr(owner, '_append', after_claim)
++        with pytest.raises(ApiError) as denied:
++            worker.execute_operation(identifier)
++        assert denied.value.code == 'CODEX_OUTCOME_UNKNOWN'
++        view = case.client.get('/api/v1/approvals/'+identifier).json()
++        assert view['execution'] == 'unknown' and view['revision'] == 4
++        assert view['started_at'] is not None and view['result_sha256'] is None
++        before = case.dump()
++        with pytest.raises(ApiError):
++            worker.execute_operation(identifier)
++        assert decision(case, identifier, body).content == ack.content
++        assert case.dump() == before and replacements == []
++    case, prep, identifier, calls = exercise(consent_case, observe, monkeypatch)
++    assert case.get('turns/'+prep['turn_id']).json()['outcome'] == 'unknown'
++    assert len(calls) == 1 and replacements == []
+diff --git a/tests/unit/test_codex_operation_closure.py b/tests/unit/test_codex_operation_closure.py
+new file mode 100644
+index 00000000..3602d154
+--- /dev/null
++++ b/tests/unit/test_codex_operation_closure.py
+@@ -0,0 +1,55 @@
++"""No executable code is run by these controlled closure comparisons."""
++import pytest
++from services.api.app.application import codex_operation_profile as profile
++
++
++@pytest.mark.parametrize('name', ['prepare', 'execute', 'projection'])
++def test_changed_registry_code_invalidates_original_profile(monkeypatch, name):
++    frozen = profile.LiteralOperationProfile.current()
++    registry = profile.CodexOperationRegistry([frozen])
++    original = getattr(profile.CodexOperationRegistry, name)
++    def replacement(*args, **kwargs):
++        return original(*args, **kwargs)
++    monkeypatch.setattr(profile.CodexOperationRegistry, name, replacement)
++    assert registry.available(frozen) is False
++
++
++def test_escaped_surrogate_is_unsupported_instead_of_throwing():
++    registry = profile.CodexOperationRegistry([profile.LiteralOperationProfile.current()])
++    assert registry.prepare('workspace_one', 'turn_one',
++        '{"text":"\\ud800","version":"codex-synthetic-literal-command-v1"}') is None
++
++
++def test_actual_old_profile_bytes_roundtrip_without_new_execution_authority():
++    from pathlib import Path
++    from packages.contracts.canonical import canonical_bytes, strict_json
++    from services.api.app.codex_turn_dto import CodexCommandOperation
++    raw = (Path(__file__).parents[1]/'fixtures/codex-operation/literal-v1.json').read_bytes()
++    value = strict_json(raw)
++    old = profile.LiteralOperationProfile.model_validate(value['profile'])
++    closure = profile.LiteralOperationClosure.model_validate(value['closure'])
++    operation = CodexCommandOperation.model_validate(value['operation'])
++    result = profile.LiteralOperationResult.model_validate(value['result'])
++    assert canonical_bytes({name: model.model_dump(mode='json') for name, model in
++        [('profile', old), ('closure', closure), ('operation', operation), ('result', result)]}) == raw
++    assert old.version == 'codex-synthetic-literal-profile-v1'
++    assert profile.CodexOperationRegistry.projection(closure) == operation
++    assert result.text == 'Original v1 synthetic result α'
++    registry = profile.CodexOperationRegistry([old])
++    assert registry.available(old) is False
++    assert registry.prepare(closure.workspace_id, closure.turn_id, operation.command_text) is None
++    from services.api.app.application.errors import ApiError
++    with pytest.raises(ApiError) as denied:
++        registry.execute(closure, result.operation_sha256)
++    assert denied.value.code == 'CODEX_RUNTIME_UNAVAILABLE'
++
++
++@pytest.mark.parametrize('helper', ['strict_json', 'canonical_bytes', 'content_sha256', 'sha256_bytes', 'result_digest'])
++def test_changed_related_interpretation_or_receipt_code_invalidates_profile(monkeypatch, helper):
++    frozen = profile.LiteralOperationProfile.current()
++    registry = profile.CodexOperationRegistry([frozen])
++    original = getattr(profile, helper)
++    def same_behavior(*args, **kwargs):
++        return original(*args, **kwargs)
++    monkeypatch.setattr(profile, helper, same_behavior)
++    assert registry.available(frozen) is False

@@ -1,0 +1,74 @@
+import datetime
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+B = Path('$HOME/.cache/learning-workbench-acceptance')
+R = B / 'm62-public-safe-oct02'
+O = Path(__file__).parent
+sys.path.insert(0, str(R / 'scripts'))
+from check_publication import inspect
+
+sha = lambda data: hashlib.sha256(data).hexdigest()
+candidate_root = B / 'm63-codex-turn-ui-cancel-evidence-oct04/publication-candidates'
+allow = json.loads((candidate_root / 'allowlist.json').read_text())
+records = []
+for e in allow['files']:
+    relative = e['path']
+    candidate = (candidate_root / relative).read_bytes()
+    raw = (B / 'm63-codex-turn-ui-cancel-evidence-oct04' / relative).read_bytes()
+    assert sha(candidate) == e['candidate_sha256'] and sha(raw) == e['raw_sha256'], relative
+    assert raw.count(b'$HOME') == e['homeprefix_replacements'], relative
+    assert candidate == raw.replace(b'$HOME', b'<LOCAL_HOME>'), relative
+    assert not inspect('progress/' + relative, candidate), relative
+    records.append({'path': relative, 'raw_sha256': sha(raw), 'sha256': sha(candidate), 'bytes': len(candidate), 'transformation': 'exact $HOME to <LOCAL_HOME> only' if raw != candidate else 'none'})
+assert len(records) == 31
+
+maps = []
+for directory in ['m63-codex-turn-ui-cancel-evidence-oct04/fixed-94bdbb02', 'm63-codex-turn-ui-cancel-evidence-oct04/fixed-b149fda2']:
+    p = B / directory
+    before, after = [(p / name).read_bytes() for name in ['inputs-before.json', 'inputs-after.json']]
+    assert before == after
+    data = json.loads(before)
+    assert data['all_match_git'] and data['status'] == '' and data['count'] == len(data['files'])
+    expected = {}
+    tree = subprocess.check_output(['git', 'ls-tree', '-rz', data['head']], cwd=R)
+    for entry in tree.split(b'\0'):
+        if not entry:
+            continue
+        meta, path = entry.split(b'\t', 1)
+        if path.startswith(b'progress/'):
+            continue
+        expected[path.decode()] = meta.split()[2].decode()
+    assert set(expected) == {e['path'] for e in data['files']}
+    proc = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=R, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    for e in data['files']:
+        assert e['git_blob'] == e['actual_blob'] == expected[e['path']] and e['matches_git']
+        proc.stdin.write((e['git_blob'] + '\n').encode())
+        proc.stdin.flush()
+        header = proc.stdout.readline().split()
+        assert header[0].decode() == e['git_blob'] and header[1] == b'blob'
+        blob = proc.stdout.read(int(header[2]))
+        assert proc.stdout.read(1) == b'\n'
+        assert sha(blob) == e['sha256']
+    proc.stdin.close()
+    assert proc.wait() == 0
+    maps.append({'head': data['head'], 'count': data['count'], 'before_after_sha256': sha(before), 'complete_git_tree_and_all_blob_sha256_verified': True})
+
+report = {
+    'status': 'ROOT_CANCEL_WIRE_AND_BASIS_P2_CLOSED_STATIC_CANDIDATES_READBACK_PASS',
+    'recorded_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    'reviewer': 'root, one reviewer reports both Standards and Spec axes; no claim of two spawned reviewers',
+    'Standards': {'additional_confirmed_findings': []},
+    'Spec': {'cancel_wire_finding': 'CLOSED_STATIC: generated strict JobSnapshot decoded completely and original job/kind/workspace checked before preserving full ACK; original1 FAIL retained. OriginalRED test and94b fixture differ only progress.label empty to cancelled; no whole-test byte identity claimed.', 'cancel_basis_finding': 'CLOSED_STATIC: original terminal/already_requested observe same status/revision; new running request running/+1; other nonterminal cancelled/+1, matching Codex strong CAS owner. Original6 illegal FAIL/4 legal PASS preserved; b149 adds narrow journal relation check. Complete ACK is kept unchanged, never reconstructed from current GET.'},
+    'source': 'b149fda25f4b007ffb4858a9b327c536a462c065',
+    'author_gates': '1201 Web /154 files, strict/build/spec exit0 and214 original owner tests PASS; root verified manifests and logs but did not rerun those commands',
+    'candidate_allowlist_sha256': sha((candidate_root / 'allowlist.json').read_bytes()),
+    'candidates': records,
+    'git_maps': maps,
+    'boundary': 'Read-only source/evidence verification, no source push, no actual external model/CLI, root actual native b149 separately passed full cancel ACK loss/reload/replay and persistence; no whole M6.3 or academic acceptance. Publication remains a separate explicit action.'
+}
+(O / 'READBACK.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+print(json.dumps({'status': report['status'], 'candidates': len(records), 'git_map_counts': [m['count'] for m in maps], 'report_sha256': sha((O / 'READBACK.json').read_bytes())}))

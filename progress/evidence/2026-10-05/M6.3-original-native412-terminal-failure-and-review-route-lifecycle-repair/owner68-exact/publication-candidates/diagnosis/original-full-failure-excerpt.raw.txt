@@ -1,0 +1,22 @@
+  1) ../../tests/e2e/review.spec.ts:76:1 › a delayed old review response cannot restore history or academic context after another page starts a real independent attempt 
+
+    Error: route.fulfill: Route is already handled!
+
+      78 |   let release!: () => void, captured!: () => void; const gate = new Promise<void>(resolve => { release = resolve }), ready = new Promise<void>(resolve => { captured = resolve })
+      79 |   const routePattern = `**/api/v1/attempts/${attempt.id}/result`
+    > 80 |   await page.route(routePattern, async route => { const response = await route.fetch(); captured(); await gate; await route.fulfill({ response }) })
+         |                                                                                                                             ^
+      81 |   await page.getByRole('button', { name: '重新读取评分结果', exact: true }).click(); await ready
+      82 |   const other = await page.context().newPage()
+      83 |   try {
+        at $HOME/.cache/learning-workbench-acceptance/m63-native-formal-412abe-owner-oct05/tests/e2e/review.spec.ts:80:125
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m63-native-formal-412abe-oct05/results/review-a-delayed-old-revie-e1a43--a-real-independent-attempt/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m63-native-formal-412abe-oct05/results/review-a-delayed-old-revie-e1a43--a-real-independent-attempt/error-context.md
+
+  1 failed
+    ../../tests/e2e/review.spec.ts:76:1 › a delayed old review response cannot restore history or academic context after another page starts a real independent attempt 
+  132 passed (24.1m)
