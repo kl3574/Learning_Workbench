@@ -1,0 +1,11 @@
+Native专用CI run37780069525 /attempt1 /eventpush /head954e6f847e9d5ffd13112abdc2063fc00e0c4c02已completed/success，唯一job113320642240 native-context15全阶段完成。一次run/jobs/artifacts三GET均0；terminal后唯一joblog、唯一declaredartifact rawZIP各一次GET均0，总5GET、无重试/轮询/remote mutation。此为原fixture作者的实际artifact采集，不是独立源码质量评判。
+
+真实Cargo childreceipt实际退出0：cargo test --locked --offline -p codex-core --lib session::retained_outbound_snapshot::tests:: -- --nocapture；12:54:41.563483→13:04:35.626020Z。stdout原footer15passed/0failed/0ignored/0measured/2694filtered，0.14s；15唯一名字与fixedmanifest精确一致，含两Step-preempt取消负例。stderr真实Finished test profile [unoptimized]9m53s，33warnings保留；不是compile失败/零test，也不把APIjobsuccess单独当footer证明。prepare/provision/explicitlockedfetch/test四report均actual0，12nestedcommand/24stdoutstderr hash与原receipt核合。
+
+唯一artifact11552771067，raw2806437B SHA25d37084e454b0becf281363efc773024cc5d53e665f73a766bcd74fe911fe7f，与GitHubdigest一致。安全47regularmembers，11,280,023B展开预算；只在archive内读namedJSON/log，未提取源码、图或库到新文件。source/test8787maps prepare→fetch→test原字节/fullPOSIXmode/link投影全等；sourcecompactdf5d1917e2de209945096aa8f64796fdaf76374da6c468d69bb8553e3d42ccd3、test22f8796d1c15a6f819b6288055193b07709676ddc80ca8b8eeebc75cfc36c89a符合固定manifest。两图唯一差codex-rs/Cargo.toml：sourceworkspace0.160.0，仅testcopy0.0.0；原lock5553f06583159ed64666b6eb4beea3154e06b612e6312528131bdc226a6a860c不变。Native03五源rows符合先前固定review hash/bytes/0664，不将此录入跨版本sourceauthority。
+
+实际远端新有界profile debug0/incremental0/jobs2/testthreads2，Rust/cargo1.95官方ownedprefix；source/toolchain acquisition和cargo fetch是显式网络setup，测试strictlockedoffline。自己的tiny-file health通过只代表该写fsync/read/delete，非完整容量资格或release/profile等价。remote所有下载报告仅作为已有receipt绑定，不在本机重新获取源码/toolchain或测试。
+
+结论限定为Native03 realSession/sameStep的15个owned fixture测试本次真实PASS。foreign17、完整core/API/HTTP/guardian/platform suites、Windows、Codex CLI/AppServer/model/actualsend仍NOT_RUN；nativecapture→producer/FFI、qualified mapping/catalog/FinalAuth/InputProof、durable record_start→actualsend未接通，production NOT_ADMITTED。模型/send未作为此gate入口运行；不冒充所有远端进程网络的全局telemetry证明。原本地ENOSPC/零tests和所有封包保持，不覆盖旧FAIL。
+
+P下仅8summarymetadata+received原joblog/rawZIP两件；各真实hash/mode/locator保全，未复制源码/fullgraph/lib，未修改canonical/作者源码、重跑、dispatch、取消或发布。工具session52963已closed actual0；pending=[]。
