@@ -138,6 +138,17 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
           include-hidden-files: false
+      # Fixed, schema-checked server metadata from the two owned synthetic tests.
+      # Keep these bounded receipts on success as well as failure for comparison.
+      - name: Retain bounded synthetic server stages
+        if: ${{ always() && (steps.native.outcome == 'success' || steps.native.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+        with:
+          name: server-stage-metadata-${{ github.event_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/learning-workbench-e2e-results/**/server-stage-timing.json
+          retention-days: 3
+          if-no-files-found: warn
+          include-hidden-files: false
       # Synthetic browser failures only; never upload the data directory or traces.
       - name: Retain synthetic browser failure diagnostics
         if: ${{ failure() && steps.native.outcome == 'failure' }}
