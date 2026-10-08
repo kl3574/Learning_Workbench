@@ -94,9 +94,10 @@ the frozen subset uses synthetic requests and one owned closed loopback port.
 
 ## Scope and licensing
 
-No persistent authorization ledger, AppServer registration, model/counting proof,
-complete resource qualification, actual destination IP/DNS enforcement, or
-production admission is implemented by this slice. A caller can still construct
+This HTTP slice does not bind the platform's existing persistent control ledger
+to an actual HTTP send. AppServer registration, model/counting proof, complete
+resource qualification, actual destination IP/DNS enforcement and production
+admission remain incomplete. A caller can still construct
 an ordinary transport or refreeze trusted request material. The returned original
 request type retains its upstream raw `Debug` behavior, so trusted owners must
 avoid logging it. The shared atomic claim covers clones of one frozen allocation;
@@ -151,18 +152,20 @@ API190通过不能覆盖它们。唯一测试构建元数据差异仍为 workspa
 0.160.0→0.0.0；原Cargo.lock不变，原release二进制等价未证明。输出包含
 实际命令、日志哈希、退出码以及完整原/patch/normalized/final源码图。
 
-## 本地 core producer B03 回放
+## 本地 core producer 与 static bearer 回放
 
-`core-producer.patch` 在同一固定官方 tar 上合并 HTTP04、A+C 与 B03-r2
-的20个 Rust 路径。`core-producer-source.json` 绑定每项实际前后 SHA、原锁、
+`core-producer.patch` 在同一固定官方 tar 上合并 HTTP04、A+C、B03-r2
+及 FinalBearer05 的内部机械冻结机制，仍只改变
+20个 Rust 路径。`core-producer-source.json` 绑定每项实际前后 SHA、原锁、
 精确 Rust1.95.0 来源和完整源码图：原始8775项，补丁后8781项。文件字节、
 权限模式与 symlink 均校验；原 `vendor/bubblewrap/LICENSE -> COPYING`
 保留，它属于原 tar，不是补丁新增文件。旧私有 stock 遗漏该 link 及57项
 可执行模式的历史限定保留，不能拿旧副本宣称完整 tar 相等。
 
-工程候选仅对 B03-r2 四个测试 callsite 增加12处精确 `/*effort*/`、
+继承的工程阶段对 B03-r2 四个测试 callsite 增加12处精确 `/*effort*/`、
 `/*service_tier*/`、`/*include_internal*/` 参数注释；表达式、断言及实现
-不变，更新后的测试源码 SHA 明确记录在 manifest。空补丁 context 行采用
+不变。当前候选在同一 producer 模块新增 static bearer finalizer 和8项测试，
+两源的新 SHA 明确记录在 manifest；其余18项 Rust 源保持原字节。空补丁 context 行采用
 无尾空格表示，实际 `git apply --check`、应用及 SHA 核对仍必须成功。
 
 此内部切片将 ordinary core builder 的纯逻辑和纯 late body/header merge
@@ -171,8 +174,18 @@ API190通过不能覆盖它们。唯一测试构建元数据差异仍为 workspa
 输出硬限及 disabled truncation，再通过 A+C 共享 API 执行一次真实
 EncodedJson 编码。root cache-affinity 的实际 Responses session header 与
 logical metadata identity 分开，Internal/SubAgent 保持原 logical header
-规则。保留的实际 EncodedJson allocation 可送到 HTTP04 gate；可信最终鉴权
-后冻结、跳过普通 retry 的生产接线仍未完成。
+规则。保留的实际 EncodedJson allocation 交给内部
+`finalize_controlled_bearer_request`，只接受已解析 static API-key bearer 模式，
+拒绝 unresolved/ChatGPT/signing/refreshing、已有或冲突的 Authorization、
+Proxy-Authorization、Cookie 及歧义 bearer。单值 Authorization 标 sensitive
+后再交 HTTP04 freeze；原 allocation、URL、method、timeout 和 response cap
+保持不变。该 helper 零编码、刷新、callback、transport 构造或 IO。
+
+这只是机械材料校验。可信 owner 必须在 body builder 前解析同一 config/secret
+版本的 guardian/access/routing/attestation 等 required facts，后续只能走
+HTTP04 `for_frozen_responses_request`，不得进入普通 EndpointSession/AuthProvider
+和 retry。真实 Python→Rust request handle、可信 FinalAuth owner/InputProof
+与持久账本 send 绑定仍未实现；传入 HeaderValue 或 mode 不会创建权威。
 
 ```sh
 python3 scripts/codex-turn/replay_core_producer.py \
@@ -190,12 +203,13 @@ python3 scripts/codex-turn/replay_core_producer.py \
 默认只执行三个真实 `codex-core --lib` 过滤选择，均为严格
 `--locked --offline -- --test-threads=2`，jobs=2：
 
-- `responses_producer::tests`：11项受控纯本地构造/拒绝测试。
+- `responses_producer::tests`：19项 producer/拒绝/机械 bearer 测试，含两个自有 loopback sender 用例。
 - `websocket_handshake_includes_attestation_for_chatgpt_codex_responses`：2项既存纯 mock header 测试。
 - `internal_session_prompt_cache_key_is_scoped_to_parent_thread`：1项既存 cache-key 测试。
 
-每个选择均核实际退出、完整 footer、精确测试名及非零数量；只有11+2+1
-全通过才能报告本次14项 PASS。无 `--all-lib`、在线依赖补齐或自由 filter
+三个 filter、编译库总数2684及每项 footer 都固定校验，实际测试名必须精确
+匹配 manifest 且非零；只有19+2+1全通过才能报告本次22项 PASS。
+无 `--all-lib`、在线依赖补齐或自由 filter
 参数，缺缓存保留实际失败。首次失败即停止后续选择，不重试、不删日志。
 参数形式与原入口保持一致，旧 HTTP/API 入口及其源码不变。输出、Rustup home
 和 target 必须新建；可复用预先准备的任务 Cargo cache，但不会复用或覆盖
@@ -209,11 +223,18 @@ stdout/stderr/exit 在 `receipts/`（补丁）和 `core-tests/receipts/`（版�
 
 历史 B03-r2 是14 selected PASS/core lib check0；B02 相同 session 材料的
 真实 RED 为1 PASS/2 FAIL/exit101，旧30项成功并未消除当时的P2。新入口
-不运行完整2676项 core库、guardian测试、API190或HTTP库测试；既有 HTTP
+不重跑旧14二进制；每次默认回放从固定 tar 应用当前补丁，使用新 target 编译
+并记录本次实际22结果。FinalBearer05 作者的限定实际结果为 core22/0、
+core check0，HTTP gate8/0另列，不算默认core22的一部分。初始排序 RED
+为0/1/101，属于 freeze-before-auth 整合排序缺失，不是 HTTP04 安全漏洞；
+错误 trait 编译101及 Cookie 拒绝18/1/101保留，后者保持同一19测试源码修复
+guard后实际19/0。本入口
+不运行完整2684项 core库、guardian测试、API190或HTTP库测试；既有 HTTP
 完整114 PASS/6 FAIL保持 **FAIL**。本地源码/测试不能替代生产完整输入证明。
 
 **INCOMPLETE / NOT_ADMITTED**：plain resolved facts 只做机械一致性校验，
-不是可信 InputProof、FinalAuth 或 owner 权威。平台已有持久 control ledger；
+不是可信 InputProof 或 owner 权威。Static bearer 机械冻结已实现，完整可信
+FinalAuth 资格和 bridge 未完成。平台已有持久 control ledger；
 它与真实 final Request/单次 HTTP send 的绑定、Provider/platform bridge、
 模型/计量/容量证明、资源/DNS资格和 AppServer 生产接线仍未闭合；
 registry/default None、UI和产品 wire 不变。此回放

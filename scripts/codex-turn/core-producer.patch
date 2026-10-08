@@ -1395,7 +1395,7 @@ diff --git a/codex-rs/core/src/responses_producer.rs b/codex-rs/core/src/respons
 new file mode 100644
 --- /dev/null
 +++ b/codex-rs/core/src/responses_producer.rs
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,559 @@
 +//! Pure construction from already resolved owner material. No authority/proof is created here.
 +//! No ModelClient, auth object, callback, telemetry, writer, live OnceLock or transport is accepted.
 +//! This private B staging interface is not connected to a platform bridge or production registry.
@@ -1882,6 +1882,76 @@ new file mode 100644
 +    codex_api::prepare_controlled_responses_request(provider, request, &options, maximum)
 +}
 +
++/// Explicitly resolved auth mode for this limited local finalization mechanism.
++/// This value is a completeness fact, not trusted owner authority or InputProof.
++#[derive(Clone, Copy, Debug)]
++#[allow(
++    dead_code,
++    reason = "Private FinalAuth staging; no production bridge is registered"
++)]
++pub(super) enum ControlledAuthMode {
++    StaticApiKeyBearer,
++    ChatGpt,
++    RequestSigning,
++    Refreshing,
++}
++
++/// Install final static bearer auth before freezing the actual encoded Request.
++/// The same qualified owner must resolve all auth-dependent B03 facts first.
++/// This helper does no auth refresh, transport, callback, encoding or I/O; its
++/// output is only frozen material and an Arc-local one-use capability. Actual
++/// config/secret versions, ledger and InputProof remain the trusted owner's job.
++/// A controlled sender must use HTTP04's for_frozen_responses_request route,
++/// never ordinary EndpointSession/AuthProvider/retry after this boundary.
++#[allow(
++    dead_code,
++    reason = "Private bearer mechanism; the trusted owner bridge is absent"
++)]
++pub(super) fn finalize_controlled_bearer_request(
++    mut request: Request,
++    mode: Resolved<ControlledAuthMode>,
++    mut bearer: HeaderValue,
++    maximum: NonZeroU64,
++) -> std::result::Result<std::sync::Arc<codex_http_client::FrozenResponsesRequest>, ApiError> {
++    if !matches!(mode.take()?, ControlledAuthMode::StaticApiKeyBearer)
++        || request.headers.contains_key(http::header::AUTHORIZATION)
++        || request
++            .headers
++            .contains_key(http::header::PROXY_AUTHORIZATION)
++        || request.headers.contains_key(http::header::COOKIE)
++        || !matches!(
++            request.body.as_ref(),
++            Some(codex_client::RequestBody::EncodedJson(_))
++        )
++    {
++        return Err(unavailable());
++    }
++    // Accept only a single canonical RFC6750 bearer value. Never normalize,
++    // print, hash publicly, refresh or reconstruct the credential here.
++    let token = bearer
++        .to_str()
++        .ok()
++        .and_then(|value| value.strip_prefix("Bearer "))
++        .ok_or_else(unavailable)?;
++    let mut parts = token.splitn(/*n*/ 2, '=');
++    let value = parts.next().ok_or_else(unavailable)?;
++    if value.is_empty()
++        || !value
++            .bytes()
++            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~+/".contains(&byte))
++        || parts
++            .next()
++            .is_some_and(|padding| !padding.bytes().all(|byte| byte == b'='))
++    {
++        return Err(unavailable());
++    }
++    bearer.set_sensitive(/*val*/ true);
++    request.headers.insert(http::header::AUTHORIZATION, bearer);
++    codex_http_client::FrozenResponsesRequest::freeze(request, maximum)
++        .map(std::sync::Arc::new)
++        .map_err(|_| unavailable())
++}
++
 +#[cfg(test)]
 +#[path = "responses_producer_tests.rs"]
 +mod tests;
@@ -1889,7 +1959,7 @@ diff --git a/codex-rs/core/src/responses_producer_tests.rs b/codex-rs/core/src/r
 new file mode 100644
 --- /dev/null
 +++ b/codex-rs/core/src/responses_producer_tests.rs
-@@ -0,0 +1,562 @@
+@@ -0,0 +1,820 @@
 +use super::*;
 +use crate::test_support::TestCodexResponsesRequestKind;
 +use crate::test_support::responses_metadata;
@@ -2450,6 +2520,264 @@ new file mode 100644
 +            NonZeroU64::new(64).expect("positive maximum"),
 +        )
 +        .expect_err("non-root actual header must keep logical identity"),
++    );
++}
++
++// Required FinalAuth ordering: auth must exist in the immutable request before freeze.
++#[test]
++fn final_bearer_header_is_part_of_the_frozen_genuine_request() {
++    let request = prepare(facts()).expect("actual one-encoded B03 request");
++    let mut bearer = HeaderValue::from_static("Bearer synthetic-final-fixture");
++    bearer.set_sensitive(/*val*/ true);
++    let maximum = NonZeroU64::new(/*n*/ 64).expect("positive fixture");
++    let frozen = finalize_controlled_bearer_request(
++        request,
++        Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++        bearer.clone(),
++        maximum,
++    )
++    .expect("final auth installed before real freeze");
++    let mut released = frozen.prepared_request();
++    released.headers.insert(http::header::AUTHORIZATION, bearer);
++    assert_eq!(
++        frozen
++            .prepared_request()
++            .headers
++            .get(http::header::AUTHORIZATION),
++        released.headers.get(http::header::AUTHORIZATION),
++        "final auth must already be immutable before release"
++    );
++}
++
++fn final_bearer(request: Request) -> std::sync::Arc<FrozenResponsesRequest> {
++    finalize_controlled_bearer_request(
++        request,
++        Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++        HeaderValue::from_static("Bearer synthetic-final-fixture"),
++        NonZeroU64::new(/*n*/ 64).expect("positive fixture"),
++    )
++    .expect("static final bearer freezes")
++}
++
++#[test]
++fn final_bearer_preserves_encoded_allocation_and_every_existing_request_limit() {
++    let mut request = prepare(facts()).expect("actual B03 producer");
++    request.timeout = Some(Duration::from_secs(/*secs*/ 2));
++    request.response_body_limit_bytes = Some(8192);
++    let original = body(&request).clone();
++    let url = request.url.clone();
++    let method = request.method.clone();
++    let mut expected_headers = request.headers.clone();
++    let mut bearer = HeaderValue::from_static("Bearer synthetic-final-fixture");
++    bearer.set_sensitive(/*val*/ true);
++    expected_headers.insert(http::header::AUTHORIZATION, bearer);
++    let frozen = final_bearer(request);
++    let final_request = frozen.prepared_request();
++    assert_eq!(
++        body(&final_request).as_bytes().as_ptr(),
++        original.as_bytes().as_ptr()
++    );
++    assert_eq!(frozen.body_bytes().as_ptr(), original.as_bytes().as_ptr());
++    assert_eq!(frozen.body_bytes(), original.as_bytes());
++    assert_eq!(final_request.method, method);
++    assert_eq!(final_request.url, url);
++    assert_eq!(final_request.timeout, Some(Duration::from_secs(/*secs*/ 2)));
++    assert_eq!(final_request.response_body_limit_bytes, Some(8192));
++    assert_eq!(final_request.headers, expected_headers);
++    assert!(final_request.headers[http::header::AUTHORIZATION].is_sensitive());
++    assert_eq!(
++        final_request
++            .headers
++            .get_all(http::header::AUTHORIZATION)
++            .iter()
++            .count(),
++        1
++    );
++    assert!(!format!("{frozen:?}").contains("synthetic-final-fixture"));
++    assert!(!format!("{final_request:?}").contains("synthetic-final-fixture"));
++}
++
++#[test]
++fn final_bearer_rejects_every_unresolved_or_nonstatic_auth_mode() {
++    for mode in [
++        Resolved::Unresolved,
++        Resolved::Value(ControlledAuthMode::ChatGpt),
++        Resolved::Value(ControlledAuthMode::RequestSigning),
++        Resolved::Value(ControlledAuthMode::Refreshing),
++    ] {
++        unavailable_error(
++            finalize_controlled_bearer_request(
++                prepare(facts()).expect("genuine B03 request"),
++                mode,
++                HeaderValue::from_static("Bearer synthetic-final-fixture"),
++                NonZeroU64::new(/*n*/ 64).expect("positive fixture"),
++            )
++            .expect_err("mode unavailable before transport"),
++        );
++    }
++}
++
++#[test]
++fn final_bearer_rejects_existing_duplicate_and_conflicting_auth_channels() {
++    for header in [
++        http::header::AUTHORIZATION,
++        http::header::PROXY_AUTHORIZATION,
++        http::header::COOKIE,
++    ] {
++        for duplicate in [false, true] {
++            let mut request = prepare(facts()).expect("genuine B03 request");
++            request.headers.append(
++                header.clone(),
++                HeaderValue::from_static("synthetic-original"),
++            );
++            if duplicate {
++                request.headers.append(
++                    header.clone(),
++                    HeaderValue::from_static("synthetic-conflict"),
++                );
++            }
++            unavailable_error(
++                finalize_controlled_bearer_request(
++                    request,
++                    Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++                    HeaderValue::from_static("Bearer synthetic-final-fixture"),
++                    NonZeroU64::new(/*n*/ 64).expect("positive fixture"),
++                )
++                .expect_err("existing auth is never overwritten"),
++            );
++        }
++    }
++}
++
++#[test]
++fn final_bearer_rejects_empty_wrong_scheme_and_ambiguous_credential_values() {
++    let mut values: Vec<_> = [
++        "",
++        "Bearer ",
++        "Basic synthetic",
++        "Bearer a b",
++        "Bearer a=b",
++        "Bearer a,b",
++    ]
++    .into_iter()
++    .map(HeaderValue::from_static)
++    .collect();
++    values
++        .push(HeaderValue::from_bytes(b"Bearer \x80").expect("valid header with non-ASCII value"));
++    for bearer in values {
++        unavailable_error(
++            finalize_controlled_bearer_request(
++                prepare(facts()).expect("genuine B03 request"),
++                Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++                bearer,
++                NonZeroU64::new(/*n*/ 64).expect("positive fixture"),
++            )
++            .expect_err("invalid credential rejected without value in the error"),
++        );
++    }
++}
++
++#[test]
++fn final_bearer_keeps_actual_encoded_shape_and_output_limit_fail_closed() {
++    for change in ["body", "maximum", "compression", "method"] {
++        let mut request = prepare(facts()).expect("genuine B03 request");
++        let mut maximum = NonZeroU64::new(/*n*/ 64).expect("positive fixture");
++        match change {
++            "body" => {
++                request.body = Some(RequestBody::Json(
++                    json!({"max_output_tokens":64,"truncation":"disabled"}),
++                ))
++            }
++            "maximum" => maximum = NonZeroU64::new(/*n*/ 65).expect("positive different maximum"),
++            "compression" => request.compression = codex_client::RequestCompression::Zstd,
++            "method" => request.method = http::Method::GET,
++            _ => unreachable!("closed fixture cases"),
++        }
++        unavailable_error(
++            finalize_controlled_bearer_request(
++                request,
++                Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++                HeaderValue::from_static("Bearer synthetic-final-fixture"),
++                maximum,
++            )
++            .expect_err("unsupported genuine shape never reaches transport"),
++        );
++    }
++}
++
++#[tokio::test]
++async fn final_bearer_actual_sender_rejects_late_auth_change_with_zero_owned_connections() {
++    use codex_http_client::HttpTransport;
++    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("owned listener");
++    listener
++        .set_nonblocking(/*nonblocking*/ true)
++        .expect("nonblocking owned observer");
++    let address = listener.local_addr().expect("owned address");
++    let mut request = prepare(facts()).expect("genuine B03 request");
++    request.url = format!("https://{address}/v1/responses");
++    let frozen = final_bearer(request);
++    let sender = codex_http_client::ReqwestTransport::for_frozen_responses_request(
++        std::sync::Arc::clone(&frozen),
++    )
++    .expect("actual restricted client builds locally");
++    let mut changed = frozen.prepared_request();
++    changed.headers.insert(
++        http::header::AUTHORIZATION,
++        HeaderValue::from_static("Bearer changed-fixture"),
++    );
++    let error = sender
++        .stream(changed)
++        .await
++        .err()
++        .expect("late auth cannot be released");
++    assert!(
++        matches!(error, codex_client::TransportError::Build(ref message) if message == "CODEX_FROZEN_REQUEST_CHANGED")
++    );
++    assert!(
++        matches!(listener.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
++    );
++    let error = sender
++        .clone()
++        .execute(frozen.prepared_request())
++        .await
++        .err()
++        .expect("mismatch consumes shared capability");
++    assert!(
++        matches!(error, codex_client::TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++    );
++}
++
++#[tokio::test]
++async fn final_bearer_actual_connection_failure_cannot_refund_frozen_auth_or_send_again() {
++    use codex_http_client::HttpTransport;
++    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("owned port");
++    let address = listener.local_addr().expect("owned address");
++    drop(listener);
++    let mut request = prepare(facts()).expect("genuine B03 request");
++    request.url = format!("https://{address}/v1/responses");
++    request.timeout = Some(Duration::from_secs(/*secs*/ 2));
++    let frozen = final_bearer(request);
++    let sender = codex_http_client::ReqwestTransport::for_frozen_responses_request(
++        std::sync::Arc::clone(&frozen),
++    )
++    .expect("restricted sender");
++    let error = sender
++        .execute(frozen.prepared_request())
++        .await
++        .err()
++        .expect("owned closed port fails");
++    assert!(matches!(error, codex_client::TransportError::Connection(_)));
++    let rebuilt = codex_http_client::ReqwestTransport::for_frozen_responses_request(
++        std::sync::Arc::clone(&frozen),
++    )
++    .expect("new sender retains same Arc");
++    let error = rebuilt
++        .stream(frozen.prepared_request())
++        .await
++        .err()
++        .expect("no refund after failure");
++    assert!(
++        matches!(error, codex_client::TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
 +    );
 +}
 diff --git a/codex-rs/ext/guardian-v2/src/async_scorer/sampler.rs b/codex-rs/ext/guardian-v2/src/async_scorer/sampler.rs

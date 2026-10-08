@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay 14 pinned local codex-core producer tests; no CLI or model execution.
+"""Replay 22 pinned local codex-core producer and bearer tests; no CLI or model execution.
 
 Uses the HTTP replay's validated extraction, patch application, one metadata
 normalization and actual-command recorder. Default tests are strictly offline
@@ -97,9 +97,15 @@ def run_tests(args: argparse.Namespace, output: Path, report: dict, manifest: di
     selection = manifest["test_selection"]
     require(selection["package"] == "codex-core" and selection["strict_locked_offline"] is True,
             "Expected fixed offline codex-core selection")
-    require([scope["expected_passed"] for scope in selection["scopes"]] == [11, 2, 1]
-            and selection["selected_total"] == 14, "Expected exactly 11+2+1 selected tests")
-    report["test"] = {"scope": "14-test local subset", "status": "RUNNING",
+    require([scope["expected_passed"] for scope in selection["scopes"]] == [19, 2, 1]
+            and selection["selected_total"] == 22, "Expected exactly 19+2+1 selected tests")
+    require([scope["filter"] for scope in selection["scopes"]] == [
+        "responses_producer::tests",
+        "websocket_handshake_includes_attestation_for_chatgpt_codex_responses",
+        "internal_session_prompt_cache_key_is_scoped_to_parent_thread",
+    ] and [scope["expected_filtered"] for scope in selection["scopes"]] == [2665, 2682, 2683],
+        "Expected the fixed three filters and complete compiled core2684 identity")
+    report["test"] = {"scope": "22-test local subset", "status": "RUNNING",
                       "actual_exit_code": None, "scopes": [], "actual_selected_passed": 0}
     result = 0
     for scope in selection["scopes"]:
@@ -136,8 +142,8 @@ def run_tests(args: argparse.Namespace, output: Path, report: dict, manifest: di
     report["test"].update(status="PASS" if result == 0 else "FAIL", actual_exit_code=result)
     if result == 0:
         require(len(report["test"]["scopes"]) == 3
-                and report["test"]["actual_selected_passed"] == 14,
-                "Expected exactly14 selected PASS; zero or partial selection is not success")
+                and report["test"]["actual_selected_passed"] == 22,
+                "Expected exactly22 selected PASS; zero or partial selection is not success")
     return result
 
 
@@ -162,11 +168,11 @@ def main() -> int:
         "replay_wrapper_sha256": sha256(Path(__file__).resolve()),
         "production": "INCOMPLETE / NOT_ADMITTED", "invocation": [sys.executable, *sys.argv],
         "commands": [], "graph": {"nodes": [], "edges": []},
-        "test_scope": "fixed11controlled+2stockWSheaders+1stockinternalcache, strict locked offline",
+        "test_scope": "fixed19producer+2stockWSheaders+1stockinternalcache, strict locked offline",
         "historical_http_client": "114 PASS / 6 FAIL retained; not superseded by core subset",
         "plain_facts": "Mechanical consistency only, not trusted InputProof or owner authority",
-        "not_run": ["complete2676 core lib suite", "guardian tests", "API190 replay", "HTTP tests",
-                    "FinalAuth", "control ledger to actual HTTP send binding", "Codex CLI", "AppServer", "models",
+        "not_run": ["complete2684 core lib suite", "guardian tests", "API190 replay", "HTTP tests",
+                    "trusted FinalAuth owner bridge", "control ledger to actual HTTP send binding", "Codex CLI", "AppServer", "models",
                     "platform acceptance", "production profile admission"],
     }
     write_json(output / "report.json", report)
