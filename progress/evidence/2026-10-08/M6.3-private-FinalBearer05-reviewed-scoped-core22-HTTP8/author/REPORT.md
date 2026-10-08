@@ -1,0 +1,37 @@
+# FinalBearer05 — bounded private mechanism, INCOMPLETE
+
+The private core helper installs a single resolved static API-key bearer before HTTP04 freezes the genuine B03 `Request`. Actual scoped tests pass: **core22/0, HTTP8/0; core library check exit0**. This is mechanical request material and an Arc-local one-use capability. It creates no trusted owner authority or InputProof, and does not connect the existing Python control ledger/SecretStore snapshot to a real Rust request handle or sender.
+
+Only `codex-rs/core/src/responses_producer.rs` and `responses_producer_tests.rs` change from the immutable engineering source at `be92014f0c6e762da20d757703c25057d0aa3057`. Final code is `source-05`; actual test code is `test-copy-05`. `FINAL-source` retains the two source files, original manifest/lock/toolchain, upstream AGENTS/LICENSE/NOTICE and the original bubblewrap license link and COPYING. All other8779 source rows are exact inherited bytes/modes/link metadata. HTTP04's four files and AC01 inheritance remain unchanged.
+
+| Material | SHA256 |
+| --- | --- |
+| producer | `747c973d33bfffef7b45a8524aed6c4d7192c259c7cccb427fe66a4291185b1f` |
+| producer tests | `9f5ca40984a5172a465dcb257d29e355eceacb471f2b8d778cccbc6e30d2fe54` |
+| CANDIDATE05-before-cargo.json | `f636ff73e61789d99b55b908dd869988816f132e805f25fc08ed0bfe9dafe367` |
+| original Cargo.lock | `5553f06583159ed64666b6eb4beea3154e06b612e6312528131bdc226a6a860c` |
+| final incremental patch | `95a0d1d8c7f9670090629ae63c087a916b645da3f08378bfd1fb789888504781` |
+
+The helper consumes the existing `EncodedJson` request; it does not encode, reconstruct metadata/history, refresh auth, call a contributor, create a transport, spawn a task or perform I/O. Unknown/ChatGPT/signing/refreshing modes and existing Authorization, Proxy-Authorization or Cookie are rejected. The bearer must be one canonical ASCII bearer value; it is marked sensitive before insertion. Errors use constant unavailable codes. The same qualified owner must already have resolved all auth-dependent guardian/access/routing/attestation/header facts before the B03 body calculation. The supplied mode and HeaderValue are facts, not evidence of that qualification.
+
+Actual tests verify the original EncodedJson allocation and bytes, method, URL, timeout and response cap survive finalization; only the sensitive Authorization is added. Negative cases cover ordinary JSON, output-limit mismatch, compression, method, malformed credentials and unsupported/unresolved auth. The actual restricted reqwest route rejects a changed auth header before any connection to an owned listener, consumes the shared capability, and rejects a second attempt. A separate real attempt to an owned closed loopback port fails and cannot refund its capability, including through a rebuilt transport sharing the Arc. HTTP04's eight cases additionally cover actual built-map/body/limit validation and concurrency across clones. No real endpoint, user key or model is used; loopback connection attempts are explicitly real local test actions.
+
+| Actual final command scope | Result | Filtered |
+| --- | --- | --- |
+| core producer module, strict locked/offline |19PASS0FAIL, exit0|2665|
+| original WS header own/inherited cache |2PASS0FAIL, exit0|2682|
+| original internal parent cache |1PASS0FAIL, exit0|2683|
+| HTTP04 frozen-request gate |8PASS0FAIL, exit0|112|
+| core `--lib` check, strict locked/offline |exit0|not a test|
+
+Each command has exact argv, cwd, task environment, stdout/stderr hashes, actual exit and UTC interval in its receipt directory. The final test binaries are retained separately: core831165344B/`3bc010a09a98e47ac79bb3ec6a1452e42c372d03ac1929817ffa66ccc8376203`, HTTP62760240B/`0bc8d6b67d70605a27a8de562b64b69e50b4c2a481385fa26c089fc4a6af25cd`. Core and guardian-v2 libraries were actually compiled in the successful scoped test build. Guardian tests and complete core2684 tests were not run. The unchanged original ToolCallSource warning is retained.
+
+The official source is commit `a956835d020762cb2b570053af06f643a11c0ecc`, archive SHA`351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927`. `fresh-patch-replay-05` safely extracts the genuine tar8775 rows, checks/applies the immutable engineering20-path patch and the new two-path incremental patch with four actual git commands, then checks all8781 final rows. Modes and `codex-rs/vendor/bubblewrap/LICENSE -> COPYING` are preserved from the original tar. Only the test workspace package version is normalized0.160.0→0.0.0 to use the unchanged original lock. Final source and normalized test graphs match the candidate before and after Cargo. This does not establish equivalence to an original0.160 release binary/profile.
+
+Rust/cargo are the actual task-owned1.95.0 installation. `FIXED-SOURCE.json` includes official manifest/component URLs and SHA256, installed binary pins and actual version receipts. Cargo uses only the task Cargo home and this packet's new target, with jobs2 and test threads2; HOME/CODEX_HOME are not overridden. The old B03-r2 and engineering targets/binaries are unchanged, verified by exact binary hashes in `OLD-SEALED-BINARIES-PRESERVED.json`. Their sealed source/result packets are not rewritten.
+
+The actual ordering RED freezes the real B03 request before adding auth:0PASS1FAIL/101. The first limited finalizer gives the same ordering fixture1PASS0FAIL/0. This exposes the missing integration ordering, **not an HTTP04 security flaw**; the old gate already rejects late changes. Candidate02 is NOT_RUN. Candidate03 first has a wrong-cwd Cargo setup exit101 with no tests, then six E0432/E0599 compile diagnostics from the wrong Transport import, also no tests. Candidate04 fixes only the import and actually runs18PASS1FAIL/101: the Cookie refusal case fails because the guard was missing. Candidate05 adds only that guard and keeps the exact same nineteen test source bytes;19/0 is the actual GREEN. Both actual RED binaries, all raw failures, the first GREEN binding and the NO_PROCESS prelaunch error are retained. The first GREEN binary was hash-bound at its stage but not separately retained; no claim is made that its later overwritten task-target pathname still holds it.
+
+The historical HTTP04 complete library **114PASS6FAIL/101 remains FAIL**; it is not rerun or reclassified. API190, full core/guardian/workspace tests, Bazel argument-comment-lint and workspace just test/fix/fmt are NOT_RUN in this bounded task. Actual scoped rustfmt checks exit0; stable-toolchain imports_granularity warnings are preserved. The parent's explicit strictly scoped Cargo/format instructions govern this private slice. No new dependency, lock/schema/public DTO/default registry/UI change, production CLI/AppServer/model call, real credential or host-security/proc probe is introduced.
+
+The existing platform control ledger already exists. Missing work is its trusted named owner/SecretStore version and actual final Request/one-shot sender binding, same-auth qualified B03 facts, genuine Python↔Rust handle bridge, trusted InputProof, counting/capacity and complete resource/DNS/TLS/runtime qualification. Ordinary EndpointSession/AuthProvider/retry must not be entered after this finalizer. Production admission remains NOT_ADMITTED. Independent final review is PENDING; this author packet does not claim reviewer PASS. No canonical, progress or remote write is performed by this Rust task.
