@@ -98,6 +98,165 @@ def queued(consent_case):
     return preparation.json(),consent.json(),body,ack
 
 
+def test_final_auth_read_failure_before_permit_has_zero_started_and_requests(consent_case, monkeypatch):
+    from contextlib import ExitStack
+    from services.api.app.application.errors import ApiError
+    from services.api.app.infrastructure.provider_repository import ProviderRepository
+
+    case, _, _, _, _, _ = consent_case
+    prep, consent, _, _ = queued(consent_case)
+    worker = case.app.state.codex_turn_worker
+    owner = worker.provider
+    workspace = worker.database.workspace_id()
+    with worker.database.transaction(immediate=False) as conn:
+        locator = ProviderRepository(conn, workspace).secret_locator('codex_peer', consent['summary']['provider_revision'])
+    reads = []
+
+    def unavailable(actual_locator):
+        assert actual_locator == locator
+        reads.append(actual_locator)
+        raise ApiError(503, 'PROVIDER_SECRET_UNAVAILABLE', 'Synthetic final-auth read unavailable.')
+
+    # Availability is explicitly true: its normal implementation also reads
+    # storage, so letting that precheck refuse would not exercise FinalAuth.
+    monkeypatch.setattr(owner.secrets, 'available', lambda _: True)
+    monkeypatch.setattr(owner.secrets, 'read', unavailable)
+    with ExitStack() as stack:
+        assert worker._claim(stack) is False
+    assert reads == [locator]
+    assert case.app.state.synthetic_transport_calls == []
+    with worker.database.transaction(immediate=False) as conn:
+        state = owner.owned_states(conn, workspace)[0][prep['turn_id']]
+        assert state.started is None and state.finished.error_code == 'PROVIDER_SECRET_UNAVAILABLE'
+    dispatch = case.get('consents/' + consent['id']).json()['dispatch']
+    assert dispatch['started_at'] is None and dispatch['consumed_provider_calls'] == 0
+
+
+def test_final_auth_changed_value_after_permit_is_refused_without_refresh_or_request(consent_case, monkeypatch):
+    case, _, _, _, _, _ = consent_case
+    prep, consent, _, _ = queued(consent_case)
+    owner = case.app.state.codex_turn_worker.provider
+    with owner.database.transaction(immediate=False) as conn:
+        state = owner.owned_states(conn, owner.database.workspace_id())[0][prep['turn_id']]
+        request = owner.prepared_request(state)
+
+    def changed_before_send(gate):
+        # Same registered immutable locator/config binding, deliberately broken
+        # synthetic storage value. Availability alone cannot detect this case.
+        monkeypatch.setattr(owner.secrets, 'available', lambda _: True)
+        monkeypatch.setattr(owner.secrets, 'read', lambda _: 'synthetic-rotated-private-value')
+        gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
+
+    case.app.state.synthetic_executor.peer = changed_before_send
+    assert case.app.state.codex_turn_worker.run_once() is True
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'failed' and control['error_code'] == 'PROVIDER_SECRET_UNAVAILABLE'
+    assert case.app.state.synthetic_transport_calls == []
+    with owner.database.transaction(immediate=False) as conn:
+        state = owner.owned_states(conn, owner.database.workspace_id())[0][prep['turn_id']]
+        assert state.started is not None and state.finished.execution_result.consumed_provider_calls == 0
+    dispatch = case.get('consents/' + consent['id']).json()['dispatch']
+    assert dispatch['consumed_provider_calls'] == 1
+    before = case.dump()
+    assert case.app.state.codex_turn_worker.run_once() is False
+    assert case.dump() == before
+
+
+def test_final_auth_snapshot_exists_before_start_and_stays_private(consent_case, monkeypatch):
+    from contextlib import ExitStack
+    from dataclasses import FrozenInstanceError
+    import time
+    from services.api.app.infrastructure.provider_repository import ProviderRepository
+
+    case, _, _, _, _, _ = consent_case
+    prep, consent, _, ack = queued(consent_case)
+    worker = case.app.state.codex_turn_worker
+    owner = worker.provider
+    workspace = worker.database.workspace_id()
+    with worker.database.transaction(immediate=False) as conn:
+        locator = ProviderRepository(conn, workspace).secret_locator('codex_peer', consent['summary']['provider_revision'])
+    artificial_secret = 'synthetic-retained-final-auth-α'
+    reads, captures, starts = [], [], []
+
+    def read(actual_locator):
+        assert actual_locator == locator
+        reads.append(actual_locator)
+        return artificial_secret
+
+    capture = owner.auth_snapshot
+    record_start = owner.record_start
+
+    def captured(conn, identity, state):
+        assert conn.in_transaction
+        snapshot = capture(conn, identity, state)
+        captures.append(snapshot)
+        return snapshot
+
+    def started(conn, workspace_id, turn_id, state, *args):
+        assert conn.in_transaction and len(captures) == 1 and reads == [locator]
+        snapshot = captures[0]
+        assert (snapshot.workspace_id, snapshot.turn_id, snapshot.dispatch_id) == (
+            workspace_id, turn_id, state.queued.dispatch_id)
+        assert (snapshot.provider_id, snapshot.provider_revision, snapshot.config_sha256) == (
+            'codex_peer', consent['summary']['provider_revision'], consent['summary']['config_sha256'])
+        assert snapshot.locator == locator and snapshot.secret == artificial_secret
+        starts.append(turn_id)
+        return record_start(conn, workspace_id, turn_id, state, *args)
+
+    monkeypatch.setattr(owner.secrets, 'available', lambda _: True)
+    monkeypatch.setattr(owner.secrets, 'read', read)
+    monkeypatch.setattr(owner, 'auth_snapshot', captured)
+    monkeypatch.setattr(owner, 'record_start', started)
+    with ExitStack() as stack:
+        claim = worker._claim(stack)
+        assert claim and claim[-1] is captures[0] and starts == [prep['turn_id']]
+        snapshot = claim[-1]
+        with pytest.raises(FrozenInstanceError):
+            snapshot.secret = 'synthetic-replacement'
+        assert artificial_secret not in repr(snapshot) and locator not in repr(snapshot)
+        assert artificial_secret not in repr(claim) and locator not in repr(claim)
+        worker._guard(claim[0], claim[1], claim[2], time.monotonic(), snapshot)
+        assert reads == [locator, locator] and claim[-1] is snapshot
+    assert case.app.state.synthetic_transport_calls == []
+    assert artificial_secret not in ack.text and locator not in ack.text
+    for path in ('turns/' + prep['turn_id'], 'consents/' + consent['id']):
+        response = case.get(path)
+        assert response.status_code == 200
+        assert artificial_secret not in response.text and locator not in response.text
+    with worker.database.transaction(immediate=False) as conn:
+        state = owner.owned_states(conn, workspace)[0][prep['turn_id']]
+        assert state.started is not None
+        persisted = canonical_bytes([event.model_dump(mode='json') for event in state.envelopes])
+        assert artificial_secret.encode() not in persisted and locator.encode() not in persisted
+
+
+def test_final_auth_real_secret_version_rotation_keeps_permit_and_refuses_send(consent_case):
+    case, _, _, _, _, _ = consent_case
+    prep, consent, _, _ = queued(consent_case)
+    owner = case.app.state.codex_turn_worker.provider
+    with owner.database.transaction(immediate=False) as conn:
+        state = owner.owned_states(conn, owner.database.workspace_id())[0][prep['turn_id']]
+        request = owner.prepared_request(state)
+
+    def rotate_before_send(gate):
+        rotated = case.client.post('/api/v1/providers/codex_peer/secret', json={
+            'expected_revision': consent['summary']['provider_revision'], 'secret': 'synthetic-new-immutable-secret-version'},
+            headers={**case.headers, 'Idempotency-Key': 'final-auth-version-rotation'})
+        assert rotated.status_code == 200
+        assert rotated.json()['revision'] == consent['summary']['provider_revision'] + 1
+        gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
+
+    case.app.state.synthetic_executor.peer = rotate_before_send
+    assert case.app.state.codex_turn_worker.run_once() is True
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'failed' and control['error_code'] == 'CODEX_SOURCE_CHANGED'
+    assert case.app.state.synthetic_transport_calls == []
+    with owner.database.transaction(immediate=False) as conn:
+        state = owner.owned_states(conn, owner.database.workspace_id())[0][prep['turn_id']]
+        assert state.started is not None and state.finished.execution_result.consumed_provider_calls == 0
+    assert case.get('consents/' + consent['id']).json()['dispatch']['consumed_provider_calls'] == 1
+
+
 @pytest.mark.parametrize('change,code',[('revoke','CODEX_CONSENT_REVOKED'),('learner','POLICY_DENIED'),
     ('expiry','CODEX_CONSENT_EXPIRED'),('proof','CODEX_INPUT_PROOF_UNAVAILABLE')])
 def test_queued_permission_loss_converges_without_actual_request(consent_case,monkeypatch,change,code):

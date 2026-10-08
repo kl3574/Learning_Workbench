@@ -1,5 +1,7 @@
 """Provider-owned Codex proposals/grants; no ordinary text-adapter fallback."""
+from dataclasses import dataclass
 from datetime import timedelta
+import hmac
 from uuid import uuid4
 
 from packages.contracts import domain_models as dm
@@ -33,6 +35,23 @@ from .providers import checked_provider_configuration, validate_key
 
 def missing() -> ApiError:
     return ApiError(404, 'REFERENCE_MISSING', '本工作区没有此 Codex 外发记录。')
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class _CodexAuthSnapshot:
+    """Private retained owner material, not a request handle or send authority.
+
+    No serializer/public DTO consumes this object. The actual Rust request
+    bridge and auth-dependent request facts are still unavailable.
+    """
+    workspace_id: str
+    turn_id: str
+    dispatch_id: str
+    provider_id: str
+    provider_revision: int
+    config_sha256: str
+    locator: str
+    secret: str
 
 
 class CodexConsentsService:
@@ -231,6 +250,46 @@ class CodexConsentsService:
             raise ApiError(409,'CODEX_CONSENT_REVOKED','原外发许可已撤销。')
         self.require_current(conn,current,state,sources[turn_id])
         return state,current,self.prepared_request(state)
+
+    def auth_snapshot(self, conn, identity, state) -> _CodexAuthSnapshot:
+        """Read the named private secret port in the caller's start transaction.
+
+        Admission still owns source/actor/proof/consent checks. This capture
+        does not finalize a Rust request or register production capability.
+        """
+        if not conn.in_transaction or state.queued is None or state.started is not None:
+            raise damaged()
+        summary = state.proposed.command.ack.summary
+        config = checked_provider_configuration(conn, identity, summary.provider_id)
+        if config != state.proposed.material.input.provider:
+            raise ApiError(409, 'PROVIDER_CONFIGURATION_CHANGED', '原提供商配置已改变。')
+        providers = ProviderRepository(conn, identity.workspace_id)
+        locator = providers.secret_locator(config.id, config.revision)
+        if providers.backup_disabled() or locator is None:
+            raise ApiError(409, 'PROVIDER_SECRET_UNAVAILABLE', '原配置的秘密当前不可用。')
+        secret = self.secrets.read(locator)
+        return _CodexAuthSnapshot(identity.workspace_id, state.proposed.material.preparation.turn_id,
+            state.queued.dispatch_id, config.id, config.revision, config.config_sha256, locator, secret)
+
+    def verify_auth_snapshot(self, conn, identity, state, snapshot: _CodexAuthSnapshot) -> None:
+        """Reduce a committed execution on rotation; never refresh frozen auth."""
+        if not conn.in_transaction or state.queued is None or state.started is None:
+            raise damaged()
+        summary = state.proposed.command.ack.summary
+        binding = (identity.workspace_id, state.proposed.material.preparation.turn_id,
+            state.queued.dispatch_id, summary.provider_id, summary.provider_revision, summary.config_sha256)
+        if binding != (snapshot.workspace_id, snapshot.turn_id, snapshot.dispatch_id,
+                snapshot.provider_id, snapshot.provider_revision, snapshot.config_sha256):
+            raise ApiError(409, 'CODEX_BINDING_INVALID', '原执行的私有凭据绑定不一致。')
+        config = checked_provider_configuration(conn, identity, summary.provider_id)
+        if config != state.proposed.material.input.provider:
+            raise ApiError(409, 'PROVIDER_CONFIGURATION_CHANGED', '原提供商配置已改变。')
+        providers = ProviderRepository(conn, identity.workspace_id)
+        locator = providers.secret_locator(config.id, config.revision)
+        if providers.backup_disabled() or locator is None or locator != snapshot.locator:
+            raise ApiError(409, 'PROVIDER_SECRET_UNAVAILABLE', '原冻结的提供商秘密不可用。')
+        if not hmac.compare_digest(self.secrets.read(locator).encode('utf-8'), snapshot.secret.encode('utf-8')):
+            raise ApiError(409, 'PROVIDER_SECRET_UNAVAILABLE', '原冻结的提供商秘密不可用。')
 
     def record_start(self, conn, workspace_id, turn_id, state, lease, owner_id, now):
         """Persist possible-send consumption before any external boundary.

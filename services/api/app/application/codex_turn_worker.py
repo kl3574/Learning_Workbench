@@ -24,7 +24,7 @@ from .codex_turn import CodexTurnService
 from .codex_broker_control import CodexBrokerControls
 from .codex_turn_models import TurnLifecycle
 from .errors import ApiError
-from .provider_codex_consents import CodexConsentsService
+from .provider_codex_consents import CodexConsentsService, _CodexAuthSnapshot
 from .provider_codex_execution import CodexExecutionResult, CodexRequestGate, SyntheticCodexExecution, SyntheticTransport
 from .provider_codex_profile import CodexRuntimeProfile, PreparedCodexRequest
 
@@ -183,10 +183,11 @@ class CodexTurnWorker:
             if provider_state is None or provider_state.queued is None:
                 raise ApiError(409,'CODEX_HISTORY_DAMAGED','任务缺少原消费事实。')
             try:
-                provider_state,_,prepared=self.provider.admit_execution(conn,workspace,turn.control.id)
+                provider_state,current,prepared=self.provider.admit_execution(conn,workspace,turn.control.id)
                 profile=provider_state.proposed.material.input.runtime
                 if not self.available(profile):
                     raise ApiError(503,'CODEX_RUNTIME_UNAVAILABLE','原执行适配器当前不可用。')
+                auth = self.provider.auth_snapshot(conn, current, provider_state)
             except ApiError as error:
                 code=self.safe_failure(error)
                 self._terminal(conn,workspace,repo,state,turn,provider_state,outcome='failed',code=code)
@@ -215,13 +216,13 @@ class CodexTurnWorker:
                 provider_seq=event.seq,provider_sha256=content_sha256(event)),now)
             self.provider.owned_states(conn,workspace)
             conn.execute('RELEASE codex_claim')
-            return workspace,turn.control.id,owner,prepared,provider_state.proposed.command.ack.summary,profile
+            return workspace,turn.control.id,owner,prepared,provider_state.proposed.command.ack.summary,profile,auth
 
-    def _guard(self, workspace, turn_id, owner, started):
+    def _guard(self, workspace, turn_id, owner, started, auth: _CodexAuthSnapshot):
         if self._stop.is_set():
             raise ApiError(409,'CODEX_CANCELLED','本机执行正在停止。')
         with self.database.transaction() as conn:
-            provider_state,_,_=self.provider.admit_execution(conn,workspace,turn_id,already_started=True)
+            provider_state,current,_=self.provider.admit_execution(conn,workspace,turn_id,already_started=True)
             _,repo,history=self.turns._owned_state(conn,workspace)
             if self.turns.approvals is not None:
                 self.turns.approvals.verify_history(conn,workspace,history)
@@ -236,6 +237,7 @@ class CodexTurnWorker:
                 raise ApiError(409,'CODEX_CANCELLED','原任务已请求停止。')
             if time.monotonic()-started>=provider_state.proposed.command.ack.summary.tools.wall_seconds:
                 raise ApiError(409,'CODEX_TIMEOUT','原任务已超过总期限。')
+            self.provider.verify_auth_snapshot(conn, current, provider_state, auth)
 
     def _finish(self, workspace, turn_id, owner, execution_result, started, collection=None, scan_error=None):
         with self.database.transaction() as conn:
@@ -274,14 +276,14 @@ class CodexTurnWorker:
                     return False
                 if claimed is False:
                     return True
-                workspace,turn_id,owner,prepared,summary,profile=claimed
+                workspace,turn_id,owner,prepared,summary,profile,auth=claimed
                 started=time.monotonic()
                 self._callback_context=(workspace,turn_id,owner,threading.get_ident())
                 try:
                     if self.executor is None:
                         raise ApiError(503,'CODEX_RUNTIME_UNAVAILABLE','执行适配器不可用。')
                     result=self.executor.execute(prepared,summary,profile,
-                        lambda:self._guard(workspace,turn_id,owner,started))
+                        lambda:self._guard(workspace,turn_id,owner,started,auth))
                     result=CodexExecutionResult.model_validate(result.model_dump(mode='json'))
                 except Exception:
                     # The adapter did not yield a checked receipt. Preserve an
