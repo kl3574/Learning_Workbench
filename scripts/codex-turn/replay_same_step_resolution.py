@@ -423,8 +423,9 @@ def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict
             graph = manifest["instruction_materials"]["before_graph"]
             require(len(before) == graph["rows"] and graph_digest(before) == graph["sha256"],
                     "Exact source58 required before inert instruction patch")
+        patch_root = source / "codex-rs" if label == "instruction-materials" else source
         for suffix, flags in [("check", ["--check"]), ("apply", [])]:
-            row = recorder.run(label + "-" + suffix, ["git", "apply", *flags, str(bundle / filename)], source)
+            row = recorder.run(label + "-" + suffix, ["git", "apply", *flags, str(bundle / filename)], patch_root)
             if row["exit_code"] != 0:
                 return row["exit_code"] or 1
         after = full_inventory(source)
