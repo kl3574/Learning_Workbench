@@ -1,0 +1,463 @@
+{
+  "fixed_source_commit": "63403908eabec794aa1113d0d4ed467f22bae7b4",
+  "tests_executed_by_reviewer": "NOT_RUN",
+  "observed_original_log": "receipts/push-job-113136770485-logs/stdout.bin",
+  "actual_log_sha256": "ad8527e6e8f98f3d54be42e80fc4c6e46d6032208f71e86199f3b394a2409474",
+  "source_reads": [
+    {
+      "argv": [
+        "git",
+        "-C",
+        "$HOME/.cache/learning-workbench-acceptance/m63-upstream-http-gate-engineering-oct08",
+        "show",
+        "63403908eabec794aa1113d0d4ed467f22bae7b4:tests/e2e/grading.spec.ts"
+      ],
+      "started_at_utc": "2026-10-08T04:24:19.465092+00:00",
+      "ended_at_utc": "2026-10-08T04:24:19.467380+00:00",
+      "exit_code": 0,
+      "fixed_path": "tests/e2e/grading.spec.ts",
+      "snapshot": "browser-failures-static/grading.source",
+      "bytes": 19029,
+      "sha256": "938f4afe16073fee38e070b3edfd236037fda31f021b03b5156ed2c519bad506",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "excerpts": [
+        {
+          "start": 15,
+          "end": 62,
+          "lines": [
+            "const test = base.extend<{ runtime: RestartRuntime; gradingTiming: GradingTiming }>({",
+            "  // This observer stays test-scoped inside the original timeout and does not add a request or wait.",
+            "  gradingTiming: [async ({}, use, info) => {",
+            "    const enabled = info.title === 'two browser profiles keep a stale manual-review baseline through an actual 412 before explicit three-way rebase'",
+            "    const started = performance.now(), phases: { sequence: number; elapsed_ms: number; stage: GradingPhase }[] = [], polls: GradingPoll[] = []",
+            "    let sequence = 0, phaseDropped = 0, pollDropped = 0, statusReadDropped = 0, statusReadAttempts = 0, statusReadPending = 0, saved = false",
+            "    const timing: GradingTiming = {",
+            "      mark(stage) { if (!enabled || saved) return; if (phases.length === 256) { phaseDropped++; return }; phases.push({ sequence: ++sequence, elapsed_ms: performance.now() - started, stage }) },",
+            "      poll(caller, status, duration) {",
+            "        if (!enabled || saved || !Number.isInteger(status) || status < 100 || status > 599 || !Number.isFinite(duration) || duration < 0) return",
+            "        if (polls.length === 64) { pollDropped++; return }",
+            "        const entry: GradingPoll = { sequence: ++sequence, elapsed_ms: performance.now() - started, caller, route: '/api/v1/attempts/:id/result', method: 'GET', status, request_elapsed_ms: duration }",
+            "        polls.push(entry)",
+            "        if (status !== 202) return",
+            "        if (statusReadAttempts === 32 || statusReadPending === 8) { statusReadDropped++; entry.job_status_not_observed = true; return }",
+            "        statusReadAttempts++; statusReadPending++",
+            "        let settled = false",
+            "        return (value, unreadable = false) => {",
+            "          if (saved || settled) return",
+            "          settled = true; statusReadPending--",
+            "          if (unreadable) { entry.job_status_unreadable = true; return }",
+            "          // Access only the top-level status. Never retain the response or inspect any other field.",
+            "          const state: unknown = value != null && typeof value === 'object' && !Array.isArray(value) ? (value as { status?: unknown }).status : undefined",
+            "          if (state === 'queued' || state === 'running' || state === 'awaiting_approval' || state === 'completed' || state === 'failed' || state === 'cancelled') entry.job_status = state",
+            "          else entry.job_status_invalid = true",
+            "        }",
+            "      },",
+            "      save(boundary) {",
+            "        if (!enabled || saved) return",
+            "        saved = true // Freeze before writing; late JSON observations cannot alter this record.",
+            "        try {",
+            "          writeFileSync(info.outputPath('grading-two-profile-timing.json'), JSON.stringify({",
+            "            version: 'grading-two-profile-metadata-v1', clock: 'Node performance.now milliseconds since test-scoped observer fixture entry', observed_timeout_ms: info.timeout, retry: info.retry,",
+            "            saved_at_boundary: boundary, phases, polls, status_reads: { attempted: statusReadAttempts, pending_at_freeze: statusReadPending }, dropped: { phases: phaseDropped, polls: pollDropped, status_reads: statusReadDropped }, limits: { phases: 256, polls: 64, status_reads: 32, status_reads_pending: 8 },",
+            "            scope: 'Original test-scoped runtime/page/start/submit/manual/grade boundaries and existing GET result HTTP status/duration. A non-awaited read of an existing 202 response projects only the strict top-level job status enum. No added request/wait, ID, URL/query, header, authentication value, answer/reason, DOM, private field or raw JSON is recorded. Page-finally freeze precedes runtime cleanup; fixture-finally fallback covers setup failure. Timing includes observer scheduling overhead; worker/browser setup before observer entry and server progress between observations are unobserved. No cause or repair verdict.',",
+            "          }, null, 2), { flag: 'wx' })",
+            "        } catch { info.annotations.push({ type: 'diagnostic', description: 'Bounded grading metadata could not be saved; original outcome preserved.' }) }",
+            "      },",
+            "    }",
+            "    timing.mark('fixture-enter')",
+            "    try { await use(timing) } finally { timing.mark('fixture-finally'); timing.save('fixture-finally') }",
+            "  }, { auto: true }],",
+            "  runtime: async ({ gradingTiming }, use) => { gradingTiming.mark('runtime-start'); const runtime = await RestartRuntime.start(); gradingTiming.mark('runtime-ready'); try { await use(runtime) } finally { await runtime.close() } },",
+            "  page: async ({ runtime, playwright, gradingTiming }, use) => {",
+            "    gradingTiming.mark('browser-open'); const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; gradingTiming.mark('browser-opened')",
+            "    gradingTimingByPage.set(page, gradingTiming); gradingTiming.mark('authentication-start'); await runtime.authenticateOnly(page); gradingTiming.mark('authentication-complete'); gradingTiming.mark('page-use')",
+            "    try { await use(page) } finally { gradingTiming.mark('page-finally'); gradingTiming.save('page-finally'); gradingTimingByPage.delete(page) }",
+            "  },"
+          ]
+        },
+        {
+          "start": 84,
+          "end": 95,
+          "lines": [
+            "async function submit(page: Page) { const timing = gradingTimingByPage.get(page); timing?.mark('submit-enter'); await page.getByRole('button', { name: '提交本次测试', exact: true }).click(); await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click(); await expect(page.getByRole('region', { name: '当前评分结果', exact: true })).toBeVisible(); timing?.mark('submit-returned') }",
+            "async function grade(page: Page, id: string, revision: number): Promise<AssessmentGradingResult> {",
+            "  let result: AssessmentGradingResult | undefined",
+            "  const timing = gradingTimingByPage.get(page), caller: GradingCaller = revision === 1 ? 'revision-1' : revision === 2 ? 'revision-2' : revision === 3 ? 'revision-3' : 'other-revision'; timing?.mark('grade-enter')",
+            "  await expect.poll(async () => { const started = performance.now(); const response = await page.request.get(`/api/v1/attempts/${id}/result`); const observe = timing?.poll(caller, response.status(), performance.now() - started); if (response.status() === 202) { if (observe) void response.json().then(value => observe(value), () => observe(undefined, true)).catch(() => { /* Diagnostic parsing must not change the original poll. */ }); return 0 }; expect(response.status()).toBe(200); result = await response.json(); return result!.grading_revision }).toBe(revision)",
+            "  timing?.mark('grade-returned')",
+            "  return result!",
+            "}",
+            "async function settleLayout(page: Page) { const choice = page.getByRole('button', { name: '采用本地会话并重新保存', exact: true }); if (await choice.isVisible()) { await choice.click(); await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible() } }",
+            "async function beginReview(page: Page) { const timing = gradingTimingByPage.get(page); timing?.mark('manual-form-enter'); const author = page.getByRole('button', { name: '切换为作者角色以人工复核', exact: true }); if (await author.isVisible()) await author.click(); await page.getByRole('button', { name: '填写人工复核', exact: true }).click(); timing?.mark('manual-form-returned') }",
+            "async function fillReview(page: Page, number: number, score: string, text: string) { await page.getByRole('checkbox', { name: `复核第 ${number} 题`, exact: true }).check(); await page.getByLabel(`第 ${number} 题人工分数`, { exact: true }).fill(score); await page.getByLabel(`第 ${number} 题复核依据`, { exact: true }).fill(text) }",
+            "async function sendReview(page: Page) { const timing = gradingTimingByPage.get(page); timing?.mark('manual-confirm-enter'); await page.getByRole('button', { name: '提交人工复核', exact: true }).click(); await page.getByRole('button', { name: '确认提交人工分数与依据', exact: true }).click(); timing?.mark('manual-confirm-returned') }"
+          ]
+        },
+        {
+          "start": 129,
+          "end": 142,
+          "lines": [
+            "test('two browser profiles keep a stale manual-review baseline through an actual 412 before explicit three-way rebase', async ({ page, browser }) => {",
+            "  const { attempt } = await start(page, 'gradingnativecas'); await submit(page); await beginReview(page)",
+            "  await page.getByLabel('人工复核理由', { exact: true }).fill('A 作者保留的原版本复核'); await fillReview(page, 1, '0.25', 'A 本页逐题依据')",
+            "  const other = await browser.newContext({ baseURL: new URL(page.url()).origin, storageState: await page.context().storageState() })",
+            "  try {",
+            "    const second = await other.newPage(); shareGradingTiming(page, second); await second.goto(page.url()); await beginReview(second)",
+            "    await second.getByLabel('人工复核理由', { exact: true }).fill('B 作者先提交的新版本'); await fillReview(second, 1, '0.75', 'B 服务端逐题依据'); await sendReview(second); await grade(second, attempt.id, 2)",
+            "    const rejected = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/attempts/${attempt.id}/regrade`))",
+            "    await sendReview(page); expect((await rejected).status()).toBe(412)",
+            "    const comparison = page.getByRole('region', { name: '人工复核三方比较', exact: true }); await expect(comparison).toContainText('A 本页逐题依据'); await expect(comparison).toContainText('B 服务端逐题依据'); await expect(comparison).toContainText('原评分基准')",
+            "    await page.getByRole('button', { name: '保留本页复核并采用当前评分基准', exact: true }).click(); await sendReview(page)",
+            "    const final = await grade(page, attempt.id, 3); expect(final.items[0].score).toBe(0.25); expect(final.items.slice(1).every(item => item.score === null)).toBe(true)",
+            "  } finally { await other.close() }",
+            "})"
+          ]
+        }
+      ]
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "$HOME/.cache/learning-workbench-acceptance/m63-upstream-http-gate-engineering-oct08",
+        "show",
+        "63403908eabec794aa1113d0d4ed467f22bae7b4:tests/e2e/review.spec.ts"
+      ],
+      "started_at_utc": "2026-10-08T04:24:19.467433+00:00",
+      "ended_at_utc": "2026-10-08T04:24:19.469453+00:00",
+      "exit_code": 0,
+      "fixed_path": "tests/e2e/review.spec.ts",
+      "snapshot": "browser-failures-static/review.source",
+      "bytes": 26817,
+      "sha256": "7cf1a873e60eb424905e5afd53a5f9fe24aa874532e69df1a233b08ca9daee3a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "excerpts": [
+        {
+          "start": 14,
+          "end": 50,
+          "lines": [
+            "const test = base.extend<{ runtime: RestartRuntime; setupTiming: SetupTiming }>({",
+            "  // Test-scoped and inside the original timeout. No fixture is moved to worker scope.",
+            "  setupTiming: [async ({}, use, info) => {",
+            "    const enabled = info.title === 'real history and exact material review preserve original submitted text, null scores and a selected old revision after reload'",
+            "    const started = performance.now(), phases: { sequence: number; elapsed_ms: number; stage: SetupPhase }[] = []",
+            "    const polls: { sequence: number; elapsed_ms: number; caller: SetupCaller; route: '/api/v1/attempts/:id/result'; method: 'GET'; status: number; request_elapsed_ms: number }[] = []",
+            "    let sequence = 0, phaseDropped = 0, pollDropped = 0, saved = false",
+            "    const observer: SetupTiming = {",
+            "      mark(stage) { if (!enabled) return; if (phases.length === 256) { phaseDropped++; return }; phases.push({ sequence: ++sequence, elapsed_ms: performance.now() - started, stage }) },",
+            "      poll(caller, status, duration) {",
+            "        if (!enabled || !Number.isInteger(status) || status < 100 || status > 599 || !Number.isFinite(duration) || duration < 0) return",
+            "        if (polls.length === 64) { pollDropped++; return }",
+            "        polls.push({ sequence: ++sequence, elapsed_ms: performance.now() - started, caller, route: '/api/v1/attempts/:id/result', method: 'GET', status, request_elapsed_ms: duration })",
+            "      },",
+            "      save(boundary) {",
+            "        if (!enabled || saved) return",
+            "        saved = true",
+            "        try {",
+            "          writeFileSync(info.outputPath('review-history-setup-helper-timing.json'), JSON.stringify({",
+            "            version: 'review-setup-helper-metadata-v1', clock: 'Node performance.now milliseconds since test-scoped observer fixture entry',",
+            "            observed_timeout_ms: info.timeout, retry: info.retry, saved_at_boundary: boundary, phases, polls,",
+            "            dropped: { phases: phaseDropped, polls: pollDropped }, limits: { phases: 256, polls: 64 },",
+            "            scope: 'Original runtime/page fixture and start/manual/grade helper boundaries. Existing page.request result polling records only fixed caller/route, status and elapsed time. No new request, JSON, query, header, body, ID, URL, DOM, React state, form or authentication value. Body-finally freeze excludes teardown; fixture-finally fallback covers setup failure. Worker/browser-runner setup before this fixture and JSON/React completion remain unobserved. Synchronous instrumentation changes scheduling; no cause or repair verdict.',",
+            "          }, null, 2), { flag: 'wx' })",
+            "        } catch { info.annotations.push({ type: 'diagnostic', description: 'Bounded setup/helper metadata could not be saved; original outcome preserved.' }) }",
+            "      },",
+            "    }",
+            "    observer.mark('fixture-enter')",
+            "    try { await use(observer) } finally { observer.mark('fixture-finally'); observer.save('fixture-finally') }",
+            "  }, { auto: true }],",
+            "  runtime: async ({ setupTiming }, use) => { setupTiming.mark('runtime-start'); const runtime = await RestartRuntime.start(); setupTiming.mark('runtime-ready'); try { await use(runtime) } finally { await runtime.close() } },",
+            "  page: async ({ runtime, playwright, setupTiming }, use) => {",
+            "    setupTiming.mark('browser-open'); const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; setupTiming.mark('browser-opened')",
+            "    setupTimingByPage.set(page, setupTiming); setupTiming.mark('authentication-start'); await runtime.authenticateOnly(page); setupTiming.mark('authentication-complete')",
+            "    setupTiming.mark('page-use'); try { await use(page) } finally { setupTimingByPage.delete(page) }",
+            "  },",
+            "})"
+          ]
+        },
+        {
+          "start": 198,
+          "end": 215,
+          "lines": [
+            "  timingPhase('desktop-screenshot')",
+            "  await page.setViewportSize({ width: 1440, height: 900 }); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); await page.screenshot({ path: info.outputPath('review-history-after-1440.png') })",
+            "  timingPhase('reload-old-selection')",
+            "  await settleLayout(page); await page.reload(); timingPhase('reload-returned'); await expect(history.getByLabel('选择评分版本')).toHaveValue('1'); await expect(page.getByLabel('第 2 题已提交答案')).toHaveText(answer)",
+            "  timingPhase('exact-material-open')",
+            "  const material = page.getByRole('region', { name: '本题对应教材', exact: true }); await material.getByRole('button', { name: /r1/ }).first().click()",
+            "  timingPhase('reader-route')",
+            "  await expect.poll(() => new URL(page.url()).searchParams.has('reader')).toBe(true)",
+            "  timingPhase('reader-binding')",
+            "  const link = new URL(page.url()); const target = JSON.parse(link.searchParams.get('reader')!); expect(target.course).toEqual(fixture.course); expect(target.lesson).toEqual(fixture.lesson); expect(target.block).toEqual(fixture.block)",
+            "  timingPhase('reader-visible')",
+            "  await expect(page.locator(`#block-${fixture.block.id}-r${fixture.block.revision}`)).toBeVisible()",
+            "  timingPhase('review-tab-return')",
+            "  const reviewTab = page.getByRole('tab', { name: /测试复盘/ }); await reviewTab.click(); timingPhase('review-tab-clicked'); await expect(history.getByLabel('选择评分版本')).toHaveValue('1')",
+            "  timingPhase('mobile-screenshot')",
+            "  await page.setViewportSize({ width: 390, height: 844 }); timingPhase('mobile-viewport-set'); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1); await page.screenshot({ path: info.outputPath('review-history-after-390.png') })",
+            "  timingPhase('agent-drawer')",
+            "  await page.getByRole('button', { name: '切换 Agent 栏', exact: true }).click(); const drawer = page.getByRole('dialog', { name: 'Agent 助教', exact: true }); await expect(drawer).toContainText('当前测试复盘上下文'); await expect(drawer).toContainText('评分版本 1：待复核'); await expect(drawer).toContainText('此版本没有当前获准的反馈正文'); await expect(drawer.getByRole('button', { name: '创建本次问答任务 ↑' })).toBeDisabled(); await drawer.getByRole('button', { name: '关闭Agent 助教', exact: true }).click()"
+          ]
+        },
+        {
+          "start": 227,
+          "end": 242,
+          "lines": [
+            "  } finally {",
+            "    // BEGIN REVIEW_HISTORY_TIMING_FINALIZER",
+            "    timingPhase('body-finally')",
+            "    page.off('request', timingRequest); page.off('response', timingResponse)",
+            "    page.off('requestfinished', timingFinished); page.off('requestfailed', timingFailed)",
+            "    try {",
+            "      writeFileSync(info.outputPath('review-history-timing.json'), JSON.stringify({",
+            "        version: 'review-history-metadata-v1', body_started_at: timingStartedAt,",
+            "        observed_timeout_ms: info.timeout, retry: info.retry, phases: timingPhases, http: timingHttp,",
+            "        dropped: { phases: timingPhaseDropped, http: timingHttpDropped },",
+            "        limits: { phases: 128, http: 512 },",
+            "        scope: 'Body-only Node monotonic timing; browser HTTP static route templates/status only. No query, ID, header, payload, DOM or error text. Page-request polling and fixture setup are not observed. Synchronous instrumentation changes scheduling; root cause remains unknown.',",
+            "      }, null, 2), { flag: 'wx' })",
+            "    } catch { info.annotations.push({ type: 'diagnostic', description: 'Bounded history metadata could not be saved; original outcome preserved.' }) }",
+            "    // END REVIEW_HISTORY_TIMING_FINALIZER",
+            "    setupTiming.mark('body-finally'); setupTiming.save('body-finally')"
+          ]
+        }
+      ]
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "$HOME/.cache/learning-workbench-acceptance/m63-upstream-http-gate-engineering-oct08",
+        "show",
+        "63403908eabec794aa1113d0d4ed467f22bae7b4:tests/e2e/restartRuntime.ts"
+      ],
+      "started_at_utc": "2026-10-08T04:24:19.469497+00:00",
+      "ended_at_utc": "2026-10-08T04:24:19.471198+00:00",
+      "exit_code": 0,
+      "fixed_path": "tests/e2e/restartRuntime.ts",
+      "snapshot": "browser-failures-static/runtime.source",
+      "bytes": 7508,
+      "sha256": "f45757408a834ae36d2714c679226f645142fa635913ca130329eb5f30c21ad8",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "excerpts": [
+        {
+          "start": 109,
+          "end": 122,
+          "lines": [
+            "  async openBrowser(browserType: BrowserType) {",
+            "    if (this.context) throw new Error('Close the actual previous browser before reopening')",
+            "    this.context = await browserType.launchPersistentContext(this.profile, {",
+            "      headless: true, viewport: { width: 1440, height: 900 }, baseURL: this.origin,",
+            "      ...(existsSync('/usr/bin/google-chrome') ? { executablePath: '/usr/bin/google-chrome' } : {}),",
+            "    })",
+            "    this.context.setDefaultTimeout(10_000)",
+            "    this.context.setDefaultNavigationTimeout(20_000)",
+            "    return this.context",
+            "  }",
+            "",
+            "  async closeBrowser() {",
+            "    await this.context?.close()",
+            "    this.context = undefined"
+          ]
+        },
+        {
+          "start": 148,
+          "end": 152,
+          "lines": [
+            "  async close() {",
+            "    const results = await Promise.allSettled([this.closeBrowser(), stopOwned(this.ui), stopOwned(this.api)])",
+            "    const failures = results.filter((value): value is PromiseRejectedResult => value.status === 'rejected')",
+            "    if (failures.length) throw new AggregateError(failures.map(value => value.reason), 'Owned test runtime cleanup failed')",
+            "  }"
+          ]
+        }
+      ]
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "$HOME/.cache/learning-workbench-acceptance/m63-upstream-http-gate-engineering-oct08",
+        "show",
+        "63403908eabec794aa1113d0d4ed467f22bae7b4:apps/web/src/workbench/Shell.tsx"
+      ],
+      "started_at_utc": "2026-10-08T04:24:19.471225+00:00",
+      "ended_at_utc": "2026-10-08T04:24:19.472797+00:00",
+      "exit_code": 0,
+      "fixed_path": "apps/web/src/workbench/Shell.tsx",
+      "snapshot": "browser-failures-static/shell.source",
+      "bytes": 54776,
+      "sha256": "bfcaef62556144bbfb3181dbc2f422c1c77f6a7af2c056302bec23f192d448e4",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "excerpts": [
+        {
+          "start": 102,
+          "end": 113,
+          "lines": [
+            "  const tabLabel = (tab: typeof session.tabs[number]) => findLesson(tab.context.active_ref)?.title ?? `${realTitles[tab.id]?.title || (assessmentTarget(tab.context) ? tab.context.view_kind === 'assessment_review' ? '测试复盘' : tab.context.attempt_id ? '测试作答' : '测试范围' : tab.context.active_ref.id)} · r${tab.context.active_ref.revision}`",
+            "  const activeLesson = findLesson(active?.context.active_ref)",
+            "  const activeTitle = activeLesson?.title ?? (active && realTitles[active.id]?.title) ?? active?.context.active_ref.id ?? ''",
+            "  const activePractice = active ? practiceTarget(active.context) : null",
+            "  const activeAssessment = active ? assessmentTarget(active.context) : null",
+            "  const subjectLocked = !policy.known || !!policy.independentId",
+            "  const activeRoute = active ? routeTarget(active.context) : null",
+            "  const routes = useRoutes(workspaceId, !uiReady || subjectLocked || session.navigation !== 'route', learningVersion)",
+            "  const routeRecord = activeRoute ? routes.records.find(item => sameRef(item.ref, activeRoute)) : null",
+            "  const profileConcepts = useConceptStates(workspaceId, subjectLocked || dialog !== '学习目标与基础', undefined, learningVersion)",
+            "  const canLeave = () => { if (active && (!editorState(active.id).safe || practiceStatesRef.current[active.id]?.safe === false || assessmentStatesRef.current[active.id]?.safe === false || routeStatesRef.current[active.id]?.safe === false)) { setHistoryWarning('当前文字或作答尚未安全保存到本机，请保持页面打开并重试；未切换对象。'); return false }; return true }",
+            "  const hasDraft = (id: string) => editorState(id).dirty || !editorState(id).safe || !!latestDrafts.current[id] || !!practiceStatesRef.current[id]?.dirty || practiceStatesRef.current[id]?.safe === false || !!assessmentStatesRef.current[id]?.dirty || assessmentStatesRef.current[id]?.safe === false || !!routeStatesRef.current[id]?.dirty || routeStatesRef.current[id]?.safe === false"
+          ]
+        },
+        {
+          "start": 142,
+          "end": 148,
+          "lines": [
+            "  const openTest = (target: AssessmentTarget, pinned = false) => {",
+            "    if (!canLeave()) return",
+            "    let opened = false",
+            "    set(old => { const result = openAssessment(old, target, pinned, hasDraft); if (result.kind === 'conflict') { setReaderLinkError(referenceConflictMessage); return old }; opened = true; return result.session })",
+            "    if (!opened) return",
+            "    setReaderLinkError(''); const href = assessmentHref(target)",
+            "    if (location.pathname + location.search + location.hash !== href) history.pushState(null, '', href)"
+          ]
+        },
+        {
+          "start": 204,
+          "end": 205,
+          "lines": [
+            "  const activateTab = (tab: typeof session.tabs[number]) => { if (!canLeave()) return; const route = routeTarget(tab.context); if (route) { openLearningRoute(route, tab.pinned); return }; const assessment = assessmentTarget(tab.context); if (assessment) { openTest(assessment, tab.pinned); return }; const exercise = practiceTarget(tab.context); if (exercise) { openExercise(exercise, tab.pinned); return }; const target = contextTarget(tab.context, session.course_ref); if (target && !findLesson(tab.context.active_ref)) openReal(target, tab.pinned); else { clearReaderLink(); set(old => ({ ...old, active_tab_id: tab.id, course_ref: fixtureRef(fixture.course.ref) })) } }",
+            "  const closeTab = (id: string) => { if (!editorState(id).closeSafe || practiceStatesRef.current[id]?.safe === false || assessmentStatesRef.current[id]?.safe === false || routeStatesRef.current[id]?.safe === false) return; set(old => { const tabs = old.tabs.filter(tab => tab.id !== id); return { ...old, tabs, active_tab_id: old.active_tab_id === id ? tabs.at(-1)?.id ?? null : old.active_tab_id } }); setClosing(null) }"
+          ]
+        },
+        {
+          "start": 235,
+          "end": 235,
+          "lines": [
+            "      <main id=\"reader-main\" className=\"reader-main\" tabIndex={-1}><div className=\"tab-bar\" role=\"tablist\" aria-label=\"打开的学习对象\" onKeyDown={event => { if (![\"ArrowLeft\", \"ArrowRight\", \"Home\", \"End\"].includes(event.key)) return; const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(\"[role=tab]\")); const current = tabs.indexOf(event.target as HTMLButtonElement); if (current < 0) return; event.preventDefault(); const index = event.key === \"Home\" ? 0 : event.key === \"End\" ? tabs.length - 1 : (current + (event.key === \"ArrowRight\" ? 1 : -1) + tabs.length) % tabs.length; tabs[index].focus(); tabs[index].click() }}><button className={`home-tab ${!active ? 'active' : ''}`} role=\"tab\" tabIndex={!active ? 0 : -1} aria-selected={!active} onClick={() => { if (!canLeave()) return; clearReaderLink(); set(old => ({ ...old, active_tab_id: null })) }}>{navigationItems.find(item => item.id === session.navigation)?.label}</button>{session.tabs.map(tab => <div className={`object-tab ${tab.id === active?.id ? 'active' : ''}`} key={tab.id}><button role=\"tab\" tabIndex={tab.id === active?.id ? 0 : -1} aria-selected={tab.id === active?.id} title={tabLabel(tab)} onClick={() => activateTab(tab)} onDoubleClick={() => set(old => ({ ...old, tabs: old.tabs.map(item => item.id === tab.id ? { ...item, pinned: true } : item) }))}>{tab.pinned && <span aria-label=\"已固定\">⌖ </span>}{tabLabel(tab)}{hasDraft(tab.id) && <span aria-label=\"有问题草稿\"> •</span>}</button><button className=\"tab-pin\" aria-label={`固定标签 ${tabLabel(tab)}`} onClick={() => set(old => ({ ...old, tabs: old.tabs.map(item => item.id === tab.id ? { ...item, pinned: !item.pinned } : item) }))}>{tab.pinned ? '⌖' : '⋄'}</button><button className=\"tab-close\" aria-label={`关闭标签 ${tabLabel(tab)}`} onClick={() => hasDraft(tab.id) ? setClosing(tab.id) : closeTab(tab.id)}>×</button></div>)}</div>{readerLinkError ? <div className=\"reader-scroll\"><div className=\"empty-content\" role=\"alert\"><h1>无法打开此精确链接</h1><p>{readerLinkError}</p><button onClick={() => { setReaderLinkError(''); if (active) activateTab(active); else clearReaderLink() }}>返回原标签</button></div></div> : subjectLocked && !activeAssessment || policy.independentId && activeAssessment?.attempt_id && activeAssessment.attempt_id !== policy.independentId ? <div className=\"reader-scroll\"><div className=\"empty-content\"><h1>{policy.known ? '独立测试期间，学科材料暂受限制' : '正在核验测试访问策略'}</h1><p>{policy.error || '可以从目录返回自己的测试，继续作答、提交或明确放弃。已有草稿保持独立保存。'}</p><button onClick={policy.refresh}>重新核验工作区策略</button></div></div> : session.navigation === 'route' && (!active || activeRoute) ? activeRoute && active && workspaceId ? routeRecord && routes.progress ? <RouteView key={active.id} workspace={workspaceId} item={routeRecord} progress={routes.progress} tab={active} latest={!routes.records.some(item => item.ref.id === activeRoute.id && item.ref.revision > activeRoute.revision)} refresh={routes.refresh} edit={() => setDialog('编辑路线')} reader={openReal} practice={openExercise} assessment={openTest} scrollChanged={offset => set(old => ({ ...old, tabs: old.tabs.map(tab => tab.id === active.id ? { ...tab, scroll_offset: offset } : tab) }))} onState={value => { setRouteStates(old => JSON.stringify(old[active.id]) === JSON.stringify(value) ? old : { ...old, [active.id]: value }); setRealTitles(old => old[active.id]?.title === value.title && old[active.id]?.resolved ? old : { ...old, [active.id]: { title: value.title, resolved: true } }) }} /> : <div className=\"reader-scroll route-home\"><h1>{routes.loading ? '正在读取精确路线…' : '此精确路线当前不可读'}</h1><p>{routes.error || '保留原路线修订与哈希，未自动换成最新版本。'}</p><button onClick={routes.refresh}>重新读取路线</button></div> : <div className=\"reader-scroll route-home\"><h1>从学习目标开始</h1><p>路线把真实教材、练习和测试排成任务顺序。先修提醒帮助选择顺序，完成标记不代表掌握。</p>{routes.loading && <p>正在读取路线…</p>}{routes.error && <p role=\"alert\">{routes.error}</p>}{!routes.loading && !routes.records.length && <p>尚无正式学习路线。</p>}<div className=\"learning-actions\"><button onClick={() => openAux('创建路线')}>创建路线</button><button onClick={() => openAux('学习建议')}>学习建议</button><button onClick={() => openAux('学习目标与基础')}>学习目标与基础</button><button onClick={() => openAux('知识画像')}>查看概念与技能证据</button></div><ul>{routes.records.map(item => <li key={`${item.ref.id}:${item.ref.revision}`}><button onClick={() => openLearningRoute(item.ref, true)}>{item.route.title} · r{item.ref.revision}</button></li>)}</ul></div> : activeAssessment && active && workspaceId ? activeAssessment.attempt_id ? <AssessmentView open={openTest} reader={subjectLocked ? undefined : openReal} course={subjectLocked ? undefined : chooseCourse} key={active.id} workspace={workspaceId} target={{ ...activeAssessment, attempt_id: activeAssessment.attempt_id }} tab={active} requestedQuestion={assessmentQuestion?.tab === active.id ? assessmentQuestion : undefined} loaded={(title, resolved) => setRealTitles(old => old[active.id]?.title === title && old[active.id]?.resolved === resolved ? old : { ...old, [active.id]: { title, resolved } })} onScroll={offset => set(old => ({ ...old, tabs: old.tabs.map(tab => tab.id === active.id ? { ...tab, scroll_offset: offset } : tab) }))} onState={value => setAssessmentStates(old => JSON.stringify(old[active.id]) === JSON.stringify(value) ? old : { ...old, [active.id]: value })} /> : <AssessmentPreview course={chooseCourse} key={active.id} workspace={workspaceId} target={activeAssessment} open={openTest} loaded={(title, resolved) => setRealTitles(old => old[active.id]?.title === title && old[active.id]?.resolved === resolved ? old : { ...old, [active.id]: { title, resolved } })} /> : !active && session.navigation === 'assessment' ? <div className=\"reader-scroll\"><div className=\"empty-content\"><div className=\"eyebrow\">测试</div><h1>选择测试，核对范围与模式</h1><p>从测试目录查看真实内容状态和最近作答记录。明确开始后才创建冻结实例；提交后可查看真实评分、历史版本与复盘。</p><button onClick={() => setDrawer('nav')}>打开测试目录</button></div></div> : activePractice && active && workspaceId ? activePractice.session_id ? <PracticeView requestedQuestion={practiceQuestion?.tab === active.id ? practiceQuestion : undefined} key={active.id} workspace={workspaceId} target={{ ...activePractice, session_id: activePractice.session_id }} tab={active} reader={openReal} loaded={(title, resolved) => setRealTitles(old => old[active.id]?.title === title && old[active.id]?.resolved === resolved ? old : { ...old, [active.id]: { title, resolved } })} onScroll={offset => set(old => ({ ...old, tabs: old.tabs.map(tab => tab.id === active.id ? { ...tab, scroll_offset: offset } : tab) }))} onState={value => setPracticeStates(old => JSON.stringify(old[active.id]) === JSON.stringify(value) ? old : { ...old, [active.id]: value })} /> : <PracticePreview key={active.id} workspace={workspaceId} target={activePractice} open={openExercise} reader={openReal} loaded={(title, resolved) => setRealTitles(old => old[active.id]?.title === title && old[active.id]?.resolved === resolved ? old : { ...old, [active.id]: { title, resolved } })} /> : !active && session.navigation === 'practice' && !loaded ? <div className=\"reader-scroll\"><div className=\"empty-content\"><div className=\"eyebrow\">习题</div><h1>选择习题，开始一次练习</h1><p>从左侧当前课程的习题目录选择参考题集。明确开始后才创建作答会话，参考解答保持隐藏。</p><button onClick={() => openAux('课程切换')}>选择课程</button></div></div> : loaded ? <Reader session={session} workspaceId={workspaceId} loaded={loaded} onLoad={loadFixture} onOpen={openLesson} onSelect={selection => set(old => ({ ...old, tabs: old.tabs.map(tab => tab.id === old.active_tab_id ? { ...tab, context: { ...tab.context, selection } } : tab) }))} onScroll={offset => set(old => ({ ...old, tabs: old.tabs.map(tab => tab.id === old.active_tab_id ? { ...tab, scroll_offset: offset } : tab) }))} onAux={openAux} /> : <ReaderDocument editorPaused={subjectLocked || !!policy.openBookId} onEditorState={(key, value) => { if (active) setEditorStates(old => JSON.stringify(old[`${active.id}:${key}`]) === JSON.stringify(value) ? old : { ...old, [`${active.id}:${key}`]: value }) }} session={session} workspace={workspaceId} onOpen={openReal} onSelect={selection => set(old => ({ ...old, tabs: old.tabs.map(tab => tab.id === old.active_tab_id ? { ...tab, context: { ...tab.context, selection } } : tab) }))} onScroll={offset => set(old => ({ ...old, tabs: old.tabs.map(tab => tab.id === old.active_tab_id ? { ...tab, scroll_offset: offset } : tab) }))} onNote={selection => { setNoteSelection(selection); setDialog('笔记') }} onLoaded={(title, resolved) => { if (active) setRealTitles(old => old[active.id]?.title === title && old[active.id]?.resolved === resolved ? old : { ...old, [active.id]: { title, resolved } }) }} progressVersion={progressVersion} progressChanged={() => setProgressVersion(value => value + 1)} onAux={openAux} loadSynthetic={loadFixture} practice={target => { setPracticeLesson(target); setDialog('本节习题') }} />}</main>"
+          ]
+        }
+      ]
+    }
+  ],
+  "local_dependency_excerpts": [
+    {
+      "local_source": "$HOME/Desktop/learning/Learning_Workbench/apps/web/node_modules/playwright/lib/worker/workerProcessEntry.js",
+      "version": "1.63.0",
+      "bytes": 76013,
+      "sha256": "3d6676ca271c075b1e7c8e2cd6ad5331430cf29a3332d1f621054ff7d8e06478",
+      "excerpts": [
+        {
+          "start": 1102,
+          "end": 1104,
+          "lines": [
+            "  _failWithError(root) {",
+            "    if (this.status === \"passed\" || this.status === \"skipped\")",
+            "      this.status = root instanceof TimeoutManagerError ? \"timedOut\" : \"failed\";"
+          ]
+        },
+        {
+          "start": 1131,
+          "end": 1149,
+          "lines": [
+            "  async _runWithTimeout(runnable, cb) {",
+            "    try {",
+            "      await this._timeoutManager.withRunnable(runnable, async () => {",
+            "        try {",
+            "          await cb();",
+            "        } catch (e) {",
+            "          if (this._allowSkips && e instanceof TestSkipError) {",
+            "            if (this.status === \"passed\")",
+            "              this.status = \"skipped\";",
+            "          } else {",
+            "            this._failWithError(e);",
+            "          }",
+            "          throw e;",
+            "        }",
+            "      });",
+            "    } catch (error) {",
+            "      if (!this._interruptedPromise.isDone() && error instanceof TimeoutManagerError)",
+            "        this._failWithError(error);",
+            "      throw error;"
+          ]
+        },
+        {
+          "start": 1646,
+          "end": 1678,
+          "lines": [
+            "        const params = await this._fixtureRunner.resolveParametersForFunction(test.fn, testInfo, \"test\", { type: \"test\" });",
+            "        if (params !== null)",
+            "          testFunctionParams = params.result;",
+            "      });",
+            "      if (testFunctionParams === null) {",
+            "        return;",
+            "      }",
+            "      await testInfo._runWithTimeout({ type: \"test\" }, async () => {",
+            "        const fn = test.fn;",
+            "        await fn(testFunctionParams, testInfo);",
+            "      });",
+            "    })().catch(() => {",
+            "    });",
+            "    testInfo.duration = testInfo._timeoutManager.defaultSlot().elapsed | 0;",
+            "    testInfo._allowSkips = true;",
+            "    const afterHooksTimeout = calculateMaxTimeout(this._project.project.timeout, testInfo.timeout);",
+            "    const afterHooksSlot = { timeout: afterHooksTimeout, elapsed: 0 };",
+            "    await testInfo._runAsStep({ title: \"After Hooks\", category: \"hook\" }, async () => {",
+            "      let firstAfterHooksError;",
+            "      try {",
+            "        await testInfo._runWithTimeout({ type: \"test\", slot: afterHooksSlot }, () => testInfo._didFinishTestFunction());",
+            "      } catch (error) {",
+            "        firstAfterHooksError = firstAfterHooksError ?? error;",
+            "      }",
+            "      try {",
+            "        if (shouldRunAfterEachHooks)",
+            "          await this._runEachHooksForSuites(reversedSuites, \"afterEach\", testInfo, afterHooksSlot);",
+            "      } catch (error) {",
+            "        firstAfterHooksError = firstAfterHooksError ?? error;",
+            "      }",
+            "      testInfo._tracing.didFinishTestFunctionAndAfterEachHooks();",
+            "      try {",
+            "        await this._fixtureRunner.teardownScope(\"test\", testInfo, { type: \"test\", slot: afterHooksSlot });"
+          ]
+        }
+      ],
+      "binding_limit": "locally installed source only; CI binary/package byte equality NOT_VERIFIED"
+    },
+    {
+      "local_source": "$HOME/Desktop/learning/Learning_Workbench/apps/web/node_modules/playwright/lib/index.js",
+      "version": "1.63.0",
+      "bytes": 36487,
+      "sha256": "54bf5935cf339938408c656bde958047a1217bf77434acdf75a0c717cddaaeae",
+      "excerpts": [
+        {
+          "start": 391,
+          "end": 398,
+          "lines": [
+            "      const context = await browser.newContext({ ...videoOptions, ...options });",
+            "      let closed = false;",
+            "      const close = async () => {",
+            "        if (closed)",
+            "          return;",
+            "        closed = true;",
+            "        const closeReason = testInfo.status === \"timedOut\" ? \"Test timeout of \" + testInfo.timeout + \"ms exceeded.\" : \"Test ended.\";",
+            "        await context.close({ reason: closeReason });"
+          ]
+        }
+      ],
+      "binding_limit": "locally installed source only; CI binary/package byte equality NOT_VERIFIED"
+    }
+  ],
+  "grading": {
+    "observed": "revision3 expected;0 received; original30000ms test timeout",
+    "boundary": "grade helper directly polls API;0 is sentinel for202, but original log lacks each response status so last202 not independently established",
+    "cause": "UNKNOWN",
+    "minimum_missing_observation": "grading-two-profile-timing.json revision3 phases/poll status/duration/projected strict job state before cleanup; durable job/worker phase if deeper cause required"
+  },
+  "review": {
+    "observed": "click stopped at scrolling-into-view; original30000ms timeout plus targetclosed",
+    "closed_order": "UNKNOWN",
+    "code_path": "review44 runtime finally -> RestartRuntime148 close ->120context.close; Playwright testtimeout ->After Hooks ->testfixture teardown",
+    "boundary": "no source close in review211 or Shell tab activation; no independent timestamp proving original close occurred only aftertimeout or excluding earlier crash",
+    "minimum_missing_observation": "existing review-history-timing.json and setup-helper phases plus test-local pageclose event/deadline ordering if available; no host probes"
+  },
+  "qualification": "NO_UNIQUE_CAUSE; NO_ASSERTION_CHANGE; NO_RERUN; DIFFERENT835_SOURCE_AND_EVENT_NOT_USED"
+}
