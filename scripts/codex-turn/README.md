@@ -150,3 +150,72 @@ python3 scripts/codex-turn/replay_shared_responses.py \
 API190通过不能覆盖它们。唯一测试构建元数据差异仍为 workspace版本
 0.160.0→0.0.0；原Cargo.lock不变，原release二进制等价未证明。输出包含
 实际命令、日志哈希、退出码以及完整原/patch/normalized/final源码图。
+
+## 本地 core producer B03 回放
+
+`core-producer.patch` 在同一固定官方 tar 上合并 HTTP04、A+C 与 B03-r2
+的20个 Rust 路径。`core-producer-source.json` 绑定每项实际前后 SHA、原锁、
+精确 Rust1.95.0 来源和完整源码图：原始8775项，补丁后8781项。文件字节、
+权限模式与 symlink 均校验；原 `vendor/bubblewrap/LICENSE -> COPYING`
+保留，它属于原 tar，不是补丁新增文件。旧私有 stock 遗漏该 link 及57项
+可执行模式的历史限定保留，不能拿旧副本宣称完整 tar 相等。
+
+工程候选仅对 B03-r2 四个测试 callsite 增加12处精确 `/*effort*/`、
+`/*service_tier*/`、`/*include_internal*/` 参数注释；表达式、断言及实现
+不变，更新后的测试源码 SHA 明确记录在 manifest。空补丁 context 行采用
+无尾空格表示，实际 `git apply --check`、应用及 SHA 核对仍必须成功。
+
+此内部切片将 ordinary core builder 的纯逻辑和纯 late body/header merge
+与 live auth、telemetry、recorder、trace 和 contributor callback 效果分开。
+受控入口要求显式提供已解析材料，在完整实际 envelope 计算前设置正整数
+输出硬限及 disabled truncation，再通过 A+C 共享 API 执行一次真实
+EncodedJson 编码。root cache-affinity 的实际 Responses session header 与
+logical metadata identity 分开，Internal/SubAgent 保持原 logical header
+规则。保留的实际 EncodedJson allocation 可送到 HTTP04 gate；可信最终鉴权
+后冻结、跳过普通 retry 的生产接线仍未完成。
+
+```sh
+python3 scripts/codex-turn/replay_core_producer.py \
+  --archive /path/to/a956835d.tar.gz \
+  --output-dir /path/to/new-private-core-prepare --prepare-only
+
+python3 scripts/codex-turn/replay_core_producer.py \
+  --archive /path/to/a956835d.tar.gz \
+  --output-dir /path/to/new-private-core-tests \
+  --toolchain-dir /path/to/owned-rust195/toolchain \
+  --cargo-home /path/to/owned-cargo-cache
+```
+
+`--prepare-only` 复用未变的 HTTP 回放准备机制，运行零 Cargo/Rust 命令。
+默认只执行三个真实 `codex-core --lib` 过滤选择，均为严格
+`--locked --offline -- --test-threads=2`，jobs=2：
+
+- `responses_producer::tests`：11项受控纯本地构造/拒绝测试。
+- `websocket_handshake_includes_attestation_for_chatgpt_codex_responses`：2项既存纯 mock header 测试。
+- `internal_session_prompt_cache_key_is_scoped_to_parent_thread`：1项既存 cache-key 测试。
+
+每个选择均核实际退出、完整 footer、精确测试名及非零数量；只有11+2+1
+全通过才能报告本次14项 PASS。无 `--all-lib`、在线依赖补齐或自由 filter
+参数，缺缓存保留实际失败。首次失败即停止后续选择，不重试、不删日志。
+参数形式与原入口保持一致，旧 HTTP/API 入口及其源码不变。输出、Rustup home
+和 target 必须新建；可复用预先准备的任务 Cargo cache，但不会复用或覆盖
+已封存阶段的 target/二进制。HOME/CODEX_HOME 不覆盖。
+
+输出保留 original/patched/normalized/final/core-final 完整图，命令及真实
+stdout/stderr/exit 在 `receipts/`（补丁）和 `core-tests/receipts/`（版本/测试）。
+`report.json` 绑定本次所运行的实际测试二进制 SHA与0.0.0测试元数据身份。
+唯一构建元数据调整仍为 workspace.version0.160.0→0.0.0，原锁不变；这
+不是原 release binary 或 production profile 等价证明。
+
+历史 B03-r2 是14 selected PASS/core lib check0；B02 相同 session 材料的
+真实 RED 为1 PASS/2 FAIL/exit101，旧30项成功并未消除当时的P2。新入口
+不运行完整2676项 core库、guardian测试、API190或HTTP库测试；既有 HTTP
+完整114 PASS/6 FAIL保持 **FAIL**。本地源码/测试不能替代生产完整输入证明。
+
+**INCOMPLETE / NOT_ADMITTED**：plain resolved facts 只做机械一致性校验，
+不是可信 InputProof、FinalAuth 或 owner 权威。平台已有持久 control ledger；
+它与真实 final Request/单次 HTTP send 的绑定、Provider/platform bridge、
+模型/计量/容量证明、资源/DNS资格和 AppServer 生产接线仍未闭合；
+registry/default None、UI和产品 wire 不变。此回放
+不执行 CLI/AppServer/真实模型，不声称 Agent 或整个M6.3已完成。原 LICENSE
+和 NOTICE 继续适用于上游派生补丁。
