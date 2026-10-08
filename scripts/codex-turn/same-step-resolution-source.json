@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "Engineering source48 repair candidate; no production qualification, runtime results pending",
+  "status": "Engineering source58 sampling-after-Clippy candidate; no production qualification, runtime results pending",
   "spec": {
     "version": "3.0.15",
     "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec"
@@ -143,12 +143,12 @@
   ],
   "complete_source_graph": {
     "source": {
-      "rows": 8789,
-      "sha256": "ffb3d1f75047df58a15a6aa15425967cdc7d976b5022319567bb50a8d3763ef5"
+      "rows": 8791,
+      "sha256": "4d9ed864538e8084352cc7360b76b29d0b7b8ee75927125c797da7c2c90a7039"
     },
     "normalized": {
-      "rows": 8789,
-      "sha256": "f9f7fbc878c0c6566330c4df8a2d4ba6ef9055da4a697e24accba5c795d4e98e"
+      "rows": 8791,
+      "sha256": "36d7d561af1aa3c2ab697242fc2c698689c3d99d9e0659db3267471c7fa166fd"
     }
   },
   "test_metadata": {
@@ -237,10 +237,10 @@
         ]
       },
       {
-        "label": "native22",
+        "label": "native32",
         "package": "codex-core",
         "filter": "session::retained_outbound_snapshot::tests::",
-        "expected_passed": 22,
+        "expected_passed": 32,
         "test_names": [
           "session::retained_outbound_snapshot::tests::absent_native_active_owner_is_unavailable",
           "session::retained_outbound_snapshot::tests::actual_mcp_attribution_change_invalidates_capture",
@@ -263,6 +263,16 @@
           "session::retained_outbound_snapshot::tests::recheck_rejects_another_session_instance",
           "session::retained_outbound_snapshot::tests::replacement_active_turn_owner_rejects_the_original_capture",
           "session::retained_outbound_snapshot::tests::same_step_mechanical_capture_cannot_qualify_fallback_or_catalog_metadata",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::actual_guardian_budget_failure_is_preserved_before_sampling",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::actual_history_append_invalidates_retained_source_without_refresh",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::capture_retains_actual_tools_schema_instructions_and_executed_metadata",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::final_metadata_change_invalidates_capture_without_reassembling_prompt",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::instructions_from_another_native_owner_cannot_be_retained",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::ordinary_assembly_does_not_require_a_retained_active_owner",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::pregrant_refuses_without_history_assembly_or_any_external_port",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::retained_capture_rejects_a_cross_session_or_equal_value_step",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::settings_replacement_invalidates_capture_and_keeps_original_model_arc",
+          "session::retained_outbound_snapshot::tests::sampling_preparation_tests::step_preemption_invalidates_the_retained_sampling_owner",
           "session::retained_outbound_snapshot::tests::sparse_non_model_updates_keep_the_existing_manager_pair"
         ],
         "argv_tail": [
@@ -333,12 +343,15 @@
         ]
       }
     ],
-    "same_step_selected_total": 31,
+    "same_step_selected_total": 41,
     "affected_ordinary_selected_total": 7,
-    "selected_total": 48,
+    "selected_total": 58,
     "filtered": "Observe actual counts only; do not infer54/2694",
     "step_case_names": "Source five direct names plus two explicit test_case labels; bounded actual Cargo --list must match before execution",
-    "affected_metadata_selected_total": 10
+    "affected_metadata_selected_total": 10,
+    "native_guard_selected_total": 22,
+    "native_sampling_selected_total": 10,
+    "sampling_case_names": "Source child10 names use the explicit native tests child-module prefix; bounded actual Cargo native --list must match all32 and unique child10 before behavior execution"
   },
   "profile": {
     "CARGO_PROFILE_DEV_DEBUG": "0",
@@ -416,5 +429,54 @@
     ],
     "status": "Candidate: four real Clippy errors; actual48 and Clippy NOT_RUN",
     "repair_author_manifest_sha256": "41f68c1d5898779dffb0d434d19b9222f7b3783e6f321feb5fa1fe42d12d85bb"
+  },
+  "sampling_preparation": {
+    "patch_file": "retained-sampling-preparation-after-clippy.patch",
+    "patch_sha256": "56f191d4a15da152e2642c61ac8ad1052738704c79fec978922942e781a04e64",
+    "before_graph": {
+      "rows": 8789,
+      "sha256": "ffb3d1f75047df58a15a6aa15425967cdc7d976b5022319567bb50a8d3763ef5"
+    },
+    "changed_files": [
+      {
+        "path": "codex-rs/core/src/session/mod.rs",
+        "before_sha256": "e1854f77b62ca09dddf85c54aac95486835a6777303a736b00919e780d296717",
+        "after_sha256": "bb707b8fa373d2610b45332a5746f4faeb471e05ab43946fd143a57dc248a7ff",
+        "after_bytes": 210632,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/turn.rs",
+        "before_sha256": "8c27407110003a384cc7a9f85985d83ff824378f1feb22e7e5c19d927d77ca1d",
+        "after_sha256": "cf864e39583fead77612fcf8312606d5d8ed5879f2c3c62d19adc9f2227daa52",
+        "after_bytes": 125898,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/retained_outbound_snapshot_tests.rs",
+        "before_sha256": "51bd3c4d439d83d9d3450a9635a6ab6b9102cd44b5fe2f430eaaef7edca6adf5",
+        "after_sha256": "aa8f9977b12921bcf72c392bf5979eab06809bdbbd733e43f7b1dbc76d83f13b",
+        "after_bytes": 38117,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/retained_sampling_preparation.rs",
+        "before_sha256": null,
+        "after_sha256": "cafa07813e8abdb3eb3d266505fa5d3e7b693f3919957438284d45583510bf15",
+        "after_bytes": 8749,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/retained_sampling_preparation_tests.rs",
+        "before_sha256": null,
+        "after_sha256": "2c07dcb01654f9db5b20d2fa7fd8ca08d569a9b5e39cbe3b4e33a5c52d57d578",
+        "after_bytes": 13489,
+        "after_mode": 436
+      }
+    ],
+    "frozen_source_pins_sha256": "009eedf465bfa776fd1f293d8faec58864131f7b2608150774f814e100cd87e0",
+    "frozen_manifest_sha256": "801f552f6865cd0d7b4d5a1c5651b97cf2a58ccc9625af8432e7967f5c235cdf",
+    "original_patch_sha256": "89aab184712b6d6fa6349fc665c6cef52c6d3d05bd0d76d930fc031b69b3a77f",
+    "status": "RAM candidate; true58 and Clippy NOT_RUN; no production admission"
   }
 }

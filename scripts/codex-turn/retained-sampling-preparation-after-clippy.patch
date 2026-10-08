@@ -1,0 +1,772 @@
+diff --git a/codex-rs/core/src/session/mod.rs b/codex-rs/core/src/session/mod.rs
+--- a/codex-rs/core/src/session/mod.rs
++++ b/codex-rs/core/src/session/mod.rs
+@@ -250,6 +250,7 @@
+ mod realtime_history;
+ mod retained_context;
+ mod retained_outbound_snapshot;
++mod retained_sampling_preparation;
+ mod review;
+ mod rollout_budget;
+ mod rollout_reconstruction;
+diff --git a/codex-rs/core/src/session/turn.rs b/codex-rs/core/src/session/turn.rs
+--- a/codex-rs/core/src/session/turn.rs
++++ b/codex-rs/core/src/session/turn.rs
+@@ -4,6 +4,9 @@
+ use std::sync::Arc;
+ use std::sync::atomic::Ordering;
+ 
++use super::retained_sampling_preparation::NativeSamplingInput;
++use super::retained_sampling_preparation::NativeSamplingInstructions;
++use super::retained_sampling_preparation::assemble_sampling_prompt;
+ use crate::client::ModelClientSession;
+ use crate::client_common::Prompt;
+ use crate::client_common::ResponseEvent;
+@@ -29,7 +32,6 @@
+ use crate::mentions::collect_tool_mentions_from_messages;
+ use crate::plugins::build_plugin_injections;
+ use crate::responses_metadata::CodexResponsesMetadata;
+-use crate::responses_metadata::CodexResponsesRequestKind;
+ use crate::responses_retry::ResponsesStreamRequest;
+ use crate::responses_retry::ResponsesStreamRetryState;
+ use crate::responses_retry::handle_response_stream_error;
+@@ -513,13 +515,10 @@
+                 .await;
+ 
+             // Construct the input that we will send to the model.
+-            let sampling_request_input: Vec<ResponseItem> = async {
+-                sess.clone_history()
+-                    .await
+-                    .for_prompt(&step_context.settings.model_info.input_modalities)
+-            }
+-            .instrument(trace_span!("run_turn.prepare_sampling_request_input"))
+-            .await;
++            let sampling_request_input =
++                async { NativeSamplingInput::capture(&sess, &step_context).await }
++                    .instrument(trace_span!("run_turn.prepare_sampling_request_input"))
++                    .await;
+ 
+             run_sampling_request(
+                 Arc::clone(&sess),
+@@ -1615,7 +1614,7 @@
+     turn_store: Arc<codex_extension_api::ExtensionData>,
+     turn_diff_tracker: SharedTurnDiffTracker,
+     client_session: &mut ModelClientSession,
+-    input: Vec<ResponseItem>,
++    input: NativeSamplingInput,
+     cancellation_token: CancellationToken,
+ ) -> CodexResult<(SamplingRequestResult, Vec<ResponseItem>)> {
+     let turn_context = Arc::clone(&step_context.turn);
+@@ -1627,7 +1626,7 @@
+     } else {
+         None
+     };
+-    let base_instructions = sess.get_prompt_base_instructions().await;
++    let base_instructions = NativeSamplingInstructions::capture(&sess, &step_context).await;
+ 
+     let tool_runtime = ToolCallRuntime::new(
+         Arc::clone(&sess),
+@@ -1650,31 +1649,15 @@
+         let prompt_input = if let Some(input) = initial_input.take() {
+             input
+         } else {
+-            sess.clone_history()
+-                .await
+-                .for_prompt(&step_context.settings.model_info.input_modalities)
++            NativeSamplingInput::capture(&sess, &step_context).await
+         };
+-        let mut prompt_input = prompt_input;
+-        sess.services
+-            .executed_tool_calls
+-            .attach_to_prompt(&mut prompt_input, &mut executed_tool_calls_by_output);
+-        let mut prompt = build_prompt(
++        let (prompt, responses_metadata) = assemble_sampling_prompt(
+             prompt_input,
+-            step_context.as_ref(),
+-            base_instructions.clone(),
+-        );
+-        let responses_metadata = sess
+-            .responses_metadata(step_context.as_ref(), CodexResponsesRequestKind::Turn)
+-            .await;
+-        if crate::guardian::is_basic_session_source(&turn_context.session_source) {
+-            crate::guardian::prepare_guardian_prompt(
+-                &sess,
+-                &mut prompt,
+-                step_context.as_ref(),
+-                &responses_metadata,
+-            )
+-            .await?;
+-        }
++            &base_instructions,
++            &mut executed_tool_calls_by_output,
++        )
++        .await?
++        .into_ordinary();
+         let err = match try_run_sampling_request(
+             tool_runtime.clone(),
+             Arc::clone(&sess),
+diff --git a/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs b/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
+--- a/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
++++ b/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
+@@ -85,6 +85,23 @@
+ async fn fixture_with_settings(
+     preempt: Option<CancellationToken>,
+     mutate_settings: impl FnOnce(&mut ResolvedStepSettings),
++) -> (Arc<Session>, Arc<StepContext>, tempfile::TempDir) {
++    fixture_with_sampling_materials(
++        preempt,
++        mutate_settings,
++        /*output_schema*/ None,
++        Vec::new(),
++        SessionSource::Exec,
++    )
++    .await
++}
++
++async fn fixture_with_sampling_materials(
++    preempt: Option<CancellationToken>,
++    mutate_settings: impl FnOnce(&mut ResolvedStepSettings),
++    output_schema: Option<serde_json::Value>,
++    model_visible_specs: Vec<codex_tools::ToolSpec>,
++    session_source: SessionSource,
+ ) -> (Arc<Session>, Arc<StepContext>, tempfile::TempDir) {
+     let (tx_event, _rx_event) = async_channel::unbounded();
+     let codex_home = tempfile::tempdir().expect("create temp dir");
+@@ -179,7 +196,7 @@
+         app_server_client_name: None,
+         app_server_client_version: None,
+         trusted_guardian_reviewer: false,
+-        session_source: SessionSource::Exec,
++        session_source,
+         history_mode: Default::default(),
+         forked_from_thread_id: None,
+         parent_thread_id: None,
+@@ -359,7 +376,7 @@
+     };
+     let per_turn_config = config.as_ref().clone();
+     let skills_snapshot = codex_skills_extension::HostSkillsSnapshot::new(Arc::default());
+-    let turn_context = Session::make_turn_context(
++    let mut turn_context = Session::make_turn_context(
+         thread_id,
+         SessionId::from(thread_id),
+         Some(Arc::clone(&auth_manager)),
+@@ -385,11 +402,20 @@
+         "turn_id".to_string(),
+         skills_snapshot,
+     );
++    turn_context.final_output_json_schema = output_schema;
+     let session = Arc::new(session);
+     let turn = Arc::new(turn_context);
+     let mut step = StepContext::for_test(Arc::clone(&turn));
+     let unique_step = Arc::get_mut(&mut step).expect("owned unique step before registration");
+     unique_step.preempt = preempt;
++    unique_step.tool_router = Arc::new(crate::tools::router::ToolRouter::from_parts(
++        crate::tools::registry::ToolRegistry::empty_for_test(),
++        model_visible_specs,
++        codex_protocol::openai_models::ToolMode::Direct,
++        std::collections::BTreeMap::new(),
++        /*tool_namespaces_info*/ None,
++        &[],
++    ));
+     let mut fixture_settings = unique_step.settings.as_ref().clone();
+     mutate_settings(&mut fixture_settings);
+     unique_step.settings = Arc::new(fixture_settings);
+@@ -976,3 +1002,7 @@
+         ));
+     }
+ }
++
++// Reuse only this existing owned native fixture; no sampling task is started.
++#[path = "retained_sampling_preparation_tests.rs"]
++mod sampling_preparation_tests;
+diff --git a/codex-rs/core/src/session/retained_sampling_preparation.rs b/codex-rs/core/src/session/retained_sampling_preparation.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/session/retained_sampling_preparation.rs
+@@ -0,0 +1,230 @@
++//! Actual native sampling assembly, retained without inventing an input proof.
++//!
++//! Ordinary sampling consumes precisely its existing Prompt and metadata. Only an
++//! explicit retain operation inspects native ownership; failure cannot redirect
++//! or break ordinary sampling. There is no auth, encoder, sender or foreign input.
++
++use super::retained_outbound_snapshot::NativeCaptureError;
++use super::retained_outbound_snapshot::RetainedNativeContext;
++use super::session::Session;
++use super::step_context::StepContext;
++use super::turn::build_prompt;
++use crate::client::retained_metadata::capture_metadata_facts;
++use crate::client_common::Prompt;
++use crate::responses_metadata::CodexResponsesMetadata;
++use crate::responses_metadata::CodexResponsesRequestKind;
++use crate::tools::router::ToolRouter;
++use codex_history::ResponseItemEnvelope;
++use codex_protocol::error::Result as CodexResult;
++use codex_protocol::models::BaseInstructions;
++use codex_protocol::models::ExecutedToolCall;
++use codex_protocol::models::ResponseItem;
++use codex_protocol::openai_models::ModelInfo;
++use std::collections::HashMap;
++use std::mem::Discriminant;
++use std::sync::Arc;
++use tokio_util::sync::CancellationToken;
++
++pub(super) type SamplingToolCache =
++    HashMap<(Discriminant<ResponseItem>, String), Vec<ExecutedToolCall>>;
++
++/// No caller-provided response items can manufacture a native history origin.
++pub(super) struct NativeSamplingInput {
++    session: Arc<Session>,
++    step: Arc<StepContext>,
++    history: Arc<Vec<ResponseItemEnvelope>>,
++    history_reset: CancellationToken,
++    input: Vec<ResponseItem>,
++}
++
++impl NativeSamplingInput {
++    pub(super) async fn capture(session: &Arc<Session>, step: &Arc<StepContext>) -> Self {
++        let (history, history_reset) = {
++            let state = session.state.lock().await;
++            (state.clone_history(), state.history_reset.child_token())
++        };
++        let source = history.clone().into_shared_annotated_items();
++        let input = history.for_prompt(&step.settings.model_info.input_modalities);
++        Self {
++            session: Arc::clone(session),
++            step: Arc::clone(step),
++            history: source,
++            history_reset,
++            input,
++        }
++    }
++}
++
++/// Retains the actual rendered Session instruction copy used by this sampling loop.
++pub(super) struct NativeSamplingInstructions {
++    session: Arc<Session>,
++    step: Arc<StepContext>,
++    instructions: BaseInstructions,
++}
++
++impl NativeSamplingInstructions {
++    pub(super) async fn capture(session: &Arc<Session>, step: &Arc<StepContext>) -> Self {
++        Self {
++            instructions: session.get_prompt_base_instructions().await,
++            session: Arc::clone(session),
++            step: Arc::clone(step),
++        }
++    }
++}
++
++/// Created only by the actual native assembly below, never from a supplied Prompt.
++pub(super) struct AssembledSamplingPrompt {
++    origin: NativeSamplingInput,
++    instructions_owner_matches: bool,
++    tool_router: Arc<ToolRouter>,
++    prompt: Prompt,
++    metadata: CodexResponsesMetadata,
++}
++
++/// Preserve ordinary ordering: executed observations, native Prompt, final Session
++/// metadata, then Guardian. In particular, this is not a side-effect-free preview.
++pub(super) async fn assemble_sampling_prompt(
++    mut input: NativeSamplingInput,
++    instructions: &NativeSamplingInstructions,
++    executed_tool_calls_by_output: &mut SamplingToolCache,
++) -> CodexResult<AssembledSamplingPrompt> {
++    let session = &input.session;
++    let step = &input.step;
++    session
++        .services
++        .executed_tool_calls
++        .attach_to_prompt(&mut input.input, executed_tool_calls_by_output);
++    let mut prompt = build_prompt(
++        std::mem::take(&mut input.input),
++        step.as_ref(),
++        instructions.instructions.clone(),
++    );
++    let metadata = session
++        .responses_metadata(step.as_ref(), CodexResponsesRequestKind::Turn)
++        .await;
++    if crate::guardian::is_basic_session_source(&step.turn.session_source) {
++        crate::guardian::prepare_guardian_prompt(session, &mut prompt, step.as_ref(), &metadata)
++            .await?;
++    }
++    let instructions_owner_matches =
++        Arc::ptr_eq(session, &instructions.session) && Arc::ptr_eq(step, &instructions.step);
++    let tool_router = Arc::clone(&step.tool_router);
++    Ok(AssembledSamplingPrompt {
++        origin: input,
++        instructions_owner_matches,
++        tool_router,
++        prompt,
++        metadata,
++    })
++}
++
++#[derive(Debug, PartialEq, Eq)]
++pub(super) enum SamplingCaptureError {
++    Native(NativeCaptureError),
++    InstructionsOwnerMismatch,
++    HistoryChanged,
++    ToolPlanChanged,
++    MetadataChanged,
++    PregrantOwnerUnavailable,
++    CompleteMaterialVersionsUnavailable,
++}
++
++impl AssembledSamplingPrompt {
++    /// Ordinary execution takes its original values without attempting capture.
++    pub(super) fn into_ordinary(self) -> (Prompt, CodexResponsesMetadata) {
++        (self.prompt, self.metadata)
++    }
++
++    /// Mechanical capture only. The native guard retains the same model/record
++    /// Arcs. It is not a prepared-job mapping, complete material epoch or proof.
++    #[allow(dead_code)]
++    pub(super) async fn retain(self) -> Result<RetainedSamplingPreparation, SamplingCaptureError> {
++        if !self.instructions_owner_matches {
++            return Err(SamplingCaptureError::InstructionsOwnerMismatch);
++        }
++        let native = self
++            .origin
++            .session
++            .capture_retained_native_context(&self.origin.step)
++            .await
++            .map_err(SamplingCaptureError::Native)?;
++        if capture_metadata_facts(&self.metadata)
++            .map_err(|_| SamplingCaptureError::MetadataChanged)?
++            != capture_metadata_facts(native.metadata())
++                .map_err(|_| SamplingCaptureError::MetadataChanged)?
++        {
++            return Err(SamplingCaptureError::MetadataChanged);
++        }
++        let retained = RetainedSamplingPreparation {
++            native,
++            origin: self.origin,
++            tool_router: self.tool_router,
++            prompt: self.prompt,
++            metadata: self.metadata,
++        };
++        retained
++            .verify_current(&retained.origin.session, &retained.origin.step)
++            .await?;
++        Ok(retained)
++    }
++}
++
++/// Private fields and no Clone/Debug/serde or free factory. Its Prompt contains
++/// actual assembled input/tools/schema/instructions, but cannot authorize a send.
++pub(super) struct RetainedSamplingPreparation {
++    native: RetainedNativeContext,
++    origin: NativeSamplingInput,
++    tool_router: Arc<ToolRouter>,
++    prompt: Prompt,
++    metadata: CodexResponsesMetadata,
++}
++
++#[allow(dead_code)]
++impl RetainedSamplingPreparation {
++    /// Read a historical mechanical capture, not an approved request or InputProof.
++    pub(super) fn native_materials(&self) -> (&Prompt, &CodexResponsesMetadata, &Arc<ModelInfo>) {
++        (&self.prompt, &self.metadata, self.native.model_info())
++    }
++
++    /// Recheck current retained identities. This does not prove an ABA-free global
++    /// epoch for instructions, executed-tool facts or later client contributors.
++    pub(super) async fn verify_current(
++        &self,
++        session: &Arc<Session>,
++        step: &Arc<StepContext>,
++    ) -> Result<(), SamplingCaptureError> {
++        self.native
++            .verify_current(session, step)
++            .await
++            .map_err(SamplingCaptureError::Native)?;
++        if self.origin.history_reset.is_cancelled() {
++            return Err(SamplingCaptureError::HistoryChanged);
++        }
++        let current = session.clone_history().await.into_shared_annotated_items();
++        if !Arc::ptr_eq(&self.origin.history, &current) {
++            return Err(SamplingCaptureError::HistoryChanged);
++        }
++        if !Arc::ptr_eq(&self.tool_router, &step.tool_router)
++            || !Arc::ptr_eq(&self.prompt.tools, &step.tool_router.model_visible_specs())
++        {
++            return Err(SamplingCaptureError::ToolPlanChanged);
++        }
++        Ok(())
++    }
++
++    /// No complete instruction/executed-material/contributor version owner exists
++    /// here. Even a mechanically current capture cannot enter the encoder yet.
++    pub(super) fn controlled_prompt(&self) -> Result<&Prompt, SamplingCaptureError> {
++        Err(SamplingCaptureError::CompleteMaterialVersionsUnavailable)
++    }
++}
++
++/// An active ordinary task is not a trusted pre-consent prepared-native owner.
++/// Refuse before history assembly/Guardian, auth, encode, grant/start or send.
++#[allow(dead_code)]
++pub(super) fn prepare_pregrant(
++    _session: &Arc<Session>,
++    _step: &Arc<StepContext>,
++) -> Result<RetainedSamplingPreparation, SamplingCaptureError> {
++    Err(SamplingCaptureError::PregrantOwnerUnavailable)
++}
+diff --git a/codex-rs/core/src/session/retained_sampling_preparation_tests.rs b/codex-rs/core/src/session/retained_sampling_preparation_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/session/retained_sampling_preparation_tests.rs
+@@ -0,0 +1,351 @@
++//! Owned native-source fixtures only; no worker, auth, encoder or transport is run.
++use super::fixture;
++use super::fixture_with_preempt;
++use super::fixture_with_sampling_materials;
++use crate::client::retained_metadata::capture_metadata_facts;
++use crate::responses_metadata::CodexResponsesRequestKind;
++use crate::session::retained_outbound_snapshot::NativeCaptureError;
++use crate::session::retained_sampling_preparation::*;
++use crate::session::session::Session;
++use crate::session::step_context::StepContext;
++use crate::tools::context::ToolCallSource;
++use crate::tools::context::ToolPayload;
++use crate::tools::router::ToolCall;
++use codex_features::Feature;
++use codex_features::Features;
++use codex_protocol::models::FunctionCallOutputPayload;
++use codex_protocol::models::ResponseInputItem;
++use codex_protocol::models::ResponseItem;
++use codex_protocol::protocol::InternalSessionSource;
++use codex_protocol::protocol::SessionSource;
++use codex_tools::FreeformTool;
++use codex_tools::FreeformToolFormat;
++use codex_tools::ToolName;
++use codex_tools::ToolSpec;
++use codex_utils_output_truncation::TruncationPolicy;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++use std::sync::Arc;
++use tokio_util::sync::CancellationToken;
++
++async fn assembled(session: &Arc<Session>, step: &Arc<StepContext>) -> AssembledSamplingPrompt {
++    let input = NativeSamplingInput::capture(session, step).await;
++    let instructions = NativeSamplingInstructions::capture(session, step).await;
++    assemble_sampling_prompt(input, &instructions, &mut SamplingToolCache::new())
++        .await
++        .expect("native assembly without sampling")
++}
++
++#[tokio::test]
++async fn capture_retains_actual_tools_schema_instructions_and_executed_metadata() {
++    let schema = json!({"type":"object","properties":{"answer":{"type":"string"}},
++        "required":["answer"],"additionalProperties":false});
++    let tools = vec![ToolSpec::Freeform(FreeformTool {
++        name: "owned_tool_never_executed".to_string(),
++        description: "Owned native tool schema".to_string(),
++        defer_loading: None,
++        format: FreeformToolFormat {
++            r#type: "grammar".to_string(),
++            syntax: "lark".to_string(),
++            definition: "start: \"owned\"".to_string(),
++        },
++    })];
++    let (session, step, _home) = fixture_with_sampling_materials(
++        /*preempt*/ None,
++        |_| {},
++        Some(schema.clone()),
++        tools.clone(),
++        SessionSource::Exec,
++    )
++    .await;
++    let mut features = Features::default();
++    features.enable(Feature::ExecutedToolCallMetadata);
++    let recorder = &session.services.executed_tool_calls;
++    recorder.refresh(&features);
++    let call = ToolCall {
++        tool_name: ToolName::plain("owned_tool_never_executed"),
++        call_id: "owned-result".to_string(),
++        payload: ToolPayload::Custom {
++            input: "owned".to_string(),
++        },
++        encrypted_function_args: None,
++    };
++    let invocation = ResponseItem::CustomToolCall {
++        id: None,
++        status: None,
++        call_id: call.call_id.clone(),
++        name: call.tool_name.to_string(),
++        namespace: None,
++        input: "owned".to_string(),
++        internal_chat_message_metadata_passthrough: None,
++    };
++    let mut output = ResponseItem::CustomToolCallOutput {
++        id: None,
++        call_id: call.call_id.clone(),
++        name: Some(call.tool_name.to_string()),
++        output: FunctionCallOutputPayload::from_text("owned result not executed".to_string()),
++        internal_chat_message_metadata_passthrough: None,
++    };
++    let record = recorder.prepare_direct_call(&call, &ToolCallSource::Direct, &step);
++    assert!(record.is_some());
++    recorder.attach_direct_call_to_output(&mut output, record);
++    session.state.lock().await.history.record_items(
++        &[invocation.clone(), output.clone()],
++        TruncationPolicy::Tokens(8192),
++    );
++    let expected_instructions = session.get_prompt_base_instructions().await;
++    let expected_metadata = session
++        .responses_metadata(&step, CodexResponsesRequestKind::Turn)
++        .await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("source capture");
++    let (prompt, metadata, model) = captured.native_materials();
++    assert_eq!(prompt.tools.as_ref(), tools.as_slice());
++    assert!(Arc::ptr_eq(
++        &prompt.tools,
++        &step.tool_router.model_visible_specs()
++    ));
++    assert_eq!(prompt.output_schema, Some(schema));
++    assert_eq!(prompt.base_instructions, expected_instructions);
++    assert!(!prompt.base_instructions.text.is_empty());
++    assert_eq!(prompt.input, vec![invocation, output]);
++    assert!(prompt.input[1].executed_tool_call_metadata().is_some());
++    assert!(Arc::ptr_eq(model, &step.settings.model_info));
++    assert_eq!(
++        capture_metadata_facts(metadata).expect("complete captured metadata"),
++        capture_metadata_facts(&expected_metadata).expect("complete actual getter metadata")
++    );
++    assert!(prompt.parallel_tool_calls);
++    assert_eq!(
++        prompt.output_schema_strict,
++        !crate::guardian::is_basic_session_source(&step.turn.session_source)
++    );
++    assert_eq!(prompt.cyber_access_program, step.turn.cyber_access_program);
++    assert_eq!(
++        captured.controlled_prompt().err(),
++        Some(SamplingCaptureError::CompleteMaterialVersionsUnavailable)
++    );
++}
++
++#[tokio::test]
++async fn ordinary_assembly_does_not_require_a_retained_active_owner() {
++    let (session, step, _home) = fixture().await;
++    *session.active_turn.lock().await = None;
++    let expected_input = session
++        .clone_history()
++        .await
++        .for_prompt(&step.settings.model_info.input_modalities);
++    let expected_instructions = session.get_prompt_base_instructions().await;
++    let expected = crate::session::turn::build_prompt(expected_input, &step, expected_instructions);
++    let (prompt, metadata) = assembled(&session, &step).await.into_ordinary();
++    assert_eq!(prompt.input, expected.input);
++    assert_eq!(prompt.tools.as_ref(), expected.tools.as_ref());
++    assert_eq!(prompt.base_instructions, expected.base_instructions);
++    assert_eq!(prompt.output_schema, expected.output_schema);
++    assert_eq!(metadata.thread_id, session.thread_id().to_string());
++    assert_eq!(
++        assembled(&session, &step).await.retain().await.err(),
++        Some(SamplingCaptureError::Native(
++            NativeCaptureError::OwnerUnavailable
++        ))
++    );
++}
++
++#[tokio::test]
++async fn retained_capture_rejects_a_cross_session_or_equal_value_step() {
++    let (session, step, _home) = fixture().await;
++    let (other, _other_step, _other_home) = fixture().await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("capture");
++    assert_eq!(
++        captured.verify_current(&other, &step).await,
++        Err(SamplingCaptureError::Native(
++            NativeCaptureError::OwnerMismatch
++        ))
++    );
++    let replacement = StepContext::for_test(Arc::clone(&step.turn));
++    assert_eq!(
++        captured.verify_current(&session, &replacement).await,
++        Err(SamplingCaptureError::Native(
++            NativeCaptureError::OwnerMismatch
++        ))
++    );
++}
++
++#[tokio::test]
++async fn actual_history_append_invalidates_retained_source_without_refresh() {
++    let (session, step, _home) = fixture().await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("capture");
++    let before = captured.native_materials().0.input.clone();
++    let output = ResponseItem::from(ResponseInputItem::FunctionCallOutput {
++        call_id: "later-owned-result".to_string(),
++        output: FunctionCallOutputPayload::from_text("later history".to_string()),
++    });
++    session
++        .state
++        .lock()
++        .await
++        .history
++        .record_items(&[output], TruncationPolicy::Tokens(8192));
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::HistoryChanged)
++    );
++    assert_eq!(captured.native_materials().0.input, before);
++}
++
++#[tokio::test]
++async fn step_preemption_invalidates_the_retained_sampling_owner() {
++    let preempt = CancellationToken::new();
++    let (session, step, _home) = fixture_with_preempt(Some(preempt.clone())).await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("capture");
++    preempt.cancel();
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::Native(
++            NativeCaptureError::OwnerUnavailable
++        ))
++    );
++}
++
++#[tokio::test]
++async fn instructions_from_another_native_owner_cannot_be_retained() {
++    let (session, step, _home) = fixture().await;
++    let (other, other_step, _other_home) = fixture().await;
++    let input = NativeSamplingInput::capture(&session, &step).await;
++    let instructions = NativeSamplingInstructions::capture(&other, &other_step).await;
++    let actual = assemble_sampling_prompt(input, &instructions, &mut SamplingToolCache::new())
++        .await
++        .expect("ordinary assembly does not fail because capture is unavailable");
++    assert_eq!(
++        actual.retain().await.err(),
++        Some(SamplingCaptureError::InstructionsOwnerMismatch)
++    );
++}
++
++#[tokio::test]
++async fn pregrant_refuses_without_history_assembly_or_any_external_port() {
++    let (session, step, _home) = fixture().await;
++    let before = session.clone_history().await.into_shared_annotated_items();
++    let metadata_before = session
++        .responses_metadata(&step, CodexResponsesRequestKind::Turn)
++        .await;
++    assert_eq!(
++        prepare_pregrant(&session, &step).err(),
++        Some(SamplingCaptureError::PregrantOwnerUnavailable)
++    );
++    *session.active_turn.lock().await = None;
++    assert_eq!(
++        prepare_pregrant(&session, &step).err(),
++        Some(SamplingCaptureError::PregrantOwnerUnavailable)
++    );
++    let after = session.clone_history().await.into_shared_annotated_items();
++    assert!(Arc::ptr_eq(&before, &after));
++    assert_eq!(
++        session
++            .responses_metadata(&step, CodexResponsesRequestKind::Turn)
++            .await
++            .client_metadata(true),
++        metadata_before.client_metadata(true)
++    );
++    // The function has no auth/encoder/ledger/send dependencies; no such port is
++    // available to invoke. These assertions concern native state, not production.
++}
++
++#[tokio::test]
++async fn settings_replacement_invalidates_capture_and_keeps_original_model_arc() {
++    let (session, step, _home) = fixture().await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("capture");
++    let model = Arc::clone(captured.native_materials().2);
++    step.turn
++        .next_step_settings
++        .store(Arc::new(step.settings.as_ref().clone()));
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::Native(
++            NativeCaptureError::SettingsChanged
++        ))
++    );
++    assert!(Arc::ptr_eq(captured.native_materials().2, &model));
++}
++
++#[tokio::test]
++async fn final_metadata_change_invalidates_capture_without_reassembling_prompt() {
++    let (session, step, _home) = fixture().await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("capture");
++    let before = capture_metadata_facts(captured.native_materials().1).expect("captured metadata");
++    step.turn
++        .turn_metadata_state
++        .set_responses_api_metadata(std::collections::BTreeMap::from([(
++            "owned_sampling_change".to_string(),
++            "later".to_string(),
++        )]));
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::Native(
++            NativeCaptureError::MetadataChanged
++        ))
++    );
++    assert_eq!(
++        capture_metadata_facts(captured.native_materials().1).expect("original retained metadata"),
++        before
++    );
++}
++
++#[tokio::test]
++async fn actual_guardian_budget_failure_is_preserved_before_sampling() {
++    let (session, step, _home) = fixture_with_sampling_materials(
++        /*preempt*/ None,
++        |settings| {
++            let mut model = settings.model_info.as_ref().clone();
++            model.context_window = Some(1);
++            settings.model_info = Arc::new(model);
++        },
++        /*output_schema*/ None,
++        Vec::new(),
++        SessionSource::Internal(InternalSessionSource::Guardian),
++    )
++    .await;
++    assert!(crate::guardian::is_basic_session_source(
++        &step.turn.session_source
++    ));
++    assert!(step.turn.config.model_context_window.is_none());
++    // This model mutation is an explicit budget fixture, not a model witness or
++    // capacity proof. Only the actual ordinary Guardian preparation is exercised.
++    let input = NativeSamplingInput::capture(&session, &step).await;
++    let instructions = NativeSamplingInstructions::capture(&session, &step).await;
++    let error = assemble_sampling_prompt(input, &instructions, &mut SamplingToolCache::new())
++        .await
++        .err()
++        .expect("actual Guardian must reject the exhausted local input budget");
++    assert!(matches!(
++        error.details(),
++        codex_protocol::error::CodexErrorDetails::ContextWindowExceeded
++    ));
++    assert_eq!(
++        prepare_pregrant(&session, &step).err(),
++        Some(SamplingCaptureError::PregrantOwnerUnavailable)
++    );
++}
