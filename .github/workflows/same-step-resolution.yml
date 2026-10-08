@@ -1,14 +1,14 @@
-name: Same-Step source38 and existing Clippy
+name: Same-Step source48 repair and existing Clippy
 on:
   push:
     branches:
-      - feat/M6.3-g2-same-step-remote-validation
+      - feat/M6.3-same-step-clippy-repair-validation
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  same-step-source38-and-clippy:
-    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/feat/M6.3-g2-same-step-remote-validation' }}
+  same-step-source48-and-clippy:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/feat/M6.3-same-step-clippy-repair-validation' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -66,7 +66,7 @@ jobs:
             --toolchain-dir "$RUNNER_TEMP/same-step-provision/toolchain" \
             --cargo-home "$RUNNER_TEMP/same-step-cargo" \
             --output-dir "$RUNNER_TEMP/same-step-fetch"
-      - name: Run only the fixed9+22+7 tests and existing two-package Clippy strictly locked and offline
+      - name: Run only the fixed9+22+7+10 tests and existing two-package Clippy strictly locked and offline
         run: >-
           python scripts/codex-turn/replay_same_step_resolution.py --mode test
           --prepared-dir "$RUNNER_TEMP/same-step-prepare"
@@ -79,7 +79,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: same-step-source38-and-clippy-${{ github.run_id }}-${{ github.run_attempt }}
+          name: same-step-source48-and-clippy-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/same-step-source-acquisition.json
             ${{ runner.temp }}/same-step-prepare/report.json

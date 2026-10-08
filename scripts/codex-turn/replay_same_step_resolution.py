@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare pinned same-Step sources or validate 9+22+7 tests and existing Clippy.
+"""Prepare pinned same-Step repair sources or validate 9+22+7+10 and Clippy.
 
 Only explicit CI setup provisions Rust/fetches dependencies. This engineering
 entry never runs Codex CLI, AppServer, a model, foreign handle or a sender, and
@@ -33,7 +33,7 @@ ASSETS = {
 FIELDS = {
     "schema_version", "status", "spec", "source", "inherited_inputs", "native03", "patch",
     "changed_files", "complete_source_graph", "test_metadata", "lock_sha256", "rust",
-    "test_selection", "profile", "source_binding", "clippy", "production_boundary", "licensing",
+    "test_selection", "profile", "source_binding", "clippy", "clippy_repair", "production_boundary", "licensing",
 }
 SOURCE_SHA = "351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927"
 BASE_SHA = "9a8c163b2683280dfdae0145018f7f8c0cd14804ac87741ef4cf52a20988be28"
@@ -41,10 +41,20 @@ LOCK_SHA = "5553f06583159ed64666b6eb4beea3154e06b612e6312528131bdc226a6a860c"
 NATIVE_PATCH_SHA = "6b94dd7b84ac84f166335e42ab1fe1bd994c17ecac3cbcde35b95c273932426e"
 R2_PINS_SHA = "4bd60a1dde7bb2d14e6791d0c5ae89119e89d610188b61ca6acb9f0c3317312d"
 CLIPPY_SHA = "ac779bc9839dd47180806b133e4e2563c4a34716284cd5b8fede8ef289f452ca"
+REPAIR_PATCH_SHA = "345c9e3c6c66751c68a4a92b8c895027a90f3e48541aca12da7c456829fa5f8c"
+REPAIR_BEFORE_GRAPH = {"rows": 8789, "sha256":
+                       "444a0c518583e501e1cb045e04316349436ea9a2897edcccb61554101bbcb400"}
+REPAIR_BEFORE_FILES = {
+    "codex-rs/core/src/retained_metadata_tests.rs":
+        "366ea6c52a8fab4fa180884eb92320673af99195eb6aeb1b18841c61566bf94d",
+    "codex-rs/core/src/session/retained_outbound_snapshot_tests.rs":
+        "56cad20ddb172fa27a5f8a6ba90cf585209ae73056498657f4528f3597b63b2d",
+}
 SCOPES = [
     ("manager9", "codex-models-manager", "manager::retained_model_resolution::tests::", 9),
     ("native22", "codex-core", "session::retained_outbound_snapshot::tests::", 22),
     ("step-settings7", "codex-core", "session::step_settings::tests::", 7),
+    ("metadata10", "codex-core", "client::retained_metadata::tests::", 10),
 ]
 CHANGED = {
     "codex-rs/models-manager/src/manager.rs",
@@ -135,6 +145,23 @@ def verify_inputs(bundle: Path) -> dict:
             "Final same-Step patch mismatch")
     require(manifest["source_binding"]["r2_source_pins_sha256"] == R2_PINS_SHA
             and manifest["source_binding"]["no_model_version_authority"] is True, "Fixed r2 source binding required")
+    repair = manifest["clippy_repair"]
+    require(set(repair) == {"patch_file", "patch_sha256", "before_graph", "changed_files",
+                           "status", "repair_author_manifest_sha256"}
+            and repair["patch_file"] == "clippy-repair.patch"
+            and repair["patch_sha256"] == REPAIR_PATCH_SHA
+            and sha256(bundle / "clippy-repair.patch") == REPAIR_PATCH_SHA
+            and repair["before_graph"] == REPAIR_BEFORE_GRAPH,
+            "Fixed actual66 Clippy repair patch and before graph required")
+    repair_rows = repair["changed_files"]
+    require(len(repair_rows) == 2 and {row["path"] for row in repair_rows} == set(REPAIR_BEFORE_FILES),
+            "Exactly two affected test sources required")
+    for row in repair_rows:
+        require(set(row) == {"path", "before_sha256", "after_sha256", "after_bytes", "after_mode"}
+                and row["before_sha256"] == REPAIR_BEFORE_FILES[row["path"]]
+                and type(row["after_bytes"]) is int and row["after_bytes"] > 0
+                and type(row["after_mode"]) is int and row["after_mode"] == 0o664,
+                "Closed repair source byte/fullmode identity required")
     rows = manifest["changed_files"]
     require(len(rows) == 9 and {row["path"] for row in rows} == CHANGED,
             "Exactly nine same-Step source paths required")
@@ -148,9 +175,10 @@ def verify_inputs(bundle: Path) -> dict:
         require(set(graph) == {"rows", "sha256"} and type(graph["rows"]) is int
                 and graph["rows"] == 8789, "Complete source graph required")
     selections = manifest["test_selection"]
-    require(len(selections["scopes"]) == 3 and selections["selected_total"] == 38
-            and selections["same_step_selected_total"] == 31 and selections["affected_ordinary_selected_total"] == 7,
-            "Fixed nonzero31 plus affected ordinary7 required")
+    require(len(selections["scopes"]) == 4 and selections["selected_total"] == 48
+            and selections["same_step_selected_total"] == 31 and selections["affected_ordinary_selected_total"] == 7
+            and selections["affected_metadata_selected_total"] == 10,
+            "Fixed nonzero31 plus affected ordinary7 and metadata10 required")
     for scope, (label, package, selector, count) in zip(selections["scopes"], SCOPES):
         require(scope["label"] == label and scope["package"] == package and scope["filter"] == selector
                 and type(scope["expected_passed"]) is int and scope["expected_passed"] == count
@@ -207,6 +235,8 @@ def source_test_names(root: Path) -> list[list[str]]:
     result.append(sorted([SCOPES[2][2] + name for name in names] + [
         SCOPES[2][2] + function + "::" + re.sub(r"[^A-Za-z0-9_]", "_", label) for label in labels
     ]))
+    metadata = (root / "codex-rs/core/src/retained_metadata_tests.rs").read_text()
+    result.append(sorted(SCOPES[3][2] + name for name in re.findall(r"#\[test\]\s+fn (\w+)\(", metadata)))
     return result
 
 
@@ -241,8 +271,13 @@ def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict
     for label, filename, expected in [
         ("native03", "native-context.patch", manifest["native03"]),
         ("same-step-r2", "same-step-resolution.patch", manifest),
+        ("clippy-repair", "clippy-repair.patch", manifest["clippy_repair"]),
     ]:
         before = full_inventory(source)
+        if label == "clippy-repair":
+            require(len(before) == REPAIR_BEFORE_GRAPH["rows"]
+                    and graph_digest(before) == REPAIR_BEFORE_GRAPH["sha256"],
+                    "Exact actual66 source required before Clippy repair")
         for suffix, flags in [("check", ["--check"]), ("apply", [])]:
             row = recorder.run(label + "-" + suffix, ["git", "apply", *flags, str(bundle / filename)], source)
             if row["exit_code"] != 0:
@@ -475,7 +510,7 @@ def run_stage(args: argparse.Namespace, output: Path, report: dict, manifest: di
                 if row["exit_code"] != 0 or not observed["selection_matches"]:
                     result = positive_exit(row["exit_code"]) or 1
                     break
-            report["tests"]["status"] = "PASS" if result == 0 and report["tests"]["selected_total_passed"] == 38 else "FAIL"
+            report["tests"]["status"] = "PASS" if result == 0 and report["tests"]["selected_total_passed"] == 48 else "FAIL"
             if report["tests"]["status"] == "PASS":
                 prelaunch_health(output, report, "clippy")
                 row = recorder.run("cargo-clippy", [str(bins["cargo"])] + CLIPPY_ARGV,

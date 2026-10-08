@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "ENGINEERING_INPUTS_ONLY_NO_PRODUCTION_QUALIFICATION",
+  "status": "Engineering source48 repair candidate; no production qualification, runtime results pending",
   "spec": {
     "version": "3.0.15",
     "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec"
@@ -142,14 +142,13 @@
     }
   ],
   "complete_source_graph": {
-    "encoding": "UTF-8 JSON sorted keys compact separators ensure_ascii=false; all files bytes/SHA/fullPOSIXmode, symlinks target/fullPOSIXmode",
     "source": {
       "rows": 8789,
-      "sha256": "444a0c518583e501e1cb045e04316349436ea9a2897edcccb61554101bbcb400"
+      "sha256": "ffb3d1f75047df58a15a6aa15425967cdc7d976b5022319567bb50a8d3763ef5"
     },
     "normalized": {
       "rows": 8789,
-      "sha256": "8c9cd2a5379890fa2229dd6cd103dd9f88d0635b8ac68ed2c231d14768579502"
+      "sha256": "f9f7fbc878c0c6566330c4df8a2d4ba6ef9055da4a697e24accba5c795d4e98e"
     }
   },
   "test_metadata": {
@@ -303,13 +302,43 @@
           "--",
           "--nocapture"
         ]
+      },
+      {
+        "label": "metadata10",
+        "package": "codex-core",
+        "filter": "client::retained_metadata::tests::",
+        "expected_passed": 10,
+        "test_names": [
+          "client::retained_metadata::tests::actual_turn_metadata_capture_exports_owned_fixture",
+          "client::retained_metadata::tests::actual_turn_metadata_capture_retains_non_null_owner_fields",
+          "client::retained_metadata::tests::metadata_capture_is_owned_and_does_not_follow_later_snapshot_mutation",
+          "client::retained_metadata::tests::metadata_capture_preserves_all_32_non_null_typed_fields",
+          "client::retained_metadata::tests::metadata_decode_rejects_nested_unknown_or_silently_defaulted_mcp",
+          "client::retained_metadata::tests::metadata_decode_rejects_non_turn_request_profiles",
+          "client::retained_metadata::tests::metadata_decode_rejects_reserved_or_oversized_extra_without_filtering",
+          "client::retained_metadata::tests::metadata_decode_rejects_unknown_missing_or_non_object_root",
+          "client::retained_metadata::tests::metadata_decode_rejects_workspace_placeholder_or_secret_normalization",
+          "client::retained_metadata::tests::metadata_decode_rejects_wrong_scalar_types_and_non_canonical_ids"
+        ],
+        "argv_tail": [
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "codex-core",
+          "--lib",
+          "client::retained_metadata::tests::",
+          "--",
+          "--nocapture"
+        ]
       }
     ],
     "same_step_selected_total": 31,
     "affected_ordinary_selected_total": 7,
-    "selected_total": 38,
+    "selected_total": 48,
     "filtered": "Observe actual counts only; do not infer54/2694",
-    "step_case_names": "Source five direct names plus two explicit test_case labels; bounded actual Cargo --list must match before execution"
+    "step_case_names": "Source five direct names plus two explicit test_case labels; bounded actual Cargo --list must match before execution",
+    "affected_metadata_selected_total": 10
   },
   "profile": {
     "CARGO_PROFILE_DEV_DEBUG": "0",
@@ -361,5 +390,31 @@
     "LICENSE_sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
     "NOTICE_sha256": "9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915",
     "scope": "Original upstream LICENSE and NOTICE preserved byte-for-byte for the upstream-derived patch. This does not select a license for the Learning Workbench repository."
+  },
+  "clippy_repair": {
+    "patch_file": "clippy-repair.patch",
+    "patch_sha256": "345c9e3c6c66751c68a4a92b8c895027a90f3e48541aca12da7c456829fa5f8c",
+    "before_graph": {
+      "rows": 8789,
+      "sha256": "444a0c518583e501e1cb045e04316349436ea9a2897edcccb61554101bbcb400"
+    },
+    "changed_files": [
+      {
+        "path": "codex-rs/core/src/retained_metadata_tests.rs",
+        "before_sha256": "366ea6c52a8fab4fa180884eb92320673af99195eb6aeb1b18841c61566bf94d",
+        "after_sha256": "50b458eb756c5b3d8bf1b955bde537d41c0bf2d5ac6326007ddba83cd2e47c39",
+        "after_bytes": 14591,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/retained_outbound_snapshot_tests.rs",
+        "before_sha256": "56cad20ddb172fa27a5f8a6ba90cf585209ae73056498657f4528f3597b63b2d",
+        "after_sha256": "51bd3c4d439d83d9d3450a9635a6ab6b9102cd44b5fe2f430eaaef7edca6adf5",
+        "after_bytes": 37058,
+        "after_mode": 436
+      }
+    ],
+    "status": "Candidate: four real Clippy errors; actual48 and Clippy NOT_RUN",
+    "repair_author_manifest_sha256": "41f68c1d5898779dffb0d434d19b9222f7b3783e6f321feb5fa1fe42d12d85bb"
   }
 }

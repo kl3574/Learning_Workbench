@@ -1,0 +1,61 @@
+diff --git a/codex-rs/core/src/retained_metadata_tests.rs b/codex-rs/core/src/retained_metadata_tests.rs
+--- a/codex-rs/core/src/retained_metadata_tests.rs
++++ b/codex-rs/core/src/retained_metadata_tests.rs
+@@ -174,7 +174,7 @@
+     let mut unknown = good.clone();
+     unknown["ignored"] = serde_json::json!(true);
+     assert!(decode_metadata_facts(&unknown).is_err());
+-    let mut missing = good.clone();
++    let mut missing = good;
+     missing
+         .as_object_mut()
+         .expect("object")
+@@ -255,7 +255,7 @@
+         value["mcp_attribution"] = invalid;
+         assert!(decode_metadata_facts(&value).is_err());
+     }
+-    let mut value = good.clone();
++    let mut value = good;
+     value["tool_namespaces_info"] = serde_json::json!({"owned":{"name":"owned","functions":{"fn":{"name":"fn","direct":true,"code_mode_name":null,"deferred":false,"source":{"kind":"harness","ignored":"x"}}}}});
+     assert!(decode_metadata_facts(&value).is_err());
+ }
+@@ -342,6 +342,11 @@
+     });
+     let encoded = serde_json::to_string(&artifact).expect("owned fixture serialization");
+     assert!(encoded.len() <= 16384);
+-    // Only this known fictional fixture is emitted, with no auth/body/context.
+-    println!("M63_OWNED_TYPED_METADATA_CAPTURE={encoded}");
+-}
++    // Export only this fictional fixture to an owned temporary file.
++    // The core test follows the existing prohibition on stdout printing.
++    let output = tempfile::tempdir().expect("owned fixture output directory");
++    let artifact_path = output.path().join("typed-metadata.json");
++    std::fs::write(&artifact_path, encoded.as_bytes()).expect("owned fixture write");
++    let replay = std::fs::read(&artifact_path).expect("owned fixture readback");
++    assert_eq!(replay, encoded.as_bytes());
++}
+diff --git a/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs b/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
+--- a/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
++++ b/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
+@@ -662,13 +662,14 @@
+         .capture_retained_native_context(&step)
+         .await
+         .expect("capture");
+-    let mut active = session.active_turn.lock().await;
+-    let previous = active.take().expect("owned active");
+-    *active = Some(ActiveTurn {
+-        task: previous.task,
+-        ..ActiveTurn::default()
+-    });
+-    drop(active);
++    {
++        let mut active = session.active_turn.lock().await;
++        let previous = active.take().expect("owned active");
++        *active = Some(ActiveTurn {
++            task: previous.task,
++            ..ActiveTurn::default()
++        });
++    }
+     session.set_last_known_step_context(&step).await;
+     assert_eq!(
+         captured.verify_current(&session, &step).await,
