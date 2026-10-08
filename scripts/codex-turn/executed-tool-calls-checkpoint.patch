@@ -1,0 +1,462 @@
+--- a/core/src/tools/executed_tool_calls.rs
++++ b/core/src/tools/executed_tool_calls.rs
+@@ -1,6 +1,9 @@
+ //! Records attempted calls at existing execution boundaries. Request metadata policy
+ //! lives in the private request metadata module; this recorder must never dispatch or await tools.
+ 
++#[cfg(test)]
++#[path = "executed_tool_calls_checkpoint_tests.rs"]
++mod checkpoint_tests;
+ #[cfg(test)]
+ #[path = "executed_tool_calls_direct_tests.rs"]
+ mod direct_tests;
+@@ -32,6 +35,7 @@
+ use codex_protocol::openai_models::ToolMode;
+ use indexmap::IndexMap;
+ use serde_json::Value as JsonValue;
++use tokio_util::sync::CancellationToken;
+ 
+ use crate::session::step_context::StepContext;
+ use crate::tools::context::ToolCallSource;
+@@ -61,6 +65,7 @@
+ #[derive(Clone, Default)]
+ pub(crate) struct ExecutedToolCalls {
+     state: Arc<Mutex<Option<ExecutedToolCallRecorderState>>>,
++    material_reset: Arc<Mutex<CancellationToken>>,
+     retained_direct_metadata_bytes: Arc<AtomicUsize>,
+     pending_direct_calls: Arc<AtomicUsize>,
+     mcp_attribution: mcp_attribution::McpAttributionRecorder,
+@@ -73,6 +78,23 @@
+             .debug_struct("ExecutedToolCalls")
+             .finish_non_exhaustive()
+     }
++}
++
++/// Checkpoint for this recorder's Option-state mutex only. It does not cover
++/// pending direct-call atomics, MCP attribution or final request contributors.
++#[derive(Clone)]
++pub(crate) struct ExecutedToolCallsCheckpoint {
++    state_owner: Weak<Mutex<Option<ExecutedToolCallRecorderState>>>,
++    reset_owner: Weak<Mutex<CancellationToken>>,
++    reset: CancellationToken,
++}
++
++#[derive(Debug, PartialEq, Eq)]
++pub(crate) enum ExecutedToolCallsCheckpointError {
++    OwnerMismatch,
++    StatePoisoned,
++    ResetPoisoned,
++    Changed,
+ }
+ 
+ // The tool future owns this reservation, so completion or cancellation releases it.
+@@ -262,6 +284,7 @@
+                     ..Default::default()
+                 }
+             }))),
++            material_reset: Arc::new(Mutex::new(CancellationToken::new())),
+             retained_direct_metadata_bytes: Arc::new(AtomicUsize::new(0)),
+             pending_direct_calls: Arc::new(AtomicUsize::new(0)),
+             mcp_attribution: mcp_attribution::McpAttributionRecorder::new(history),
+@@ -284,10 +307,66 @@
+         self.mcp_attribution.mark_persisted(revision);
+     }
+ 
++    /// Captures the current recorder state without enabling recording or visiting
++    /// the ordinary lock seam. A genuine disabled state has the same owner rules.
++    pub(crate) fn state_checkpoint(
++        &self,
++    ) -> Result<ExecutedToolCallsCheckpoint, ExecutedToolCallsCheckpointError> {
++        let _state_guard = self
++            .state
++            .lock()
++            .map_err(|_| ExecutedToolCallsCheckpointError::StatePoisoned)?;
++        let reset = self
++            .material_reset
++            .lock()
++            .map_err(|_| ExecutedToolCallsCheckpointError::ResetPoisoned)?;
++        Ok(ExecutedToolCallsCheckpoint {
++            state_owner: Arc::downgrade(&self.state),
++            reset_owner: Arc::downgrade(&self.material_reset),
++            reset: reset.child_token(),
++        })
++    }
++
++    pub(crate) fn verify_state_checkpoint(
++        &self,
++        checkpoint: &ExecutedToolCallsCheckpoint,
++    ) -> Result<(), ExecutedToolCallsCheckpointError> {
++        if !Weak::ptr_eq(&checkpoint.state_owner, &Arc::downgrade(&self.state))
++            || !Weak::ptr_eq(
++                &checkpoint.reset_owner,
++                &Arc::downgrade(&self.material_reset),
++            )
++        {
++            return Err(ExecutedToolCallsCheckpointError::OwnerMismatch);
++        }
++        let _state_guard = self
++            .state
++            .lock()
++            .map_err(|_| ExecutedToolCallsCheckpointError::StatePoisoned)?;
++        let _reset_guard = self
++            .material_reset
++            .lock()
++            .map_err(|_| ExecutedToolCallsCheckpointError::ResetPoisoned)?;
++        if checkpoint.reset.is_cancelled() {
++            Err(ExecutedToolCallsCheckpointError::Changed)
++        } else {
++            Ok(())
++        }
++    }
++
+     fn lock_state(&self) -> MutexGuard<'_, Option<ExecutedToolCallRecorderState>> {
+-        self.state
++        let state = self
++            .state
+             .lock()
+-            .unwrap_or_else(std::sync::PoisonError::into_inner)
++            .unwrap_or_else(std::sync::PoisonError::into_inner);
++        let mut reset = self
++            .material_reset
++            .lock()
++            .unwrap_or_else(std::sync::PoisonError::into_inner);
++        // Cancel before any caller can read or mutate the returned native guard.
++        // Read-only and no-op visits conservatively revoke too.
++        std::mem::replace(&mut *reset, CancellationToken::new()).cancel();
++        state
+     }
+ 
+     /// A later wait cannot claim a complete inventory if an earlier wire copy
+--- /dev/null
++++ b/core/src/tools/executed_tool_calls_checkpoint_tests.rs
+@@ -0,0 +1,330 @@
++use std::panic::AssertUnwindSafe;
++use std::panic::catch_unwind;
++
++use codex_protocol::models::FunctionCallOutputPayload;
++use codex_protocol::models::ResponseInputItem;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++
++use super::*;
++
++fn recording_features(enabled: bool) -> Features {
++    let mut features = Features::default();
++    features
++        .set_enabled(Feature::ExecutedToolCallMetadata, enabled)
++        .expect("test recording feature must be configurable");
++    features
++}
++
++fn enabled_recorder() -> ExecutedToolCalls {
++    ExecutedToolCalls::new(&recording_features(true), &InitialHistory::New)
++}
++
++fn record_nested(recorder: &ExecutedToolCalls, cell: &CellId, call_id: &str) -> ExecutedToolCall {
++    let call = ExecutedToolCall::new("nested_tool".to_string(), json!({}));
++    recorder.record_nested_tool_call(cell.clone(), call_id.to_string(), call.clone(), 2);
++    call
++}
++
++fn metadata_source(cell: &CellId, call_id: &str) -> ToolCallSource {
++    ToolCallSource::CodeMode {
++        cell_id: cell.as_str().to_string(),
++        runtime_tool_call_id: call_id.to_string(),
++    }
++}
++
++fn history() -> Vec<ResponseItem> {
++    vec![
++        serde_json::from_value(json!({
++            "type": "custom_tool_call", "call_id": "exec", "name": "exec", "input": "",
++        }))
++        .expect("test exec input must deserialize"),
++        ResponseItem::from(ResponseInputItem::CustomToolCallOutput {
++            call_id: "exec".to_string(),
++            name: None,
++            output: FunctionCallOutputPayload::from_text(String::new()),
++        }),
++    ]
++}
++
++fn assert_inert_none_capture(recorder: &ExecutedToolCalls) {
++    assert!(
++        recorder
++            .state
++            .lock()
++            .expect("state must be usable")
++            .is_none()
++    );
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    let second = recorder
++        .state_checkpoint()
++        .expect("repeat capture must succeed");
++    assert_eq!(recorder.verify_state_checkpoint(&checkpoint), Ok(()));
++    assert_eq!(recorder.verify_state_checkpoint(&second), Ok(()));
++    assert!(
++        recorder
++            .state
++            .lock()
++            .expect("state must remain usable")
++            .is_none()
++    );
++    assert_eq!(recorder.pending_direct_calls.load(Ordering::Relaxed), 0);
++    assert_eq!(
++        recorder
++            .retained_direct_metadata_bytes
++            .load(Ordering::Relaxed),
++        0
++    );
++    assert!(!checkpoint.reset.is_cancelled());
++    assert!(!second.reset.is_cancelled());
++    assert_eq!(format!("{recorder:?}"), "ExecutedToolCalls { .. }");
++}
++
++#[test]
++fn default_genuine_none_capture_is_inert_and_stable() {
++    assert_inert_none_capture(&ExecutedToolCalls::default());
++}
++
++#[test]
++fn explicit_disabled_owner_capture_is_inert_and_stable() {
++    let recorder = ExecutedToolCalls::new(&recording_features(false), &InitialHistory::New);
++    assert_inert_none_capture(&recorder);
++}
++
++#[test]
++fn checkpoint_accepts_shared_clone_and_rejects_distinct_none_owner() {
++    let recorder = ExecutedToolCalls::default();
++    let shared = recorder.clone();
++    let distinct = ExecutedToolCalls::default();
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    assert!(Arc::ptr_eq(&recorder.state, &shared.state));
++    assert!(Arc::ptr_eq(
++        &recorder.material_reset,
++        &shared.material_reset
++    ));
++    assert_eq!(shared.verify_state_checkpoint(&checkpoint), Ok(()));
++    assert_eq!(
++        distinct.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::OwnerMismatch),
++    );
++    assert_eq!(recorder.verify_state_checkpoint(&checkpoint), Ok(()));
++}
++
++#[test]
++fn none_to_none_refresh_revokes_checkpoint() {
++    let recorder = ExecutedToolCalls::default();
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    recorder.refresh(&recording_features(false));
++    assert!(
++        recorder
++            .state
++            .lock()
++            .expect("state must be usable")
++            .is_none()
++    );
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++    assert_eq!(
++        recorder.verify_state_checkpoint(&recorder.state_checkpoint().expect("recapture")),
++        Ok(()),
++    );
++}
++
++#[test]
++fn recording_change_and_revert_does_not_revive_checkpoint() {
++    let recorder = ExecutedToolCalls::default();
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    recorder.refresh(&recording_features(true));
++    assert!(
++        recorder
++            .state
++            .lock()
++            .expect("state must be usable")
++            .is_some()
++    );
++    let enabled = recorder.state_checkpoint().expect("enabled capture");
++    recorder.refresh(&recording_features(false));
++    assert!(
++        recorder
++            .state
++            .lock()
++            .expect("state must be usable")
++            .is_none()
++    );
++    for stale in [&checkpoint, &enabled] {
++        assert_eq!(
++            recorder.verify_state_checkpoint(stale),
++            Err(ExecutedToolCallsCheckpointError::Changed),
++        );
++    }
++}
++
++#[test]
++fn nested_call_writer_revokes_and_records_actual_call() {
++    let recorder = enabled_recorder();
++    let cell = CellId::new("checkpoint-cell".to_string());
++    recorder.start_cell(&cell, "exec");
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    let call = record_nested(&recorder, &cell, "nested");
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++    let state = recorder.state.lock().expect("state must be usable");
++    let state = state.as_ref().expect("recording must remain enabled");
++    assert_eq!(state.pending_nested_calls, 1);
++    assert_eq!(state.cells[&cell].pending_calls["nested"], call);
++}
++
++#[test]
++fn accepted_pending_metadata_writer_revokes_checkpoint() {
++    let recorder = enabled_recorder();
++    let cell = CellId::new("checkpoint-cell".to_string());
++    recorder.start_cell(&cell, "exec");
++    let mut expected = record_nested(&recorder, &cell, "nested");
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    let metadata = json!({"id": "accepted"});
++    assert!(recorder.record_tool_result_metadata(
++        &metadata_source(&cell, "nested"),
++        "nested",
++        &metadata,
++    ));
++    expected.set_tool_result_metadata(ToolResultMetadata::new(&metadata));
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++    let state = recorder.state.lock().expect("state must be usable");
++    let state = state.as_ref().expect("recording must remain enabled");
++    assert_eq!(state.cells[&cell].pending_calls["nested"], expected);
++}
++
++#[test]
++fn delayed_retained_metadata_writer_revokes_checkpoint() {
++    let recorder = enabled_recorder();
++    let cell = CellId::new("checkpoint-cell".to_string());
++    recorder.start_cell(&cell, "exec");
++    let mut expected = record_nested(&recorder, &cell, "nested");
++    recorder.finish_cell_recording(&cell);
++    let mut original_output = history();
++    recorder.attach_to_compaction_prompt(&mut original_output);
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    let metadata = json!({"id": "late"});
++    assert!(recorder.record_tool_result_metadata(
++        &metadata_source(&cell, "nested"),
++        "nested",
++        &metadata,
++    ));
++    expected.set_tool_result_metadata(ToolResultMetadata::new(&metadata));
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++    let mut updated = history();
++    recorder.attach_to_compaction_prompt(&mut updated);
++    let mut expected_output = history();
++    expected_output[1].append_executed_tool_calls(vec![expected]);
++    expected_output[1].set_tool_call_cell_id("exec");
++    expected_output[1].mark_tool_calls_complete();
++    assert_eq!(updated, expected_output);
++    assert_ne!(original_output, updated);
++}
++
++#[test]
++fn compaction_attachment_writer_revokes_and_preserves_emitted_output() {
++    let recorder = enabled_recorder();
++    let cell = CellId::new("checkpoint-cell".to_string());
++    recorder.start_cell(&cell, "exec");
++    let call = record_nested(&recorder, &cell, "nested");
++    recorder.finish_cell_recording(&cell);
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    let mut attached = history();
++    recorder.attach_to_compaction_prompt(&mut attached);
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++    let mut expected = history();
++    expected[1].append_executed_tool_calls(vec![call]);
++    expected[1].set_tool_call_cell_id("exec");
++    expected[1].mark_tool_calls_complete();
++    assert_eq!(attached, expected);
++    let state = recorder.state.lock().expect("state must be usable");
++    let state = state.as_ref().expect("recording must remain enabled");
++    assert_eq!(state.pending_nested_calls, 0);
++    assert_eq!(state.retained_calls.len(), 1);
++}
++
++#[test]
++fn ordinary_lock_visit_revokes_conservatively() {
++    let recorder = enabled_recorder();
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    {
++        let state = recorder.lock_state();
++        assert!(state.is_some());
++    }
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++}
++
++#[test]
++fn poisoned_state_rejects_checkpoint_and_preserves_ordinary_recovery() {
++    let recorder = ExecutedToolCalls::default();
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    assert!(
++        catch_unwind(AssertUnwindSafe(|| {
++            let _state_guard = recorder.state.lock().expect("unpoisoned setup");
++            panic!("poison recorder state");
++        }))
++        .is_err()
++    );
++    assert!(matches!(
++        recorder.state_checkpoint(),
++        Err(ExecutedToolCallsCheckpointError::StatePoisoned),
++    ));
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::StatePoisoned),
++    );
++    recorder.refresh(&recording_features(true));
++    let recovered = match recorder.state.lock() {
++        Ok(_) => panic!("ordinary recovery must preserve the poison marker"),
++        Err(poisoned) => poisoned.into_inner(),
++    };
++    assert!(recovered.is_some());
++    assert!(checkpoint.reset.is_cancelled());
++}
++
++#[test]
++fn poisoned_reset_rejects_checkpoint_and_preserves_ordinary_recovery() {
++    let recorder = ExecutedToolCalls::default();
++    let checkpoint = recorder.state_checkpoint().expect("capture must succeed");
++    assert!(
++        catch_unwind(AssertUnwindSafe(|| {
++            let _reset_guard = recorder.material_reset.lock().expect("unpoisoned setup");
++            panic!("poison recorder reset");
++        }))
++        .is_err()
++    );
++    assert!(matches!(
++        recorder.state_checkpoint(),
++        Err(ExecutedToolCallsCheckpointError::ResetPoisoned),
++    ));
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::ResetPoisoned),
++    );
++    recorder.refresh(&recording_features(true));
++    assert!(
++        recorder
++            .state
++            .lock()
++            .expect("ordinary state must be usable")
++            .is_some()
++    );
++    assert!(checkpoint.reset.is_cancelled());
++}

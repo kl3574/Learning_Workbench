@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare pinned same-Step repair sources or validate 9+39+7+10+5 and Clippy.
+"""Prepare pinned same-Step repair sources or validate prior70+checkpoint12+original39 (121) and Clippy.
 
 Only explicit CI setup provisions Rust/fetches dependencies. This engineering
 entry never runs Codex CLI, AppServer, a model, foreign handle or a sender, and
@@ -33,7 +33,7 @@ ASSETS = {
 FIELDS = {
     "schema_version", "status", "spec", "source", "inherited_inputs", "native03", "patch",
     "changed_files", "complete_source_graph", "test_metadata", "lock_sha256", "rust",
-    "test_selection", "profile", "source_binding", "clippy", "clippy_repair", "sampling_preparation", "instruction_materials", "production_boundary", "licensing",
+    "test_selection", "profile", "source_binding", "clippy", "clippy_repair", "sampling_preparation", "instruction_materials", "executed_state_checkpoint", "executed_regressions", "production_boundary", "licensing",
 }
 SOURCE_SHA = "351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927"
 BASE_SHA = "9a8c163b2683280dfdae0145018f7f8c0cd14804ac87741ef4cf52a20988be28"
@@ -146,6 +146,44 @@ INSTRUCTION_MATERIALS = {'patch_file': 'retained-instruction-materials.patch',
  'status': 'RAM candidate; source70 and Clippy NOT_RUN; no production admission',
  'scope': 'Actual Session instruction/config and applied-manager lifetimes only; no complete '
           'contributor/executed versions or trusted PREGRANT owner'}
+EXECUTED_STATE_CHECKPOINT = {'patch_file': 'executed-tool-calls-checkpoint.patch',
+ 'patch_sha256': '0cacc0ff84a73cbdc6e3f2647cd0d2d21170d9421f189d04802b37ab866b2c5b',
+ 'before_graph': {'rows': 8793,
+                  'sha256': '69c605abba0daa10e0d174445f7894861eba024afd1cbd9ea9a5d091dbee7f6c'},
+ 'changed_files': [{'path': 'codex-rs/core/src/tools/executed_tool_calls.rs',
+                    'before_sha256': '06cb4d27fec0da47dd7e981ccf8f5a4b900d6dc8362f1ded8ab1290f7c0d7d9f',
+                    'after_sha256': 'a83c8bd18d01841c884732525b9981fd8a313e7e482e9268cc2135e53eb4d21d',
+                    'after_bytes': 33137,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/tools/executed_tool_calls_checkpoint_tests.rs',
+                    'before_sha256': None,
+                    'after_sha256': '9956c221c8af09f38e9f5e43c54ace09157d3267224afd061e4f5bc3572d10cb',
+                    'after_bytes': 11599,
+                    'after_mode': 436}],
+ 'status': 'RAM candidate; source121 and Clippy NOT_RUN; no production admission',
+ 'scope': 'ExecutedToolCalls Option-state mutex visits only; pending Direct atomics, MCP revision '
+          'and final contributors excluded; no retained sampling binding or InputProof authority'}
+EXECUTED_REGRESSIONS = {'source_pins': [{'path': 'codex-rs/core/src/tools/executed_tool_calls_direct_tests.rs',
+                  'bytes': 6978,
+                  'sha256': '21febb49952f70795cbdeb24c83d02c027cb20dbd67eb64e385fa2099f59ddf1',
+                  'mode': 436},
+                 {'path': 'codex-rs/core/src/tools/executed_tool_calls/request_metadata.rs',
+                  'bytes': 25731,
+                  'sha256': '5f13e13ea19c60eecaba864507906ca9bc74dc3b57ba976bbd7a7b7d50233359',
+                  'mode': 436},
+                 {'path': 'codex-rs/core/src/tools/executed_tool_calls/request_metadata_tests.rs',
+                  'bytes': 85527,
+                  'sha256': 'efbcb4dd389b66a8b4f04919163519955bc4c0a47f0e3aac043cf9561880e1f1',
+                  'mode': 436}],
+ 'direct_prefix': 'tools::executed_tool_calls::direct_tests::',
+ 'direct_count': 3,
+ 'request_metadata_prefix': 'tools::executed_tool_calls::request_metadata::tests::',
+ 'request_metadata_count': 36,
+ 'scope': 'Original finite direct/request-metadata regressions, byteexact fixtures; collection '
+          'never substitutes for behavior'}
+EXECUTED_DIRECT_PREFIX = 'tools::executed_tool_calls::direct_tests::'
+EXECUTED_METADATA_PREFIX = 'tools::executed_tool_calls::request_metadata::tests::'
+EXECUTED_PREFIX = 'tools::executed_tool_calls::checkpoint_tests::'
 INSTRUCTION_CHILD_PREFIX = 'session::retained_outbound_snapshot::tests::instruction_material_tests::'
 APPLIED_INSTRUCTIONS_PREFIX = 'agents_md_manager::checkpoint_tests::'
 SAMPLING_CHILD_PREFIX = "session::retained_outbound_snapshot::tests::sampling_preparation_tests::"
@@ -155,6 +193,9 @@ SCOPES = [
     ("step-settings7", "codex-core", "session::step_settings::tests::", 7),
     ("metadata10", "codex-core", "client::retained_metadata::tests::", 10),
     ("applied-instructions5", "codex-core", APPLIED_INSTRUCTIONS_PREFIX, 5),
+    ("executed-state12", "codex-core", EXECUTED_PREFIX, 12),
+    ("executed-direct3", "codex-core", EXECUTED_DIRECT_PREFIX, 3),
+    ("executed-metadata36", "codex-core", EXECUTED_METADATA_PREFIX, 36),
 ]
 CHANGED = {
     "codex-rs/models-manager/src/manager.rs",
@@ -270,6 +311,12 @@ def verify_inputs(bundle: Path) -> dict:
     require(instruction == INSTRUCTION_MATERIALS
             and sha256(bundle / instruction["patch_file"]) == instruction["patch_sha256"],
             "Closed eleven-row inert instruction patch after exact source58 required")
+    executed = manifest["executed_state_checkpoint"]
+    require(executed == EXECUTED_STATE_CHECKPOINT
+            and sha256(bundle / executed["patch_file"]) == executed["patch_sha256"],
+            "Closed two-row Option-state checkpoint patch after exact source70 required")
+    require(manifest["executed_regressions"] == EXECUTED_REGRESSIONS,
+            "Original finite executed regression source contract required")
     rows = manifest["changed_files"]
     require(len(rows) == 9 and {row["path"] for row in rows} == CHANGED,
             "Exactly nine same-Step source paths required")
@@ -281,16 +328,22 @@ def verify_inputs(bundle: Path) -> dict:
     for phase in ["source", "normalized"]:
         graph = manifest["complete_source_graph"][phase]
         require(set(graph) == {"rows", "sha256"} and type(graph["rows"]) is int
-                and graph["rows"] == 8793, "Complete source graph required")
+                and graph["rows"] == 8794, "Complete source graph required")
     selections = manifest["test_selection"]
-    require(len(selections["scopes"]) == 5 and selections["selected_total"] == 70
+    require(len(selections["scopes"]) == 8 and selections["selected_total"] == 121
             and selections["same_step_selected_total"] == 48 and selections["affected_ordinary_selected_total"] == 7
             and selections["affected_metadata_selected_total"] == 10
             and selections["native_guard_selected_total"] == 22
             and selections["native_sampling_selected_total"] == 10
             and selections["native_instruction_selected_total"] == 7
-            and selections["applied_instruction_selected_total"] == 5,
-            "Fixed nonzero manager9/native39/ordinary7/metadata10/applied5 required")
+            and selections["applied_instruction_selected_total"] == 5
+            and selections["executed_state_selected_total"] == 12
+            and selections["prior70_selected_total"] == 70
+            and selections["checkpoint_subtotal"] == 82
+            and selections["executed_regression_selected_total"] == 39
+            and selections["original_executed_direct_selected_total"] == 3
+            and selections["original_request_metadata_selected_total"] == 36,
+            "Fixed nonzero manager9/native39/ordinary7/metadata10/applied5/checkpoint12/direct3/request36 required")
     for scope, (label, package, selector, count) in zip(selections["scopes"], SCOPES):
         require(scope["label"] == label and scope["package"] == package and scope["filter"] == selector
                 and type(scope["expected_passed"]) is int and scope["expected_passed"] == count
@@ -373,6 +426,32 @@ def source_test_names(root: Path) -> list[list[str]]:
     names = re.findall(r"#\[tokio::test\]\s+async fn (\w+)\(", child)
     require(len(names) == len(set(names)) == 5, "Unique five applied-manager candidates required")
     result.append(sorted(APPLIED_INSTRUCTIONS_PREFIX + name for name in names))
+    executed = (root / "codex-rs/core/src/tools/executed_tool_calls.rs").read_text()
+    declaration = '#[cfg(test)]\n#[path = "executed_tool_calls_checkpoint_tests.rs"]\nmod checkpoint_tests;'
+    require(executed.count(declaration) == 1, "Exact executed-state checkpoint child module required")
+    child = (root / "codex-rs/core/src/tools/executed_tool_calls_checkpoint_tests.rs").read_text()
+    names = re.findall(r"#\[test\]\s+fn (\w+)\(", child)
+    require(len(names) == len(set(names)) == 12, "Unique twelve executed-state candidates required")
+    result.append(sorted(EXECUTED_PREFIX + name for name in names))
+    declaration = '#[cfg(test)]\n#[path = "executed_tool_calls_direct_tests.rs"]\nmod direct_tests;'
+    require(executed.count(declaration) == 1, "Exact original direct-tests child module required")
+    for pin in EXECUTED_REGRESSIONS["source_pins"]:
+        path = root / pin["path"]
+        require(path.is_file() and path.stat().st_size == pin["bytes"]
+                and sha256(path) == pin["sha256"] and path.stat().st_mode & 0o7777 == pin["mode"],
+                "Original executed regression source bytes/fullmode required")
+    request = (root / "codex-rs/core/src/tools/executed_tool_calls/request_metadata.rs").read_text()
+    declaration = '#[cfg(test)]\n#[path = "request_metadata_tests.rs"]\nmod tests;'
+    require(request.count(declaration) == 1, "Exact original request-metadata child module required")
+    for relative, prefix, count in [
+        ("codex-rs/core/src/tools/executed_tool_calls_direct_tests.rs", EXECUTED_DIRECT_PREFIX, 3),
+        ("codex-rs/core/src/tools/executed_tool_calls/request_metadata_tests.rs", EXECUTED_METADATA_PREFIX, 36),
+    ]:
+        child = (root / relative).read_text()
+        names = re.findall(r"#\[(?:test|tokio::test)\]\s+(?:async )?fn (\w+)\(", child)
+        require(len(names) == len(set(names)) == count and "#[test_case" not in child,
+                "Unique fixed original executed regression source names required")
+        result.append(sorted(prefix + name for name in names))
     return result
 
 def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict,
@@ -409,6 +488,7 @@ def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict
         ("clippy-repair", "clippy-repair.patch", manifest["clippy_repair"]),
         ("sampling-preparation", manifest["sampling_preparation"]["patch_file"], manifest["sampling_preparation"]),
         ("instruction-materials", manifest["instruction_materials"]["patch_file"], manifest["instruction_materials"]),
+        ("executed-state-checkpoint", manifest["executed_state_checkpoint"]["patch_file"], manifest["executed_state_checkpoint"]),
     ]:
         before = full_inventory(source)
         if label == "clippy-repair":
@@ -423,7 +503,11 @@ def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict
             graph = manifest["instruction_materials"]["before_graph"]
             require(len(before) == graph["rows"] and graph_digest(before) == graph["sha256"],
                     "Exact source58 required before inert instruction patch")
-        patch_root = source / "codex-rs" if label == "instruction-materials" else source
+        if label == "executed-state-checkpoint":
+            graph = manifest["executed_state_checkpoint"]["before_graph"]
+            require(len(before) == graph["rows"] and graph_digest(before) == graph["sha256"],
+                    "Exact source70 required before Option-state checkpoint patch")
+        patch_root = source / "codex-rs" if label in {"instruction-materials", "executed-state-checkpoint"} else source
         for suffix, flags in [("check", ["--check"]), ("apply", [])]:
             row = recorder.run(label + "-" + suffix, ["git", "apply", *flags, str(bundle / filename)], patch_root)
             if row["exit_code"] != 0:
@@ -638,6 +722,12 @@ def run_stage(args: argparse.Namespace, output: Path, report: dict, manifest: di
                 elif scope["label"] == "applied-instructions5":
                     collections = [("applied-instructions", APPLIED_INSTRUCTIONS_PREFIX,
                                     scope["test_names"], 5)]
+                elif scope["label"] == "executed-state12":
+                    collections = [("executed-state", EXECUTED_PREFIX, scope["test_names"], 12)]
+                elif scope["label"] == "executed-direct3":
+                    collections = [("executed-direct", EXECUTED_DIRECT_PREFIX, scope["test_names"], 3)]
+                elif scope["label"] == "executed-metadata36":
+                    collections = [("executed-metadata", EXECUTED_METADATA_PREFIX, scope["test_names"], 36)]
                 for label, selector, expected_names, expected_count in collections:
                     prelaunch_health(output, report, label + "-list")
                     argv = [str(bins["cargo"]), "test", "--locked", "--offline", "-p", "codex-core",
@@ -684,7 +774,7 @@ def run_stage(args: argparse.Namespace, output: Path, report: dict, manifest: di
                 if row["exit_code"] != 0 or not observed["selection_matches"]:
                     result = positive_exit(row["exit_code"]) or 1
                     break
-            report["tests"]["status"] = "PASS" if result == 0 and report["tests"]["selected_total_passed"] == 70 else "FAIL"
+            report["tests"]["status"] = "PASS" if result == 0 and report["tests"]["selected_total_passed"] == 121 else "FAIL"
             if report["tests"]["status"] == "PASS":
                 prelaunch_health(output, report, "clippy")
                 row = recorder.run("cargo-clippy", [str(bins["cargo"])] + CLIPPY_ARGV,
