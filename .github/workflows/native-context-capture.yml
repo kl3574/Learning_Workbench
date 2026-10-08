@@ -1,11 +1,14 @@
 name: Native context mechanical capture
 on:
+  push:
+    branches:
+      - feat/M6.3-native-context-remote-validation
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   native-context15:
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feat/M6.3-native-context-remote-validation' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/feat/M6.3-native-context-remote-validation' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
