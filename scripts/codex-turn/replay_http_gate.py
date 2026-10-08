@@ -186,9 +186,10 @@ def guarded_cache(path: str, global_name: str) -> Path:
     return cache
 
 
-def execute(args: argparse.Namespace, output: Path, report: dict) -> int:
+def execute(args: argparse.Namespace, output: Path, report: dict,
+            manifest_path: Path | None = None) -> int:
     bundle = Path(__file__).resolve().parent
-    manifest_path = bundle / "source.json"
+    manifest_path = manifest_path or bundle / "source.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     archive = Path(args.archive).resolve(strict=True)
     report["inputs"] = {"archive": str(archive), "archive_sha256": sha256(archive),
@@ -216,7 +217,7 @@ def execute(args: argparse.Namespace, output: Path, report: dict) -> int:
     verify_source(patched, manifest, "patched")
     after_patch = inventory(patched)
     require(differences(original, after_patch) == sorted(row["path"] for row in manifest["changed_files"]),
-            "Patch changed files outside the four-path source slice")
+            "Patch changed files outside the declared source slice")
     write_json(output / "patched-files.json", after_patch)
     report["graph"]["nodes"].append({"id": "patched", "files_sha256": sha256(output / "patched-files.json")})
     report["graph"]["edges"].append({"from": "original", "to": "patched", "receipts": ["git-apply-check", "git-apply"],
@@ -258,7 +259,9 @@ def execute(args: argparse.Namespace, output: Path, report: dict) -> int:
             require(row["exit_code"] == 0, f"{name} version command failed")
             text = (recorder.receipts / (name + "-version") / "stdout.log").read_text(encoding="utf-8")
             require(re.search(r"(?m)^release: 1\.95\.0$", text) is not None, f"{name} is not 1.95.0")
-        command = [str(bins["cargo"]), "test", "-p", "codex-http-client", "--lib"]
+        package = manifest["test_selection"].get("package", "codex-http-client")
+        require(package in {"codex-http-client", "codex-api"}, "Unsupported library replay package")
+        command = [str(bins["cargo"]), "test", "-p", package, "--lib"]
         if not args.all_lib:
             command.append(manifest["test_selection"]["default_filter"])
         command.append("--locked")
@@ -280,6 +283,9 @@ def execute(args: argparse.Namespace, output: Path, report: dict) -> int:
             require(report["test"]["summary"] is not None and int(matches[-1][1]) == expected
                     and int(matches[-1][2]) == 0 and int(matches[-1][3]) == 0,
                     "Zero cargo exit did not prove the expected test selection")
+            if args.all_lib:
+                require(int(matches[-1][4]) == 0 and int(matches[-1][5]) == 0,
+                        "Complete library replay must contain no measured or filtered tests")
     else:
         report["test"] = {"scope": "prepare-only", "status": "NOT_RUN", "actual_exit_code": None}
     verify_source(source, manifest, "original")

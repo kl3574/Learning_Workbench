@@ -108,3 +108,45 @@ byte for this upstream-derived patch, including its third-party notice. The
 patch modifies the four paths recorded in `source.json`. These bundled upstream
 license materials do not select a license for the Learning Workbench repository;
 its owner-level licensing decision remains unchanged.
+
+## 共享 Responses 构造器 A+C
+
+`shared-responses.patch` 在同一个固定上游提交上包含原 HTTP 门控和真实
+Responses API 构造器。普通请求继续共用相同的同步准备路径；受控准备在一次
+实际 EncodedJson 编码前设置正整数输出限额及 disabled truncation。有限制的
+WebSocket 请求由受支持调用路径在 core 转换前、专用序列化和公开发送入口
+检查并拒绝。公开 From 转换及通用 serde 类型本身仅保留字段，不保证拒绝；
+普通空字段保留原 wire。
+
+准备器接受已经完整的 typed request。完整 core builder、最终鉴权之后的冻结、
+AppServer 接线、持久单次许可、模型输入/容量证明和运行资格仍未实现；这些
+脚本不启动 CLI/AppServer/真实模型，也不注册平台生产 profile。
+
+本地准备、应用与源码核对（不运行 Cargo）：
+
+```sh
+python3 scripts/codex-turn/replay_shared_responses.py \
+  --archive /path/to/a956835d.tar.gz \
+  --output-dir /path/to/new-private-ac-replay \
+  --prepare-only
+```
+
+完整 codex-api 库测试固定为严格 `--locked --offline`，须事先准备独立任务缓存：
+
+```sh
+python3 scripts/codex-turn/replay_shared_responses.py \
+  --archive /path/to/a956835d.tar.gz \
+  --output-dir /path/to/new-private-ac-tests \
+  --toolchain-dir /path/to/owned-rust-1.95 \
+  --cargo-home /path/to/owned-cargo-cache
+```
+
+作者的实际完整 API 结果为190 PASS/0 FAIL/0 ignored/0 filtered；4个准备、
+4个WS拒绝及1个普通golden均包含在190内，不能相加。8个原clients集成测试
+另行通过，首offline缺Inflector导致的101以及错过滤器选中0项均保留。
+本入口不运行clients、core或guardian测试。
+
+原 HTTP 完整库的114 PASS/6 FAIL及未改基线106 PASS/同6 FAIL继续有效，
+API190通过不能覆盖它们。唯一测试构建元数据差异仍为 workspace版本
+0.160.0→0.0.0；原Cargo.lock不变，原release二进制等价未证明。输出包含
+实际命令、日志哈希、退出码以及完整原/patch/normalized/final源码图。
