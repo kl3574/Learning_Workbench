@@ -1,0 +1,109 @@
+from pathlib import Path
+import datetime, hashlib, json, re, stat, subprocess
+
+B = Path('$HOME/.cache/learning-workbench-acceptance')
+P = B / 'm63-grading-snapshot-current93c-storage-isolated-native-private-oct08'
+R = B / 'm63-grading-snapshot-current93c-complete-native-worktree-oct08'
+L = B / 'm63-grading-snapshot-root-normal-integration-oct08/native-detached-owned-launcher-oct08'
+O = L.parent / 'ORIGINAL-NATIVE132P1F-ROOT-ADMISSION.json'
+C = '93c44303f9635067d2fae44a40986ba947e75e21'
+H = lambda b: hashlib.sha256(b).hexdigest()
+load = lambda p: json.loads(p.read_bytes())
+assert not O.exists()
+def finite(root, manifest, seal, count, expected):
+    m = load(root / manifest)
+    names = set()
+    for x in m['finite_members']:
+        assert x['name'] not in names
+        names.add(x['name'])
+        p = root / x['name']
+        assert p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root.resolve())
+        b = p.read_bytes()
+        assert (len(b), H(b)) == (x['size'], x['sha256'])
+    assert len(names) == count
+    assert {str(p.relative_to(root)) for p in root.rglob('*') if p.is_file()} == names | {manifest, seal}
+    s = load(root / seal)
+    assert H((root / manifest).read_bytes()) == expected
+    assert s['manifest'] == {'size': (root / manifest).stat().st_size, 'sha256': expected}
+    return m
+finite(P, 'MANIFEST.json', 'SEAL-RECEIPT.json', 317, 'd4e8f9a91906a59a5817d5152eba8a5675a28e7c412bddfb96fc7ec4203b87f9')
+lm = load(L / 'LAUNCHER-MANIFEST.json')
+finite(L, 'LAUNCHER-MANIFEST.json', 'LAUNCHER-SEAL-RECEIPT.json', len(lm['finite_members']), '5c177b3a4623afd13a73fa78d8f01453f90aedb2c699e261432a769efa655ad0')
+before, raw, after = [load(P / (n + '-SOURCE-MAP.json')) for n in ['before-native', 'after-raw', 'after-restored']]
+assert before['rows'] == after['rows'] and before['all_equal'] and after['all_equal']
+for d in [before, raw, after]:
+    assert d['head'] == C and d['source_count'] == len(d['rows']) == 1565
+git = lambda *v: subprocess.check_output(['git', *v], cwd=R)
+assert git('rev-parse', 'HEAD').decode().strip() == C and not git('status', '--porcelain', '-uall')
+tree = {}
+for line in git('ls-tree', '-rz', C).split(b'\0'):
+    if not line: continue
+    left, name = line.split(b'\t'); mode, kind, blob = left.decode().split(); name = name.decode()
+    if not name.startswith('progress/'):
+        assert kind == 'blob'
+        tree[name] = (mode, blob)
+assert len(tree) == 1565 and set(tree) == {x['path'] for x in before['rows']}
+ids = list(dict.fromkeys(v[1] for v in tree.values()))
+batch = subprocess.check_output(['git', 'cat-file', '--batch'], cwd=R, input=('\n'.join(ids) + '\n').encode())
+blobs = {}; i = 0
+for expected in ids:
+    j = batch.index(b'\n', i); blob, kind, size = batch[i:j].decode().split(); size = int(size)
+    assert blob == expected and kind == 'blob'
+    blobs[blob] = batch[j+1:j+1+size]; assert batch[j+1+size:j+2+size] == b'\n'; i = j+2+size
+assert i == len(batch)
+index = {}
+for line in git('ls-files', '-s', '-z').split(b'\0'):
+    if not line: continue
+    left, name = line.split(b'\t'); mode, blob, stage = left.decode().split(); name = name.decode()
+    if not name.startswith('progress/'): index[name] = (mode, blob, stage)
+assert set(index) == set(tree)
+for row in before['rows']:
+    name = row['path']; mode, blob = tree[name]; b = blobs[blob]; p = R/name
+    assert stat.S_ISREG(p.lstat().st_mode)
+    assert row['git_mode'] == row['index_mode'] == row['live_mode'] == mode
+    assert row['git_blob'] == row['index_blob'] == blob and index[name] == (mode, blob, '0')
+    assert row['git_bytes'] == row['live_bytes'] == len(b) and row['git_sha256'] == row['live_sha256'] == H(b)
+    assert p.read_bytes() == b and ('100755' if p.stat().st_mode & stat.S_IXUSR else '100644') == mode
+assert H(blobs[tree['PRODUCT_DESIGN.md'][1]]) == 'b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec'
+guard = load(P/'GUARDED-RESTORATION.json'); freeze = load(P/'FREEZE.json')
+assert guard['mutated_count'] == 5 and not guard['unknown_paths'] and not guard['index_changes']
+assert guard['restoration'] == 'PASS' and not guard['reset_stash_unknown_overwrite']
+assert guard['mutated_paths'] == guard['restored'] == [x['path'] for x in raw['differences']]
+assert set(guard['mutated_paths']) <= set(freeze['guarded_generated_allowlist']) and len(freeze['guarded_generated_allowlist']) == 10
+rawrows = {x['path']: x for x in raw['rows']}
+for row in raw['rows']:
+    baseline = next(x for x in before['rows'] if x['path'] == row['path'])
+    if row['path'] not in guard['mutated_paths']: assert row == baseline
+    assert row['git_blob'] == baseline['git_blob'] and row['index_blob'] == baseline['index_blob']
+for row in guard['raw_frozen']:
+    assert row == rawrows[row['path']]
+    b = (P/'raw-generated'/row['path']).read_bytes()
+    assert len(b) == row['live_bytes'] and H(b) == row['live_sha256']
+receipt = load(P/'01-native.receipt.json'); terminal = load(P/'TERMINAL.json'); cmd = load(P/'01-native.command.json'); rb = load(P/'READBACK.json')
+assert receipt['actual_exit'] == terminal['actual_native_exit'] == 2 and not receipt['bookkeeping_errors'] and not terminal['bookkeeping_errors']
+assert cmd['argv'] == freeze['native_argv'] == ['make', 'test-e2e']
+assert cmd['cwd'] == str(R) and not cmd['HOME_CODEX_HOME_override']
+assert cmd['explicit_environment'] == {'LEARNING_E2E_OUTPUT_DIR':str(P/'native-output'),'LEARNING_E2E_DATA_DIR':str(P/'native-data'),'TMPDIR':'$HOME/.cache/lw93c-native-1008'}
+assert freeze['timeout_ms'] == rb['timeout_ms'] == 30000 and freeze['workers'] == rb['workers'] == 1 and freeze['retry_default'] == rb['retry_default'] == 0
+assert freeze['attempts_this_changed_environment'] == 1 and not freeze['filters_exclusions_fallback']
+logs = {}
+for part in ['stdout', 'stderr']:
+    b = (P/('01-native.'+part)).read_bytes(); assert len(b) == receipt[part+'_bytes'] and H(b) == receipt[part+'_sha256']; logs[part] = {'size':len(b),'sha256':H(b)}
+b = (P/'01-native.stdout').read_bytes(); text = b.decode(); lines = text.splitlines()
+events = re.findall(r'^\s*([✓✘])\s+(\d+)\s+(.+)$', text, re.M)
+assert len(events) == 133 and [int(x[1]) for x in events] == list(range(1,134))
+assert sum(x[0]=='✓' for x in events) == 132 and [int(x[1]) for x in events if x[0]=='✘'] == [15]
+assert 'Running 133 tests using 1 worker' in text and '  1 failed' in lines and '  132 passed (20.2m)' in lines
+assert 'Expected: "completed"' in text and 'Received: "running"' in text and '5000ms' in text
+assert 'authoring-groups.spec.ts:297' in events[14][2] and 'authoring-groups.spec.ts:79' in text
+assert rb['actual_counts'] == {'failed':1,'passed':132} and rb['actual_make_exit'] == 2
+for event in rb['all133_original_case_events']: assert lines[event['line']-1] == event['actual_stdout_line']
+for section in rb['failure_sections']:
+    for binding in section['actual_error_line_bindings']: assert lines[binding['line']-1] == binding['actual_text']
+for x in rb['all_observed_owned_pid_identities_terminal']:
+    assert not x['exists'] and not x['active'] and not Path('/proc', str(x['pid'])).exists()
+assert rb['exact_four_logs_lsof_no_holders'] == {'actualexit':1,'stdout':'','stderr':''}
+assert rb['original_native65PASS68FAIL_raw_stdout_stderr_and_all_top_level_records_preserved']
+result = {'recorded_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'independent_root_evidence_admission':'PASS','actual_native_gate':'FAIL','actual_make_exit':2,'actual_counts':{'passed':132,'failed':1,'cases':133},'sole_failed_case':15,'assertion_timeout_ms':5000,'root_cause':'UNKNOWN','private_finite_members':317,'manifest_sha256':H((P/'MANIFEST.json').read_bytes()),'launcher_finite_members':len(lm['finite_members']),'runtime_source':C,'all1565_original_Git_index_live_before_and_after_rows_and_current_bytes_exact':True,'raw_generated_artifacts_frozen_before_guard_restore':5,'unknown_or_index_mutations':0,'source_mode_scope':'Git executable/file modes only; complete POSIX permission modes NOT_CAPTURED','observed_owned_processes_closed':len(rb['all_observed_owned_pid_identities_terminal']),'logs':logs,'models':0,'numeric':'BLOCKED_ENVIRONMENT','production_M63_AC21':'NOT_ACCEPTED','M7':'todo','old_failures_and_new_FAIL':'preserved; no repeated original native execution'}
+O.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+print(json.dumps({'admission':'PASS','native_gate':'FAIL','actual_exit':2,'counts':result['actual_counts'],'output':str(O),'sha256':H(O.read_bytes())}))

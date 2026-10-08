@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-08T03:24:43Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-08T03:33:33Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：ACTUAL_ISSUE32_DRAFTPR56_SEVEN_API0_CURRENT_PYTHON_RUST_NATIVE
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-取得原native133真实终态、raw/generated freeze及1565恢复核对；保留case15失败，按实际记录诊断grant/worker/Provider关闭链，不增加timeout或retry。继续固定上游完整纯本地producer及输出字段、AppServer接线/持久许可/计量和资源资格；仅库8PASS不开放生产。公开源尚4ca，待安全检查正常同步实现与实际证据；M6.3/AC21未接受，M7todo。
+保留原native132PASS1FAIL/make2及原5000ms断言，增加最窄安全grant/poll阶段观测以定位真实deadline；不凭晚TIMEOUT改预算。继续固定上游共享纯本地Responses producer A+C编码/严格锁编译与测试；AppServer/持久许可/计量和资源资格仍缺。安全检查后正常同步草稿分支与全部真实结果；M6.3/AC21未接受，M7todo。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -45,7 +45,7 @@
 - unit: 固定93c完整原Python actualexit0：4593PASS/2真实数值ENVskip/3warnings，4595collected/3081.36s；all1565原Git/index/live before/after字节exact。原2090/500/2004与4587/6失败和中断59677保留。原133项native单次RUNNING，已有case15原5000ms等待completed收到running，原因UNKNOWN，非终态计数。
 - contract: 固定93c完整原Python actualexit0：4593PASS/2真实数值ENVskip/3warnings，4595collected/3081.36s；all1565原Git/index/live before/after字节exact。原2090/500/2004与4587/6失败和中断59677保留。原133项native单次RUNNING，已有case15原5000ms等待completed收到running，原因UNKNOWN，非终态计数。
 - integration: 固定93c完整原Python actualexit0：4593PASS/2真实数值ENVskip/3warnings，4595collected/3081.36s；all1565原Git/index/live before/after字节exact。原2090/500/2004与4587/6失败和中断59677保留。原133项native单次RUNNING，已有case15原5000ms等待completed收到running，原因UNKNOWN，非终态计数。
-- browser_native: Original fixed93c65PASS68FAIL/exit2 retained. New single original133case make test-e2e with locked owned setup and task-private shortTMPDIR is RUNNING_AT_CAPTURE_HAS_CASE15FAIL; original5s completed poll receivedrunning, causeUNKNOWN, finalcounts/exit pending; no retry/timeout change. Historicalf4 133PASS separate.
+- browser_native: Current fixed93c single original133cases terminalFAIL132PASS1FAIL/make2/20.2m; solecase15 original5000ms expectedcompletedreceivedrunning, causeUNKNOWN; all1565before/restored exact,5generatedfrozen/restored,223observedownedPIDsclosed. Earlier65PASS68FAIL retained; historicalf4/101133PASS separate.
 - real_provider: PLATFORM_PROVIDER_NOT_RUN：production完整InputProof/受控executor未有符合要求注册证明；本轮0actual external model request，无实key使用/存入源码/上传。历史直连成功缺原HTTP可核回执，不作为当前平台通过。
 - real_codex: PHYSICAL_CODEX_MODEL_OR_TOOL_TURN_NOT_RUN：控制bootstrap/纯内存和pureliteral合成执行分别限定，真实CLI模型turn、物理Broker/hosttools/writer-stop/resource验收未完成。
 - learning_effectiveness: NOT_RUN
@@ -415,6 +415,7 @@
 - m6_3_interruption_recovery: old59677 INTERRUPTED_NO_TERMINAL; unknown handle plus no writer exact two old task logs; new detached actualowned39311/39317 startup and writer verified, launcher0 not suite0; original parser assertion1 preserved/corrected, no historical test exit invented
 - m6_3_actual_upstream_http_gate: {'evidence': 'progress/evidence/2026-10-08/M6.3-actual-upstream-HTTP-gate-eightPASS-full114P6F-baseline106P6F-sevenRED-and-runnable-bundle2fcc/REPORT.json', 'bounded_gate': '8PASS/0FAIL', 'complete_library': 'FAIL114/6', 'replay': 'prepare0/default8PASS0FAIL', 'models': 0, 'production': 'NOT_ADMITTED'}
 - m6_3_python_rust_native_managed_sync: {'actual_GitHub_commands': 7, 'all_exits': 0, 'recorded_utc': '2026-10-08T03:23:18.876454+00:00', 'public_source': '4ca05634adac74b59ac6b5d932445158724c4365', 'local_documentary_head': 'c92fdf2234bb5e76ca14122f03e3bab5e249cde4', 'local_engineering_source': '2fcc7b187314e6a7c9dedbf7c06cb1bd3bbf19cf', 'locked_runtime_source': '93c44303f9635067d2fae44a40986ba947e75e21', 'issue_body_sha256': 'a0b8cc88a65fc29dccddc62f3ca4ecd43fb9e1ca3d8c018c69e01d6a13ba3502', 'pr_body_sha256': 'be05eff21fc97c16b6e28c33eba74beb5936abb27d09f249758c689a5dfdc75f', 'Issue_unmanaged_body_and_metadata_preserved': True, 'PR_title_base_head_draft_open_unmerged_preserved': True, 'previous_managed_and_PR_bodies': 'exactprivate before API snapshots kept', 'actual_python': '4593PASS2numericENVskip3warnings/exit0 all1565exact', 'current_native': 'original133 RUNNING_AT_CAPTURE_HAS_CASE15FAIL; exactknownownerPIDidentity; finalcounts/exit unknown', 'actual_rust_gate': '8PASS/0FAIL; complete114P6F FAIL and baseline106P6F retained', 'production': 'NOT_ADMITTED', 'sourcepush_merge_release_deploy': False, 'models': 0, 'realAgent_M63_AC21': 'NOT_ACCEPTED', 'M7': 'todo', 'evidence': 'progress/evidence/2026-10-08/M6.3-Python4593PASS-real-Rust-slice-native-original-running-sevenAPI0-managed-sync-and-CWD-guard-correction/REPORT.json'}
+- m6_3_original_native_terminal132p1f: {'actual_root_admission_exit': 0, 'actual_root_tool_chunk': '459b7a', 'actual_native_gate': 'FAIL', 'actual_make_exit': 2, 'counts': {'passed': 132, 'failed': 1, 'cases': 133}, 'runtime_source': '93c44303f9635067d2fae44a40986ba947e75e21', 'single_original_make_test_e2e': True, 'workers': 1, 'test_timeout_ms': 30000, 'retry': 0, 'sole_failed_case': 15, 'original_completion_poll_timeout_ms': 5000, 'received': 'running', 'expected': 'completed', 'deadline_root_cause': 'UNKNOWN', 'private_finite_native_members': 317, 'private_finite_launcher_members': 25, 'all1565_source_Git_index_live_before_and_after_rows_and_current_bytes_exact': True, 'source_modes': 'Git modes; complete POSIX permission modes NOT_CAPTURED', 'frozen_generated_before_restoration': 5, 'guarded_restoration': 'PASS', 'unknown_or_index_changes': 0, 'observed_owned_PIDs_closed': 223, 'original65PASS68FAIL_and_interrupted_and_Python_FAILs_preserved': True, 'current_complete_Python': '4593PASS2numericENVskip3warnings actual0', 'actual_Rust': 'slice8PASS; whole114PASS6FAIL; unchangedbaseline106PASS6FAIL', 'rawlogs_source_maps_failure_screenshots_fixture_database': 'private; public projections contain bounded metadata and hashes only', 'real_Agent_M63_AC21': 'NOT_ACCEPTED', 'production': 'NOT_ADMITTED', 'models_this_phase': 0, 'numeric': 'BLOCKED_ENVIRONMENT', 'M7': 'todo', 'next': 'safe deadline observer without timeout/retry changes; actual shared pure Responses producer A+C compiled tests pending; ordinary guarded draft branch sync', 'evidence': 'progress/evidence/2026-10-08/M6.3-fixed93c-original-native132PASS-oneFAIL-case15-actual2-frozen-five-generated-and-restored1565/REPORT.json'}
 
 ## 阻塞与待决项
 
