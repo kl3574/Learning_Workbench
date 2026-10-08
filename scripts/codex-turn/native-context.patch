@@ -1,0 +1,1014 @@
+diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
+--- a/codex-rs/core/src/client.rs
++++ b/codex-rs/core/src/client.rs
+@@ -35,7 +35,7 @@
+ #[path = "responses_producer.rs"]
+ mod responses_producer;
+ #[path = "retained_metadata.rs"]
+-mod retained_metadata;
++pub(crate) mod retained_metadata;
+ #[path = "retained_request_ffi.rs"]
+ mod retained_request_ffi;
+ #[path = "client_tool_metadata.rs"]
+diff --git a/codex-rs/core/src/retained_metadata.rs b/codex-rs/core/src/retained_metadata.rs
+--- a/codex-rs/core/src/retained_metadata.rs
++++ b/codex-rs/core/src/retained_metadata.rs
+@@ -158,7 +158,7 @@
+     dead_code,
+     reason = "Private offline capture mechanism, no production resolver"
+ )]
+-pub(super) fn capture_metadata_facts(metadata: &CodexResponsesMetadata) -> Result<Value, ()> {
++pub(crate) fn capture_metadata_facts(metadata: &CodexResponsesMetadata) -> Result<Value, ()> {
+     if !matches!(metadata.request_kind, Some(CodexResponsesRequestKind::Turn)) {
+         return Err(());
+     }
+diff --git a/codex-rs/core/src/session/mod.rs b/codex-rs/core/src/session/mod.rs
+--- a/codex-rs/core/src/session/mod.rs
++++ b/codex-rs/core/src/session/mod.rs
+@@ -249,6 +249,7 @@
+ mod plugin_selection;
+ mod realtime_history;
+ mod retained_context;
++mod retained_outbound_snapshot;
+ mod review;
+ mod rollout_budget;
+ mod rollout_reconstruction;
+diff --git a/codex-rs/core/src/session/retained_outbound_snapshot.rs b/codex-rs/core/src/session/retained_outbound_snapshot.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/session/retained_outbound_snapshot.rs
+@@ -0,0 +1,224 @@
++//! In-process capture from an owned native Session and the same retained Step.
++//!
++//! This is a private mechanical source boundary, not platform mapping authority,
++//! a model-catalog qualification, InputProof, a dispatch permit or a sender.
++//! Rechecking observed settings, history, window and metadata does not create a
++//! global mutation epoch: unobserved ABA changes remain outside this boundary.
++
++use super::session::Session;
++use super::step_context::StepContext;
++use crate::client::retained_metadata::capture_metadata_facts;
++use crate::responses_metadata::CodexResponsesMetadata;
++use crate::responses_metadata::CodexResponsesRequestKind;
++use crate::state::TaskKind;
++use crate::state::TurnState;
++use codex_protocol::SessionId;
++use codex_protocol::ThreadId;
++use codex_protocol::openai_models::ModelInfo;
++use serde_json::Value;
++use std::sync::Arc;
++use tokio::sync::Mutex;
++use tokio_util::sync::CancellationToken;
++
++#[derive(Debug, PartialEq, Eq)]
++pub(crate) enum NativeCaptureError {
++    OwnerUnavailable,
++    OwnerMismatch,
++    SettingsChanged,
++    HistoryChanged,
++    WindowChanged,
++    MetadataChanged,
++    InvalidMetadata,
++}
++
++/// Retains actual native references; there is no dict or free-string constructor.
++/// The model flag and every native metadata default are retained as observed.
++/// In particular, an offline/fallback descriptor is not upgraded to authority.
++pub(crate) struct RetainedNativeContext {
++    session: Arc<Session>,
++    step: Arc<StepContext>,
++    session_id: SessionId,
++    thread_id: ThreadId,
++    sub_id: String,
++    model_info: Arc<ModelInfo>,
++    metadata: CodexResponsesMetadata,
++    facts: Value,
++    history_version: u64,
++    history_reset: CancellationToken,
++    owner: Arc<Mutex<TurnState>>,
++}
++
++struct Observation {
++    metadata: CodexResponsesMetadata,
++    facts: Value,
++    history_version: u64,
++    history_reset: CancellationToken,
++    owner: Arc<Mutex<TurnState>>,
++}
++
++impl RetainedNativeContext {
++    pub(crate) fn native_identity(&self) -> (SessionId, ThreadId, &str) {
++        (self.session_id, self.thread_id, &self.sub_id)
++    }
++
++    pub(crate) fn model_info(&self) -> &Arc<ModelInfo> {
++        &self.model_info
++    }
++
++    pub(crate) fn metadata(&self) -> &CodexResponsesMetadata {
++        &self.metadata
++    }
++
++    /// Checks the same retained references against currently observable facts.
++    /// It never refreshes this snapshot or substitutes next-step ModelInfo.
++    pub(crate) async fn verify_current(
++        &self,
++        session: &Arc<Session>,
++        step: &Arc<StepContext>,
++    ) -> Result<(), NativeCaptureError> {
++        if !Arc::ptr_eq(session, &self.session) || !Arc::ptr_eq(step, &self.step) {
++            return Err(NativeCaptureError::OwnerMismatch);
++        }
++        if self.history_reset.is_cancelled() {
++            return Err(NativeCaptureError::HistoryChanged);
++        }
++        let observed = observe(session, step).await?;
++        if !Arc::ptr_eq(&self.owner, &observed.owner) {
++            return Err(NativeCaptureError::OwnerMismatch);
++        }
++        if observed.history_version != self.history_version {
++            return Err(NativeCaptureError::HistoryChanged);
++        }
++        if observed.metadata.window_id != self.metadata.window_id
++            || observed.metadata.window_number != self.metadata.window_number
++            || observed.metadata.context_window_id != self.metadata.context_window_id
++        {
++            return Err(NativeCaptureError::WindowChanged);
++        }
++        if observed.facts != self.facts {
++            return Err(NativeCaptureError::MetadataChanged);
++        }
++        Ok(())
++    }
++}
++
++impl Session {
++    /// Captures final Turn metadata using this actual Session and exactly one Step.
++    /// Internal ownership alone does not authenticate the platform/native mapping.
++    pub(crate) async fn capture_retained_native_context(
++        self: &Arc<Self>,
++        step: &Arc<StepContext>,
++    ) -> Result<RetainedNativeContext, NativeCaptureError> {
++        let observed = observe(self, step).await?;
++        let captured = RetainedNativeContext {
++            session: Arc::clone(self),
++            step: Arc::clone(step),
++            session_id: self.session_id(),
++            thread_id: self.thread_id(),
++            sub_id: step.turn.sub_id.clone(),
++            model_info: Arc::clone(&step.settings.model_info),
++            metadata: observed.metadata,
++            facts: observed.facts,
++            history_version: observed.history_version,
++            history_reset: observed.history_reset,
++            owner: observed.owner,
++        };
++        captured.verify_current(self, step).await?;
++        Ok(captured)
++    }
++}
++
++async fn observe(
++    session: &Arc<Session>,
++    step: &Arc<StepContext>,
++) -> Result<Observation, NativeCaptureError> {
++    let owner = current_owner(session, step).await?;
++    if !Arc::ptr_eq(&step.settings, &step.turn.next_step_settings.load_full()) {
++        return Err(NativeCaptureError::SettingsChanged);
++    }
++    let window = session.current_window().await;
++    let (history_version, history_reset) = session.history_reset().await;
++    // This is the complete Session getter used by sampling, not the turn template.
++    let metadata = session
++        .responses_metadata(step, CodexResponsesRequestKind::Turn)
++        .await;
++    if metadata.session_id != session.session_id().to_string()
++        || metadata.thread_id != session.thread_id().to_string()
++        || metadata.turn_id.as_deref() != Some(step.turn.sub_id.as_str())
++    {
++        return Err(NativeCaptureError::OwnerMismatch);
++    }
++    if metadata.window_id != window.0
++        || metadata.window_number != Some(window.1)
++        || metadata.context_window_id != Some(window.2)
++        || session.current_window().await != window
++    {
++        return Err(NativeCaptureError::WindowChanged);
++    }
++    let (after_history_version, _) = session.history_reset().await;
++    if history_reset.is_cancelled() || after_history_version != history_version {
++        return Err(NativeCaptureError::HistoryChanged);
++    }
++    if !Arc::ptr_eq(&step.settings, &step.turn.next_step_settings.load_full()) {
++        return Err(NativeCaptureError::SettingsChanged);
++    }
++    let facts =
++        capture_metadata_facts(&metadata).map_err(|_| NativeCaptureError::InvalidMetadata)?;
++    if !Arc::ptr_eq(&owner, &current_owner(session, step).await?) {
++        return Err(NativeCaptureError::OwnerMismatch);
++    }
++    Ok(Observation {
++        metadata,
++        facts,
++        history_version,
++        history_reset,
++        owner,
++    })
++}
++
++// Sampling already retains the selected Step in this Session's active TurnState.
++// An ID equality cannot substitute for that exact in-process owner relationship.
++async fn current_owner(
++    session: &Arc<Session>,
++    step: &Arc<StepContext>,
++) -> Result<Arc<Mutex<TurnState>>, NativeCaptureError> {
++    // None and an uncancelled request token remain admissible. A cancelled
++    // request is unavailable even while its parent regular task still runs.
++    if step
++        .preempt
++        .as_ref()
++        .is_some_and(CancellationToken::is_cancelled)
++    {
++        return Err(NativeCaptureError::OwnerUnavailable);
++    }
++    let owner = {
++        let active = session.active_turn.lock().await;
++        let active = active
++            .as_ref()
++            .ok_or(NativeCaptureError::OwnerUnavailable)?;
++        let task = active
++            .task
++            .as_ref()
++            .ok_or(NativeCaptureError::OwnerUnavailable)?;
++        if task.kind != TaskKind::Regular || task.cancellation_token.is_cancelled() {
++            return Err(NativeCaptureError::OwnerUnavailable);
++        }
++        if !Arc::ptr_eq(&task.turn_context, &step.turn) {
++            return Err(NativeCaptureError::OwnerMismatch);
++        }
++        Arc::clone(&active.turn_state)
++    };
++    let retained = owner.lock().await;
++    let retained = retained
++        .last_known_step_context
++        .as_ref()
++        .ok_or(NativeCaptureError::OwnerUnavailable)?;
++    if !Arc::ptr_eq(retained, step) {
++        return Err(NativeCaptureError::OwnerMismatch);
++    }
++    Ok(Arc::clone(&owner))
++}
++
++#[cfg(test)]
++#[path = "retained_outbound_snapshot_tests.rs"]
++mod tests;
+diff --git a/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs b/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
+@@ -0,0 +1,745 @@
++// Deliberate owned composition of actual upstream types. No Session::new,
++// environment resolution, skill/plugin discovery, shell detection or sampling.
++use super::*;
++use crate::agent::LocalAgentControl;
++use crate::agents_md_manager::{AgentsMdManager, SessionInstructions};
++use crate::config::{ConfigBuilder, ConfigOverrides};
++use crate::environment_selection::ThreadEnvironments;
++use crate::hook_mcp_executor::CoreHookMcpExecutor;
++use crate::plugins::plugins_manager_for_config;
++use crate::session::mcp_refresh::McpRefresh;
++use crate::session::step_settings::ResolvedStepSettings;
++use crate::session::step_settings::StepSettings;
++use crate::session::*;
++use crate::shell_snapshot::ShellSnapshot;
++use crate::state::{ActiveTurn, RunningTask, TaskKind};
++use crate::tasks::{SessionTask, SessionTaskResult};
++use crate::test_support::models_manager_with_provider;
++use codex_config::LoaderOverrides;
++use codex_http_client::{
++    ClientRouteClass, HttpClientFactory, OutboundProxyPolicy, RouteAwareClientPool,
++};
++use codex_login::CodexAuth;
++use codex_login::auth::AgentIdentityAuthPolicy;
++use codex_model_provider::create_model_provider;
++use codex_models_manager::test_support::{
++    construct_model_info_offline_for_tests, get_model_offline_for_tests,
++};
++use codex_otel::TelemetryAuthMode;
++use codex_prompts::render_model_instructions;
++use codex_protocol::config_types::{CollaborationMode, ModeKind, Settings};
++use core_test_support::test_codex::local;
++use pretty_assertions::assert_eq;
++use std::sync::OnceLock;
++use tokio::sync::Semaphore;
++
++struct NeverExecutedFixtureTask;
++impl SessionTask for NeverExecutedFixtureTask {
++    fn kind(&self) -> TaskKind {
++        TaskKind::Regular
++    }
++    fn span_name(&self) -> &'static str {
++        "owned-native-fixture-never-executed"
++    }
++    async fn run(
++        self: Arc<Self>,
++        _session: Arc<Session>,
++        _ctx: Arc<crate::session::turn_context::TurnContext>,
++        _input: Vec<TurnInput>,
++        _cancellation_token: CancellationToken,
++    ) -> SessionTaskResult {
++        panic!("owned fixture task must never execute")
++    }
++}
++static OWNED_FIXTURE_TASKS: codex_diagnostics::Gauge =
++    codex_diagnostics::Gauge::new("owned-native-fixture-tasks");
++
++fn session_telemetry(
++    conversation_id: ThreadId,
++    config: &Config,
++    model_info: &ModelInfo,
++    session_source: SessionSource,
++) -> SessionTelemetry {
++    SessionTelemetry::new(
++        conversation_id,
++        get_model_offline_for_tests(config.model.as_deref()).as_str(),
++        model_info.slug.as_str(),
++        /*account_id*/ None,
++        Some("test@test.com".to_string()),
++        Some(TelemetryAuthMode::Chatgpt),
++        "test_originator".to_string(),
++        /*log_user_prompts*/ false,
++        "test".to_string(),
++        session_source,
++    )
++}
++
++async fn fixture() -> (Arc<Session>, Arc<StepContext>, tempfile::TempDir) {
++    fixture_with_preempt(None).await
++}
++
++async fn fixture_with_preempt(
++    preempt: Option<CancellationToken>,
++) -> (Arc<Session>, Arc<StepContext>, tempfile::TempDir) {
++    let (tx_event, _rx_event) = async_channel::unbounded();
++    let codex_home = tempfile::tempdir().expect("create temp dir");
++    let mut loader = LoaderOverrides::without_managed_config_for_tests();
++    loader.ignore_user_config = true;
++    loader.ignore_project_config = true;
++    loader.ignore_user_and_project_exec_policy_rules = true;
++    let mut config = ConfigBuilder::default()
++        .loader_overrides(loader)
++        .codex_home(codex_home.path().to_path_buf())
++        .harness_overrides(ConfigOverrides {
++            cwd: Some(codex_home.path().to_path_buf()),
++            model: Some("gpt-5.5".to_string()),
++            ..Default::default()
++        })
++        .build()
++        .await
++        .expect("owned fixture config");
++    config.analytics_enabled = Some(false);
++    let user_shell = crate::shell::Shell {
++        shell_type: crate::shell::ShellType::Sh,
++        shell_path: codex_home.path().join("never-executed-shell"),
++    };
++    let config = Arc::new(config);
++    let thread_id = ThreadId::default();
++    let auth_manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
++        "explicit-owned-fixture-key-not-real",
++    ));
++    let models_manager = models_manager_with_provider(
++        config.codex_home.to_path_buf(),
++        auth_manager.clone(),
++        config.model_provider.clone(),
++    );
++    let agent_control = LocalAgentControl::default()
++        .with_session_id(SessionId::from(thread_id), /*max_threads*/ 1);
++    let exec_policy = Arc::new(ExecPolicyManager::default());
++    let (agent_status_tx, _agent_status_rx) = watch::channel(AgentStatus::PendingInit);
++    let model = get_model_offline_for_tests(config.model.as_deref());
++    let model_info =
++        construct_model_info_offline_for_tests(model.as_str(), &config.to_models_manager_config());
++    let reasoning_effort = config.model_reasoning_effort.clone();
++    let collaboration_mode = CollaborationMode {
++        mode: ModeKind::Default,
++        settings: Settings {
++            model,
++            reasoning_effort,
++            developer_instructions: None,
++        },
++    };
++    let default_environments = vec![local(config.cwd.clone())];
++    let session_configuration = SessionConfiguration {
++        environments: default_environments.clone(),
++        provider: create_model_provider(
++            config.model_provider.clone(),
++            Some(Arc::clone(&auth_manager)),
++        ),
++        step_settings: Arc::new(StepSettings {
++            collaboration_mode,
++            reasoning_summary: config.model_reasoning_summary,
++            service_tier: None,
++            personality: config.personality,
++            approval_policy: config.permissions.approval_policy.clone(),
++            approvals_reviewer: config.approvals_reviewer,
++        }),
++        model_info_overrides: config.to_models_manager_config().into(),
++        developer_instructions: config.developer_instructions.clone(),
++        base_instructions: config
++            .base_instructions
++            .clone()
++            .unwrap_or_else(|| render_model_instructions(&model_info)),
++        permission_profile_state: config.permissions.permission_profile_state().clone(),
++        allow_login_shell: config.permissions.allow_login_shell,
++        shell_environment_policy: config.permissions.shell_environment_policy.clone(),
++        windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
++        windows_sandbox_type: config.permissions.windows_sandbox_type,
++        use_legacy_landlock: config.features.use_legacy_landlock(),
++        legacy_fallback_cwd: config.cwd.clone(),
++        runtime_workspace_roots: config.workspace_roots.clone(),
++        codex_home: config.codex_home.clone(),
++        thread_name: None,
++        disabled_plugin_ids: Vec::new(),
++        original_config_do_not_use: Arc::clone(&config),
++        metrics_service_name: None,
++        app_server_client_name: None,
++        app_server_client_version: None,
++        trusted_guardian_reviewer: false,
++        session_source: SessionSource::Exec,
++        history_mode: Default::default(),
++        forked_from_thread_id: None,
++        parent_thread_id: None,
++        thread_source: None,
++        originator: "test_originator".to_string(),
++        dynamic_tools: Vec::new(),
++        user_shell_override: None,
++    };
++    let session_telemetry = session_telemetry(
++        thread_id,
++        config.as_ref(),
++        &model_info,
++        session_configuration.session_source.clone(),
++    );
++
++    let mut state = SessionState::new(session_configuration.clone());
++    state.history =
++        ContextManager::for_session(&session_configuration.session_source, &config.features);
++    let resolved_turn_environments = TurnEnvironmentSnapshot::default();
++    let turn_environments = Arc::new(ThreadEnvironments::new(
++        Arc::new(EnvironmentManager::without_environments(
++            HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
++        )),
++        user_shell.clone(),
++        ThreadEnvironmentDefaults::new(
++            session_configuration.inferred_environment_config(),
++            session_configuration.windows_sandbox_type,
++        ),
++        ShellSnapshot::disabled(),
++        resolved_turn_environments.clone(),
++        /*non_blocking_snapshots*/ false,
++    ));
++    let plugins_manager = Arc::new(plugins_manager_for_config(
++        &config,
++        Arc::clone(&auth_manager),
++    ));
++    let mcp_manager = Arc::new(McpManager::new(Arc::clone(&plugins_manager)));
++    let skills_service = Arc::new(HostSkillsService::new(
++        config.codex_home.clone(),
++        /*bundled_skills_enabled*/ true,
++    ));
++    let network_approval = Arc::new(NetworkApprovalService::default());
++    let mcp_runtime = Arc::new(codex_mcp::McpRuntime::empty(config.prefix_mcp_tool_names()));
++    let executed_tool_calls =
++        crate::state::ExecutedToolCalls::new(&config.features, &InitialHistory::Forked(Vec::new()));
++    let (hooks, async_hook_results) = Hooks::new(
++        HooksConfig {
++            legacy_notify_argv: config.notify.clone(),
++            ..HooksConfig::default()
++        },
++        thread_id,
++        Arc::new(CoreHookMcpExecutor {
++            runtime: Arc::clone(&mcp_runtime),
++            thread_id,
++        }),
++    )
++    .expect("initialize test hooks");
++    let services = SessionServices {
++        mcp_runtime,
++        mcp_handler_cache: Default::default(),
++        unified_exec_manager: UnifiedExecProcessManager::new(
++            config.background_terminal_max_timeout,
++        ),
++        elicitations: crate::elicitation::ElicitationService::new(),
++        shell_zsh_path: None,
++        main_execve_wrapper_exe: config.main_execve_wrapper_exe.clone(),
++        analytics_events_client: AnalyticsEventsClient::disabled(),
++        hooks: arc_swap::ArcSwap::from_pointee(hooks),
++        rollout_thread_trace: codex_rollout_trace::ThreadTraceContext::disabled(),
++        user_shell: Arc::new(user_shell),
++        show_raw_agent_reasoning: config.show_raw_agent_reasoning,
++        exec_policy,
++        auth_manager: auth_manager.clone(),
++        openai_file_upload_client_pool: RouteAwareClientPool::new_without_request_logging(
++            config.http_client_factory(),
++            ClientRouteClass::Api,
++        )
++        .with_legacy_custom_ca_fallback(),
++        session_telemetry: session_telemetry.clone(),
++        models_manager: Arc::clone(&models_manager),
++        git_root_discovery: Arc::default(),
++        tool_approvals: Mutex::new(ApprovalStore::default()),
++        runtime_handle: tokio::runtime::Handle::current(),
++        skills_service,
++        agents_md_manager: Arc::new(AgentsMdManager::new(SessionInstructions::default())),
++        plugins_manager,
++        mcp_manager,
++        extensions: Arc::new(codex_extension_api::ExtensionRegistryBuilder::new().build()),
++        session_extension_data: codex_extension_api::ExtensionData::new(
++            agent_control.session_id().to_string(),
++        ),
++        thread_extension_data: codex_extension_api::ExtensionData::new(thread_id.to_string()),
++        selected_capability_roots: Vec::new(),
++        mcp_thread_init: codex_extension_api::ExtensionDataInit::default(),
++        client_mcp_extensions: ClientMcpExtensions::default(),
++        local_agent_runtime: agent_control.runtime.clone(),
++        agent_control: Arc::new(agent_control),
++        network_proxy: arc_swap::ArcSwapOption::from(None),
++        network_proxy_audit_metadata: crate::config::NetworkProxyAuditMetadata::default(),
++        managed_network_requirements_configured: false,
++        network_approval: Arc::clone(&network_approval),
++        state_db: None,
++        live_thread: None,
++        image_store: crate::passthrough_image_store(),
++        thread_store: Arc::new(codex_thread_store::LocalThreadStore::new(
++            codex_thread_store::LocalThreadStoreConfig::from_config(config.as_ref()),
++            /*state_db*/ None,
++        )),
++        attestation_provider: None,
++        time_provider: Arc::new(crate::current_time::SystemTimeProvider),
++        model_client: ModelClient::new(
++            Some(auth_manager.clone()),
++            AgentIdentityAuthPolicy::JwtOnly,
++            thread_id,
++            session_configuration.provider.info().clone(),
++            session_configuration.session_source.clone(),
++            session_configuration.originator.clone(),
++            config.model_verbosity,
++            config.features.enabled(Feature::ContentItemKinds),
++            config.features.enabled(Feature::ReasoningEffortOverride),
++            config.features.enabled(Feature::EnableRequestCompression),
++            config.features.enabled(Feature::RuntimeMetrics),
++            Session::build_model_client_beta_features_header(config.as_ref()),
++            /*concurrent_reasoning_summaries_enabled*/
++            config
++                .features
++                .enabled(Feature::ConcurrentReasoningSummaries),
++            /*attestation_provider*/ None,
++            config.http_client_factory(),
++            config.workspace_routing_context(),
++            Vec::new(),
++        ),
++        executed_tool_calls: executed_tool_calls.clone(),
++        code_mode_service: crate::tools::code_mode::CodeModeService::new(
++            thread_id,
++            Arc::new(codex_code_mode::DisabledCodeModeSessionProvider),
++            &config.code_mode,
++            executed_tool_calls,
++        ),
++        tool_search_handler_cache: Default::default(),
++        turn_environments: Arc::clone(&turn_environments),
++    };
++
++    let session = Session {
++        thread_id,
++        installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
++        tx_event,
++        agent_status: agent_status_tx,
++        state: Mutex::new(state),
++        thread_settings_persistence: Semaphore::new(/*permits*/ 1),
++        code_mode_message_tasks: Default::default(),
++        managed_network_proxy_refresh_lock: Semaphore::new(/*permits*/ 1),
++        features: config.features.clone(),
++
++        isolation: codex_extension_api::SessionIsolation::Inherit,
++        tool_policy: Arc::default(),
++        windows_sandbox_proxy_settings_mode:
++            codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
++        multi_agent_version: OnceLock::from(config.multi_agent_version_from_features()),
++        mcp_refresh: McpRefresh::new(),
++        mcp_tool_approval_metadata: Default::default(),
++        mcp_elicitation_reviewer_handle: OnceLock::new(),
++        mcp_elicitation_lifecycle_handle: OnceLock::new(),
++        mcp_prewarm_tx: async_channel::bounded(1).0,
++        mcp_prewarm_shutdown: CancellationToken::new(),
++        mcp_prewarm_task: std::sync::Mutex::new(None),
++        conversation: Arc::new(RealtimeConversationManager::new()),
++        realtime_history: None,
++        active_turn: Mutex::new(None),
++        async_hook_results,
++        input_queue: crate::session::input_queue::InputQueue::new(),
++        services,
++        git_enrichment_policy: GitEnrichmentPolicy::Fresh,
++        fork_persistence: ForkPersistence::Copied,
++        forked_from_ordinal_exclusive: None,
++        next_internal_sub_id: AtomicU64::new(0),
++    };
++    let per_turn_config = config.as_ref().clone();
++    let skills_snapshot = codex_skills_extension::HostSkillsSnapshot::new(Arc::default());
++    let turn_context = Session::make_turn_context(
++        thread_id,
++        SessionId::from(thread_id),
++        Some(Arc::clone(&auth_manager)),
++        &session_telemetry,
++        session_configuration.provider.clone(),
++        &session_configuration,
++        config.multi_agent_version_from_features(),
++        session.services.user_shell.as_ref(),
++        session.services.shell_zsh_path.as_ref(),
++        session.services.main_execve_wrapper_exe.as_ref(),
++        per_turn_config,
++        Arc::new(crate::session::step_settings::ResolvedStepSettings::new(
++            Arc::clone(&session_configuration.step_settings),
++            Arc::new(model_info),
++            config.features.enabled(Feature::FastMode),
++        )),
++        &models_manager,
++        /*network*/ None,
++        resolved_turn_environments,
++        session_configuration.cwd().clone(),
++        "turn_id".to_string(),
++        skills_snapshot,
++    );
++    let session = Arc::new(session);
++    let turn = Arc::new(turn_context);
++    let mut step = StepContext::for_test(Arc::clone(&turn));
++    Arc::get_mut(&mut step)
++        .expect("owned unique step before registration")
++        .preempt = preempt;
++    turn.next_step_settings.store(Arc::clone(&step.settings));
++    let active = ActiveTurn {
++        task: Some(RunningTask {
++            done: Arc::new(tokio::sync::Notify::new()),
++            kind: TaskKind::Regular,
++            task: Arc::new(NeverExecutedFixtureTask),
++            cancellation_token: CancellationToken::new(),
++            handle: tokio_util::task::AbortOnDropHandle::new(tokio::spawn(std::future::pending())),
++            turn_context: Arc::clone(&turn),
++            _agent_execution_guard: None,
++            _diagnostics_guard: OWNED_FIXTURE_TASKS.track(),
++            _timer: None,
++        }),
++        ..ActiveTurn::default()
++    };
++    *session.active_turn.lock().await = Some(active);
++    session.set_last_known_step_context(&step).await;
++    (session, step, codex_home)
++}
++
++#[tokio::test]
++async fn capture_executes_final_session_getter_and_retains_the_same_step_model() {
++    let (session, step, _home) = fixture().await;
++    let expected = session
++        .responses_metadata(&step, CodexResponsesRequestKind::Turn)
++        .await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("native fixture capture");
++    assert_eq!(
++        captured.native_identity(),
++        (
++            session.session_id(),
++            session.thread_id(),
++            step.turn.sub_id.as_str()
++        )
++    );
++    assert!(Arc::ptr_eq(
++        captured.model_info(),
++        &step.settings.model_info
++    ));
++    assert_eq!(
++        serde_json::to_value(captured.model_info().as_ref()).expect("full model"),
++        serde_json::to_value(step.settings.model_info.as_ref()).expect("same full model")
++    );
++    assert_eq!(
++        capture_metadata_facts(captured.metadata()).expect("full capture"),
++        capture_metadata_facts(&expected).expect("final getter")
++    );
++    assert_eq!(
++        captured.metadata().client_metadata(true),
++        expected.client_metadata(true)
++    );
++    assert_eq!(
++        captured.metadata().compatibility_headers(),
++        expected.compatibility_headers()
++    );
++    // These values come from the actual Session wrapper, not the turn template.
++    assert!(captured.metadata().window_number.is_some());
++    assert!(captured.metadata().context_window_id.is_some());
++    assert_eq!(captured.metadata().analytics_enabled, Some(false));
++    assert!(captured.metadata().mcp_attribution.is_some());
++    let template = step.turn.turn_metadata_state.to_responses_metadata(
++        session.installation_id.clone(),
++        expected.window_id.clone(),
++        CodexResponsesRequestKind::Turn,
++    );
++    assert_ne!(
++        capture_metadata_facts(&template).expect("template"),
++        capture_metadata_facts(captured.metadata()).expect("final")
++    );
++    captured
++        .verify_current(&Arc::clone(&session), &Arc::clone(&step))
++        .await
++        .expect("same retained clones");
++}
++
++#[tokio::test]
++async fn capture_rejects_a_step_from_another_native_thread() {
++    let (session, _step, _home) = fixture().await;
++    let (_other, other_step, _other_home) = fixture().await;
++    assert_eq!(
++        session
++            .capture_retained_native_context(&other_step)
++            .await
++            .err(),
++        Some(NativeCaptureError::OwnerMismatch)
++    );
++}
++
++#[tokio::test]
++async fn recheck_rejects_another_session_instance() {
++    let (session, step, _home) = fixture().await;
++    let (other, _other_step, _other_home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    assert_eq!(
++        captured.verify_current(&other, &step).await,
++        Err(NativeCaptureError::OwnerMismatch)
++    );
++}
++
++#[tokio::test]
++async fn recheck_rejects_a_distinct_step_with_the_same_turn() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    let other_step = StepContext::for_test(Arc::clone(&step.turn));
++    assert_eq!(
++        captured.verify_current(&session, &other_step).await,
++        Err(NativeCaptureError::OwnerMismatch)
++    );
++}
++
++#[tokio::test]
++async fn next_model_update_does_not_replace_captured_step_model_and_invalidates_recheck() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    let original = serde_json::to_value(captured.model_info().as_ref()).expect("full model");
++    let mut next = step.settings.as_ref().clone();
++    let mut next_model = next.model_info.as_ref().clone();
++    next_model.slug = "owned-next-model-never-requested".to_string();
++    next.model_info = Arc::new(next_model);
++    step.turn.next_step_settings.store(Arc::new(next));
++    assert_eq!(
++        serde_json::to_value(captured.model_info().as_ref()).expect("retained full model"),
++        original
++    );
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::SettingsChanged)
++    );
++    assert_eq!(
++        session.capture_retained_native_context(&step).await.err(),
++        Some(NativeCaptureError::SettingsChanged)
++    );
++}
++
++#[tokio::test]
++async fn actual_window_advance_invalidates_capture_without_refreshing_it() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    let before = capture_metadata_facts(captured.metadata()).expect("captured metadata");
++    session.advance_auto_compact_window().await;
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::WindowChanged)
++    );
++    assert_eq!(
++        capture_metadata_facts(captured.metadata()).expect("unchanged metadata"),
++        before
++    );
++}
++
++#[tokio::test]
++async fn extra_metadata_defaults_and_execution_overlay_are_preserved_then_change_is_rejected() {
++    let (session, step, _home) = fixture().await;
++    step.turn
++        .turn_metadata_state
++        .set_responses_api_metadata(std::collections::BTreeMap::from([
++            ("owned_extra".to_string(), "owned-value".to_string()),
++            ("model".to_string(), "caller-model-must-not-win".to_string()),
++        ]));
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    let facts = capture_metadata_facts(captured.metadata()).expect("all metadata");
++    assert_eq!(facts["extra"]["owned_extra"], "owned-value");
++    assert_eq!(facts["extra"]["model"], step.settings.model_info.slug);
++    assert_eq!(facts["history_ingest_requested"], serde_json::Value::Null);
++    assert_eq!(facts["tool_namespaces_info"], serde_json::Value::Null);
++    assert_eq!(facts["routing_hint"], serde_json::Value::Null);
++    step.turn
++        .turn_metadata_state
++        .set_responses_api_metadata(std::collections::BTreeMap::from([(
++            "owned_extra".to_string(),
++            "changed".to_string(),
++        )]));
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::MetadataChanged)
++    );
++    assert_eq!(
++        capture_metadata_facts(captured.metadata()).expect("unchanged full metadata"),
++        facts
++    );
++}
++
++#[tokio::test]
++async fn actual_mcp_attribution_change_invalidates_capture() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    session.services.executed_tool_calls.record_mcp_source(
++        codex_protocol::mcp::McpAttributionSource {
++            connector_id: None,
++            plugin_id: None,
++            server_name: "owned-server-never-called".to_string(),
++            tool_name: "owned-tool-never-called".to_string(),
++            first_turn_id: step.turn.sub_id.clone(),
++        },
++    );
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::MetadataChanged)
++    );
++}
++
++#[tokio::test]
++async fn native_history_reset_token_invalidates_capture() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    session.state.lock().await.history_reset.cancel();
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::HistoryChanged)
++    );
++}
++
++#[tokio::test]
++async fn absent_native_active_owner_is_unavailable() {
++    let (session, step, _home) = fixture().await;
++    *session.active_turn.lock().await = None;
++    assert_eq!(
++        session.capture_retained_native_context(&step).await.err(),
++        Some(NativeCaptureError::OwnerUnavailable)
++    );
++}
++
++#[tokio::test]
++async fn matching_ids_cannot_replace_the_session_registered_step_arc() {
++    let (session, step, _home) = fixture().await;
++    let fabricated_step = StepContext::for_test(Arc::clone(&step.turn));
++    step.turn
++        .next_step_settings
++        .store(Arc::clone(&fabricated_step.settings));
++    assert_eq!(
++        session
++            .capture_retained_native_context(&fabricated_step)
++            .await
++            .err(),
++        Some(NativeCaptureError::OwnerMismatch)
++    );
++}
++
++#[tokio::test]
++async fn replacement_active_turn_owner_rejects_the_original_capture() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    let mut active = session.active_turn.lock().await;
++    let previous = active.take().expect("owned active");
++    *active = Some(ActiveTurn {
++        task: previous.task,
++        ..ActiveTurn::default()
++    });
++    drop(active);
++    session.set_last_known_step_context(&step).await;
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::OwnerMismatch)
++    );
++}
++
++#[tokio::test]
++async fn cancelled_native_task_is_unavailable() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("capture");
++    session
++        .active_turn
++        .lock()
++        .await
++        .as_ref()
++        .expect("active")
++        .task
++        .as_ref()
++        .expect("task")
++        .cancellation_token
++        .cancel();
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::OwnerUnavailable)
++    );
++}
++
++#[tokio::test]
++async fn cancelled_step_preempt_before_capture_is_unavailable() {
++    let preempt = CancellationToken::new();
++    let (session, step, _home) = fixture_with_preempt(Some(preempt.clone())).await;
++    preempt.cancel();
++    assert!(
++        !session
++            .active_turn
++            .lock()
++            .await
++            .as_ref()
++            .expect("active")
++            .task
++            .as_ref()
++            .expect("task")
++            .cancellation_token
++            .is_cancelled()
++    );
++    assert_eq!(
++        session.capture_retained_native_context(&step).await.err(),
++        Some(NativeCaptureError::OwnerUnavailable)
++    );
++}
++
++#[tokio::test]
++async fn cancelled_step_preempt_after_capture_invalidates_recheck() {
++    let preempt = CancellationToken::new();
++    let (session, step, _home) = fixture_with_preempt(Some(preempt.clone())).await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("uncancelled request token allows capture");
++    captured
++        .verify_current(&session, &step)
++        .await
++        .expect("uncancelled request token allows recheck");
++    let before = capture_metadata_facts(captured.metadata()).expect("captured metadata");
++    preempt.cancel();
++    assert!(
++        !session
++            .active_turn
++            .lock()
++            .await
++            .as_ref()
++            .expect("active")
++            .task
++            .as_ref()
++            .expect("task")
++            .cancellation_token
++            .is_cancelled()
++    );
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::OwnerUnavailable)
++    );
++    assert_eq!(
++        capture_metadata_facts(captured.metadata()).expect("snapshot not refreshed"),
++        before
++    );
++}
