@@ -41,8 +41,9 @@ def missing() -> ApiError:
 class _CodexAuthSnapshot:
     """Private retained owner material, not a request handle or send authority.
 
-    No serializer/public DTO consumes this object. The actual Rust request
-    bridge and auth-dependent request facts are still unavailable.
+    No serializer/public DTO consumes this object. An explicit private local
+    memory owner may retain it; qualified production request/auth facts and
+    durable-start-to-send integration remain unavailable.
     """
     workspace_id: str
     turn_id: str
@@ -275,6 +276,21 @@ class CodexConsentsService:
         """Reduce a committed execution on rotation; never refresh frozen auth."""
         if not conn.in_transaction or state.queued is None or state.started is None:
             raise damaged()
+        self._verify_auth_snapshot(conn, identity, state, snapshot)
+
+    def verify_prepared_auth_snapshot(self, conn, identity, state, snapshot: _CodexAuthSnapshot) -> None:
+        """Recheck a private memory capture before freeze, without recording start.
+
+        This is not genuine InputProof or send admission. Existing committed
+        execution callers keep the distinct post-start precondition above.
+        """
+        if not conn.in_transaction or state.queued is None or state.started is not None:
+            raise damaged()
+        self._verify_auth_snapshot(conn, identity, state, snapshot)
+
+    def _verify_auth_snapshot(self, conn, identity, state, snapshot: _CodexAuthSnapshot) -> None:
+        if type(snapshot) is not _CodexAuthSnapshot:
+            raise ApiError(409, 'CODEX_BINDING_INVALID', '原执行的私有凭据绑定不一致。')
         summary = state.proposed.command.ack.summary
         binding = (identity.workspace_id, state.proposed.material.preparation.turn_id,
             state.queued.dispatch_id, summary.provider_id, summary.provider_revision, summary.config_sha256)
