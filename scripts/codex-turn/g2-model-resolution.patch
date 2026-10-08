@@ -1,0 +1,447 @@
+diff --git a/codex-rs/models-manager/src/manager.rs b/codex-rs/models-manager/src/manager.rs
+--- a/codex-rs/models-manager/src/manager.rs
++++ b/codex-rs/models-manager/src/manager.rs
+@@ -921,3 +921,6 @@
+ #[cfg(test)]
+ #[path = "manager_tests.rs"]
+ mod tests;
++
++#[path = "retained_model_resolution.rs"]
++pub(crate) mod retained_model_resolution;
+diff --git a/codex-rs/models-manager/src/retained_model_resolution.rs b/codex-rs/models-manager/src/retained_model_resolution.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/models-manager/src/retained_model_resolution.rs
+@@ -0,0 +1,192 @@
++//! Mechanical resolution observations, not catalog authority or request qualification.
++//!
++//! Only the owning manager constructs a record. Ordinary `get_model_info` is unchanged;
++//! this opt-in path retains the typed catalog entry before slug rewriting and overrides.
++
++use super::CatalogSource;
++use super::OpenAiModelsManager;
++use super::find_model_by_longest_prefix;
++use super::find_model_by_namespaced_suffix;
++use crate::ModelsManagerConfig;
++use crate::model_info;
++use chrono::DateTime;
++use chrono::Utc;
++use codex_protocol::openai_models::ModelInfo;
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub(crate) enum ModelMatchRule {
++    LongestPrefix,
++    NamespacedSuffix,
++    ExplicitProviderExact,
++    UnmatchedFallback,
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub(crate) enum CatalogOrigin {
++    IdentityMatchedMemoryEntry,
++    BundledIdentityFallback,
++    EmptyExplicitProviderFallback,
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub(crate) enum ResolutionQualification {
++    Unqualified,
++}
++
++/// The memory entry may originate from initialization, cache, or an endpoint.
++/// These observed fields do not establish that origin, a model version, or authority.
++/// Opaque credential identities are compared by the manager and are not copied here.
++pub(crate) struct CatalogObservation {
++    origin: CatalogOrigin,
++    entry_fetched_at: Option<DateTime<Utc>>,
++    entry_etag: Option<String>,
++    entry_client_version: Option<String>,
++}
++
++impl CatalogObservation {
++    pub(crate) fn origin(&self) -> CatalogOrigin {
++        self.origin
++    }
++
++    pub(crate) fn entry_fetched_at(&self) -> Option<&DateTime<Utc>> {
++        self.entry_fetched_at.as_ref()
++    }
++
++    pub(crate) fn entry_etag(&self) -> Option<&str> {
++        self.entry_etag.as_deref()
++    }
++
++    pub(crate) fn entry_client_version(&self) -> Option<&str> {
++        self.entry_client_version.as_deref()
++    }
++}
++
++/// Owned typed observations. No public constructor, serde representation, or Debug output.
++/// In particular, a false serde-skipped fallback flag is never treated as qualification.
++/// This record does not bind a Step, detect later owner changes, or authorize any send.
++pub(crate) struct RetainedModelResolution {
++    requested_model: String,
++    match_rule: ModelMatchRule,
++    original_catalog_model: Option<ModelInfo>,
++    before_overrides: ModelInfo,
++    resolved_model: ModelInfo,
++    catalog: CatalogObservation,
++}
++
++impl RetainedModelResolution {
++    pub(crate) fn requested_model(&self) -> &str {
++        &self.requested_model
++    }
++
++    pub(crate) fn match_rule(&self) -> ModelMatchRule {
++        self.match_rule
++    }
++
++    pub(crate) fn original_catalog_model(&self) -> Option<&ModelInfo> {
++        self.original_catalog_model.as_ref()
++    }
++
++    pub(crate) fn before_overrides(&self) -> &ModelInfo {
++        &self.before_overrides
++    }
++
++    pub(crate) fn resolved_model(&self) -> &ModelInfo {
++        &self.resolved_model
++    }
++
++    pub(crate) fn catalog(&self) -> &CatalogObservation {
++        &self.catalog
++    }
++
++    pub(crate) fn authoritative_model_version(&self) -> Option<&str> {
++        None
++    }
++
++    pub(crate) fn qualification(&self) -> ResolutionQualification {
++        ResolutionQualification::Unqualified
++    }
++}
++
++impl OpenAiModelsManager {
++    /// Observe the original lookup without refreshing the catalog or resolving auth.
++    /// The original selected ModelInfo retains every typed field, including its raw
++    /// fallback marker, even when ordinary construction rewrites that marker to false.
++    pub(crate) async fn get_model_info_with_retained_resolution(
++        &self,
++        model: &str,
++        config: &ModelsManagerConfig,
++    ) -> RetainedModelResolution {
++        let (models, catalog) = {
++            let entry = self.remote_models.read().await;
++            if entry.identity.is_some() && entry.identity == self.endpoint_client.identity() {
++                (
++                    entry.models.clone(),
++                    CatalogObservation {
++                        origin: CatalogOrigin::IdentityMatchedMemoryEntry,
++                        entry_fetched_at: Some(entry.fetched_at),
++                        entry_etag: entry.etag.clone(),
++                        entry_client_version: entry.client_version.clone(),
++                    },
++                )
++            } else {
++                let origin = match &self.catalog_source {
++                    CatalogSource::Default => CatalogOrigin::BundledIdentityFallback,
++                    CatalogSource::ExplicitProvider(_) => {
++                        CatalogOrigin::EmptyExplicitProviderFallback
++                    }
++                };
++                (
++                    self.catalog_source.fallback_models().unwrap_or_default(),
++                    CatalogObservation {
++                        origin,
++                        entry_fetched_at: None,
++                        entry_etag: None,
++                        entry_client_version: None,
++                    },
++                )
++            }
++        };
++        let (match_rule, original_catalog_model) = match &self.catalog_source {
++            CatalogSource::Default => {
++                if let Some(candidate) = find_model_by_longest_prefix(model, &models) {
++                    (ModelMatchRule::LongestPrefix, Some(candidate))
++                } else if let Some(candidate) = find_model_by_namespaced_suffix(model, &models) {
++                    (ModelMatchRule::NamespacedSuffix, Some(candidate))
++                } else {
++                    (ModelMatchRule::UnmatchedFallback, None)
++                }
++            }
++            CatalogSource::ExplicitProvider(_) => {
++                if let Some(candidate) =
++                    models.into_iter().find(|candidate| candidate.slug == model)
++                {
++                    (ModelMatchRule::ExplicitProviderExact, Some(candidate))
++                } else {
++                    (ModelMatchRule::UnmatchedFallback, None)
++                }
++            }
++        };
++        let before_overrides = if let Some(original) = original_catalog_model.as_ref() {
++            ModelInfo {
++                slug: model.to_string(),
++                used_fallback_model_metadata: false,
++                ..original.clone()
++            }
++        } else {
++            model_info::model_info_from_slug(model)
++        };
++        let resolved_model = model_info::with_config_overrides(before_overrides.clone(), config);
++        RetainedModelResolution {
++            requested_model: model.to_string(),
++            match_rule,
++            original_catalog_model,
++            before_overrides,
++            resolved_model,
++            catalog,
++        }
++    }
++}
++
++#[cfg(test)]
++#[path = "retained_model_resolution_tests.rs"]
++mod tests;
+diff --git a/codex-rs/models-manager/src/retained_model_resolution_tests.rs b/codex-rs/models-manager/src/retained_model_resolution_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/models-manager/src/retained_model_resolution_tests.rs
+@@ -0,0 +1,235 @@
++//! Owned mechanical catalog fixtures; none supplies vendor or current-Step authority.
++use super::*;
++use crate::cache::ModelsCacheEntry;
++use crate::manager::ModelsEndpointClient;
++use crate::manager::ModelsEndpointFuture;
++use crate::manager::ModelsEndpointResponse;
++use crate::manager::ModelsManager;
++use codex_http_client::HttpClientFactory;
++use codex_protocol::error::Result as CoreResult;
++use codex_protocol::openai_models::ModelsResponse;
++use codex_protocol::openai_models::TruncationPolicyConfig;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++use std::sync::Arc;
++use std::sync::atomic::AtomicBool;
++use tokio::sync::Mutex;
++use tokio::sync::RwLock;
++
++#[derive(Debug)]
++struct InertEndpoint;
++
++impl ModelsEndpointClient for InertEndpoint {
++    fn identity(&self) -> Option<String> {
++        Some("owned-fixture-provider".to_string())
++    }
++
++    fn has_command_auth(&self) -> bool {
++        panic!("resolution must not inspect command auth")
++    }
++
++    fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool> {
++        panic!("resolution must not resolve backend auth")
++    }
++
++    fn list_models<'a>(
++        &'a self,
++        _client_version: &'a str,
++        _http_client_factory: HttpClientFactory,
++    ) -> ModelsEndpointFuture<'a, CoreResult<ModelsEndpointResponse>> {
++        panic!("resolution must not refresh the catalog")
++    }
++}
++
++fn fixture_model(slug: &str, display: &str) -> ModelInfo {
++    serde_json::from_value(json!({
++        "slug": slug, "display_name": display, "description": "owned test fixture",
++        "default_reasoning_level": "medium", "supported_reasoning_levels": [],
++        "shell_type": "shell_command", "visibility": "list", "supported_in_api": true,
++        "priority": 0, "upgrade": null, "availability_nux": null,
++        "model_messages": {"instructions_template": "original", "instructions_variables": null},
++        "support_verbosity": false, "default_verbosity": null, "apply_patch_tool_type": null,
++        "truncation_policy": {"mode": "bytes", "limit": 10000},
++        "context_window": 2000, "max_context_window": 4000, "experimental_supported_tools": []
++    }))
++    .expect("valid owned ModelInfo fixture")
++}
++
++fn fixture_manager(models: Vec<ModelInfo>, catalog_source: CatalogSource) -> OpenAiModelsManager {
++    OpenAiModelsManager {
++        remote_models: RwLock::new(ModelsCacheEntry {
++            fetched_at: DateTime::<Utc>::MIN_UTC,
++            etag: Some("owned-fixture-etag".to_string()),
++            client_version: Some("owned-fixture-client-version".to_string()),
++            identity: Some("owned-fixture-provider".to_string()),
++            models,
++        }),
++        cache: None,
++        endpoint_client: Arc::new(InertEndpoint),
++        catalog_source,
++        api_key_model_discovery_enabled: AtomicBool::new(/*v*/ false),
++        auth_manager: None,
++    }
++}
++
++async fn compare_ordinary(
++    manager: &OpenAiModelsManager,
++    model: &str,
++    config: &ModelsManagerConfig,
++) -> RetainedModelResolution {
++    let ordinary = manager.get_model_info(model, config).await;
++    let retained = manager
++        .get_model_info_with_retained_resolution(model, config)
++        .await;
++    assert_eq!(retained.resolved_model(), &ordinary);
++    assert_eq!(retained.requested_model(), model);
++    assert_eq!(retained.authoritative_model_version(), None);
++    assert_eq!(
++        retained.qualification(),
++        ResolutionQualification::Unqualified
++    );
++    retained
++}
++
++#[tokio::test]
++async fn retains_longest_prefix_first_tie_and_raw_fallback_marker_before_rewrite() {
++    let short = fixture_model("gpt", "short");
++    let mut first = fixture_model("gpt-next", "first tie");
++    first.used_fallback_model_metadata = true;
++    let second = fixture_model("gpt-next", "second tie");
++    let manager = fixture_manager(vec![short, first.clone(), second], CatalogSource::Default);
++    let retained = compare_ordinary(&manager, "gpt-next-trial", &Default::default()).await;
++
++    assert_eq!(retained.match_rule(), ModelMatchRule::LongestPrefix);
++    assert_eq!(retained.original_catalog_model(), Some(&first));
++    let mut rewritten = first.clone();
++    rewritten.slug = "gpt-next-trial".to_string();
++    rewritten.used_fallback_model_metadata = false;
++    assert_eq!(retained.before_overrides(), &rewritten);
++    manager.remote_models.write().await.models.clear();
++    assert_eq!(retained.original_catalog_model(), Some(&first));
++    assert_eq!(retained.before_overrides(), &rewritten);
++}
++
++#[tokio::test]
++async fn namespaced_suffix_preserves_validation_and_whole_getter_results() {
++    let original = fixture_model("gpt", "suffix match");
++    let manager = fixture_manager(vec![original.clone()], CatalogSource::Default);
++    for requested in ["custom/gpt-trial", "custom-provider_2/gpt-trial"] {
++        let retained = compare_ordinary(&manager, requested, &Default::default()).await;
++        assert_eq!(retained.match_rule(), ModelMatchRule::NamespacedSuffix);
++        assert_eq!(retained.original_catalog_model(), Some(&original));
++    }
++    for requested in ["ns1/ns2/gpt", "/gpt", "bad.namespace/gpt", "space ns/gpt"] {
++        let retained = compare_ordinary(&manager, requested, &Default::default()).await;
++        assert_eq!(retained.match_rule(), ModelMatchRule::UnmatchedFallback);
++        assert_eq!(retained.original_catalog_model(), None);
++        assert!(retained.before_overrides().used_fallback_model_metadata);
++    }
++}
++
++#[tokio::test]
++async fn direct_prefix_remains_prior_to_namespaced_suffix() {
++    let direct = fixture_model("custom", "direct prefix");
++    let suffix = fixture_model("gpt", "suffix");
++    let manager = fixture_manager(vec![suffix, direct.clone()], CatalogSource::Default);
++    let retained = compare_ordinary(&manager, "custom/gpt-trial", &Default::default()).await;
++    assert_eq!(retained.match_rule(), ModelMatchRule::LongestPrefix);
++    assert_eq!(retained.original_catalog_model(), Some(&direct));
++}
++
++#[tokio::test]
++async fn explicit_provider_keeps_exact_matching_instead_of_prefix_or_namespace() {
++    let original = fixture_model("gpt", "exact only");
++    let manager = fixture_manager(
++        vec![original.clone()],
++        CatalogSource::ExplicitProvider(Mutex::new(())),
++    );
++    let retained = compare_ordinary(&manager, "gpt", &Default::default()).await;
++    assert_eq!(retained.match_rule(), ModelMatchRule::ExplicitProviderExact);
++    assert_eq!(retained.original_catalog_model(), Some(&original));
++    for requested in ["gpt-trial", "custom/gpt"] {
++        let retained = compare_ordinary(&manager, requested, &Default::default()).await;
++        assert_eq!(retained.match_rule(), ModelMatchRule::UnmatchedFallback);
++        assert_eq!(retained.original_catalog_model(), None);
++        assert!(retained.resolved_model().used_fallback_model_metadata);
++    }
++}
++
++#[tokio::test]
++async fn overrides_preserve_complete_original_and_pre_override_model_info() {
++    let original = fixture_model("gpt", "before overrides");
++    let manager = fixture_manager(vec![original.clone()], CatalogSource::Default);
++    let config = ModelsManagerConfig {
++        model_context_window: Some(9000),
++        model_auto_compact_token_limit: Some(1234),
++        tool_output_token_limit: Some(11),
++        base_instructions: Some("replacement instructions".to_string()),
++        model_catalog: Some(ModelsResponse {
++            models: vec![fixture_model(
++                "gpt",
++                "caller catalog is not this lookup source",
++            )],
++        }),
++        ..Default::default()
++    };
++    let retained = compare_ordinary(&manager, "gpt-trial", &config).await;
++    assert_eq!(retained.original_catalog_model(), Some(&original));
++    let mut before = original;
++    before.slug = "gpt-trial".to_string();
++    assert_eq!(retained.before_overrides(), &before);
++    let mut expected = before;
++    expected.context_window = Some(4000);
++    expected.auto_compact_token_limit = Some(1234);
++    expected.truncation_policy = TruncationPolicyConfig::bytes(/*limit*/ 44);
++    expected
++        .model_messages
++        .as_mut()
++        .expect("fixture messages")
++        .instructions_template = Some("replacement instructions".to_string());
++    assert_eq!(retained.resolved_model(), &expected);
++    assert_eq!(
++        retained.catalog().origin(),
++        CatalogOrigin::IdentityMatchedMemoryEntry
++    );
++    assert_eq!(retained.catalog().entry_etag(), Some("owned-fixture-etag"));
++    assert_eq!(
++        retained.catalog().entry_client_version(),
++        Some("owned-fixture-client-version")
++    );
++    assert_eq!(
++        retained.catalog().entry_fetched_at(),
++        Some(&DateTime::<Utc>::MIN_UTC)
++    );
++}
++
++#[tokio::test]
++async fn mismatched_or_missing_identity_does_not_retain_unused_entry_metadata() {
++    for catalog_source in [
++        CatalogSource::Default,
++        CatalogSource::ExplicitProvider(Mutex::new(())),
++    ] {
++        let original = fixture_model("owned-fixture-unavailable-model", "unused catalog");
++        let manager = fixture_manager(vec![original], catalog_source);
++        for identity in [Some("previous-fixture-provider".to_string()), None] {
++            manager.remote_models.write().await.identity = identity;
++            let retained = compare_ordinary(
++                &manager,
++                "owned-fixture-unavailable-model",
++                &Default::default(),
++            )
++            .await;
++            let expected_origin = match &manager.catalog_source {
++                CatalogSource::Default => CatalogOrigin::BundledIdentityFallback,
++                CatalogSource::ExplicitProvider(_) => CatalogOrigin::EmptyExplicitProviderFallback,
++            };
++            assert_eq!(retained.catalog().origin(), expected_origin);
++            assert_eq!(retained.catalog().entry_fetched_at(), None);
++            assert_eq!(retained.catalog().entry_etag(), None);
++            assert_eq!(retained.catalog().entry_client_version(), None);
++            assert_eq!(retained.original_catalog_model(), None);
++            assert_eq!(retained.match_rule(), ModelMatchRule::UnmatchedFallback);
++            assert!(retained.resolved_model().used_fallback_model_metadata);
++        }
++    }
++}
