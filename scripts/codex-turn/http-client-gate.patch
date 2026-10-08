@@ -1,0 +1,710 @@
+diff --git a/codex-rs/http-client/src/lib.rs b/codex-rs/http-client/src/lib.rs
+--- a/codex-rs/http-client/src/lib.rs
++++ b/codex-rs/http-client/src/lib.rs
+@@ -5,6 +5,7 @@
+ mod client_tls;
+ mod custom_ca;
+ mod error;
++mod frozen_responses_request;
+ mod network_policy;
+ mod outbound_proxy;
+ mod request;
+@@ -36,6 +37,8 @@
+ pub use crate::custom_ca::maybe_build_rustls_client_config_with_custom_ca;
+ pub use crate::error::StreamError;
+ pub use crate::error::TransportError;
++pub use crate::frozen_responses_request::FrozenRequestError;
++pub use crate::frozen_responses_request::FrozenResponsesRequest;
+ pub use crate::network_policy::DestinationPolicy;
+ pub use crate::network_policy::NetworkPermit;
+ pub use crate::network_policy::NetworkPolicy;
+diff --git a/codex-rs/http-client/src/transport.rs b/codex-rs/http-client/src/transport.rs
+--- a/codex-rs/http-client/src/transport.rs
++++ b/codex-rs/http-client/src/transport.rs
+@@ -3,6 +3,7 @@
+ //! Each request's limit applies to observed body bytes, including unsuccessful responses;
+ //! declared content lengths are only an additional early-rejection check.
+
++use crate::FrozenResponsesRequest;
+ use crate::HttpResponse;
+ use crate::RouteAwareClientPool;
+ use crate::RouteAwareRequestError;
+@@ -21,6 +22,7 @@
+ use http::HeaderMap;
+ use http::Method;
+ use http::StatusCode;
++use std::sync::Arc;
+ use tracing::Level;
+ use tracing::enabled;
+ use tracing::trace;
+@@ -47,6 +49,7 @@
+ #[derive(Clone, Debug)]
+ pub struct ReqwestTransport {
+     client: TransportClient,
++    frozen_responses_request: Option<Arc<FrozenResponsesRequest>>,
+ }
+
+ #[derive(Clone, Debug)]
+@@ -63,6 +66,7 @@
+     pub fn from_http_client(client: HttpClient) -> Self {
+         Self {
+             client: TransportClient::Fixed(client),
++            frozen_responses_request: None,
+         }
+     }
+
+@@ -70,7 +74,33 @@
+     pub fn from_route_aware_client_pool(client: RouteAwareClientPool) -> Self {
+         Self {
+             client: TransportClient::RouteAware(Box::new(client)),
+-        }
++            frozen_responses_request: None,
++        }
++    }
++
++    /// Build the restricted real HTTP sender for one already frozen request.
++    ///
++    /// Clones and newly constructed senders must share the same capability.
++    /// This does not bind AppServer's other transports or persist platform consent.
++    pub fn for_frozen_responses_request(
++        frozen: Arc<FrozenResponsesRequest>,
++    ) -> Result<Self, TransportError> {
++        let client = reqwest::Client::builder()
++            .no_proxy()
++            .redirect(reqwest::redirect::Policy::none())
++            .retry(reqwest::retry::never())
++            .http1_only()
++            .pool_max_idle_per_host(0)
++            .no_gzip()
++            .no_brotli()
++            .no_zstd()
++            .no_deflate()
++            .build()
++            .map_err(|error| TransportError::Build(error.without_url().to_string()))?;
++        Ok(Self {
++            client: TransportClient::Fixed(HttpClient::new_without_request_logging(client)),
++            frozen_responses_request: Some(frozen),
++        })
+     }
+
+     async fn send(&self, req: Request) -> Result<HttpResponse, TransportError> {
+@@ -83,7 +113,7 @@
+             body: _,
+             compression: _,
+             timeout,
+-            response_body_limit_bytes: _,
++            response_body_limit_bytes,
+         } = req;
+
+         let method = Method::from_bytes(method.as_str().as_bytes()).unwrap_or(Method::GET);
+@@ -103,6 +133,19 @@
+                     let request = request
+                         .build(client)
+                         .map_err(|error| Self::map_error(error.into()))?;
++                    if let Some(frozen) = &self.frozen_responses_request {
++                        frozen
++                            .claim(&request, response_body_limit_bytes)
++                            .map_err(|error| TransportError::Build(error.to_string()))?;
++                        // Bypass late trace/default-header injection; claim the
++                        // actual built request immediately before real execution.
++                        return client
++                            .inner
++                            .execute(request)
++                            .await
++                            .map(HttpResponse::from)
++                            .map_err(|error| Self::map_error(error.into()));
++                    }
+                     client
+                         .execute(request)
+                         .await
+diff --git a/codex-rs/http-client/src/frozen_responses_request.rs b/codex-rs/http-client/src/frozen_responses_request.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/http-client/src/frozen_responses_request.rs
+@@ -0,0 +1,235 @@
++//! One-use binding to the existing serializer's exact Responses request bytes.
++//!
++//! This is a transport capability, not an input-token proof or a durable consent.
++//! The owner must freeze after all request/header mutations, share the same `Arc`
++//! across every HTTP attempt, and separately exclude other outbound transports.
++
++use crate::Request;
++use crate::RequestBody;
++use crate::RequestCompression;
++use crate::request::PreparedRequestBody;
++use http::Method;
++use serde::Deserialize;
++use serde::Deserializer;
++use serde::de::MapAccess;
++use serde::de::SeqAccess;
++use serde::de::Visitor;
++use std::collections::HashSet;
++use std::num::NonZeroU64;
++use std::sync::atomic::AtomicBool;
++use std::sync::atomic::Ordering;
++use thiserror::Error;
++
++/// An immutable existing request and a shared, non-resettable send capability.
++pub struct FrozenResponsesRequest {
++    request: Request,
++    prepared: PreparedRequestBody,
++    claimed: AtomicBool,
++}
++
++impl std::fmt::Debug for FrozenResponsesRequest {
++    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        formatter
++            .debug_struct("FrozenResponsesRequest")
++            .finish_non_exhaustive()
++    }
++}
++
++#[derive(Debug, Error, PartialEq, Eq)]
++pub enum FrozenRequestError {
++    #[error("CODEX_FROZEN_REQUEST_UNSUPPORTED")]
++    Unsupported,
++    #[error("CODEX_OUTPUT_LIMIT_UNAVAILABLE")]
++    OutputLimit,
++    #[error("CODEX_FROZEN_REQUEST_CHANGED")]
++    Changed,
++    #[error("CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")]
++    AlreadyClaimed,
++}
++
++// Deserialize only to check limits in the actual encoded body. Never reserialize
++// this view or use it in place of the original request. Serde rejects duplicate
++// occurrences of these known fields rather than choosing one ambiguously.
++#[derive(Deserialize)]
++struct OutputLimits {
++    max_output_tokens: NonZeroU64,
++    truncation: String,
++}
++
++// Reject duplicate names at every object depth before interpreting limits.
++// This parser is validation only; the exact original bytes remain the payload.
++struct UniqueJson;
++
++impl<'de> Deserialize<'de> for UniqueJson {
++    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
++        struct UniqueVisitor;
++        impl<'de> Visitor<'de> for UniqueVisitor {
++            type Value = UniqueJson;
++
++            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++                formatter.write_str("JSON with unique object names")
++            }
++
++            fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_unit<E: serde::de::Error>(self) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<UniqueJson, A::Error> {
++                while seq.next_element::<UniqueJson>()?.is_some() {}
++                Ok(UniqueJson)
++            }
++
++            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<UniqueJson, A::Error> {
++                let mut names = HashSet::new();
++                while let Some(name) = map.next_key::<String>()? {
++                    if !names.insert(name) {
++                        return Err(serde::de::Error::custom("duplicate JSON name"));
++                    }
++                    map.next_value::<UniqueJson>()?;
++                }
++                Ok(UniqueJson)
++            }
++        }
++        deserializer.deserialize_any(UniqueVisitor)
++    }
++}
++
++impl FrozenResponsesRequest {
++    /// Freeze an already encoded, uncompressed HTTPS Responses POST.
++    ///
++    /// No request field is injected here. In particular the real producer must
++    /// already encode the exact positive output limit and disabled truncation.
++    /// Compression, supplied Host/framing, and URL credentials/query/fragment
++    /// are excluded. Accept must be explicit before freeze, closing reqwest's
++    /// otherwise late default. Content-Type must be exactly application/json.
++    pub fn freeze(
++        request: Request,
++        max_output_tokens: NonZeroU64,
++    ) -> Result<Self, FrozenRequestError> {
++        let url = reqwest::Url::parse(&request.url).map_err(|_| FrozenRequestError::Unsupported)?;
++        if request.method != Method::POST
++            || url.scheme() != "https"
++            || url.host_str().is_none()
++            || !url.username().is_empty()
++            || url.password().is_some()
++            || url.query().is_some()
++            || url.fragment().is_some()
++            || !url.path().ends_with("/responses")
++            || url.as_str() != request.url
++            || request.compression != RequestCompression::None
++            || request.headers.contains_key(http::header::CONTENT_ENCODING)
++            || request.headers.contains_key(http::header::HOST)
++            || request.headers.contains_key(http::header::CONTENT_LENGTH)
++            || request
++                .headers
++                .contains_key(http::header::TRANSFER_ENCODING)
++            || !request.headers.contains_key(http::header::ACCEPT)
++        {
++            return Err(FrozenRequestError::Unsupported);
++        }
++        let Some(RequestBody::EncodedJson(body)) = request.body.as_ref() else {
++            return Err(FrozenRequestError::Unsupported);
++        };
++        if body
++            .as_bytes()
++            .iter()
++            .find(|byte| !byte.is_ascii_whitespace())
++            != Some(&b'{')
++        {
++            return Err(FrozenRequestError::OutputLimit);
++        }
++        serde_json::from_slice::<UniqueJson>(body.as_bytes())
++            .map_err(|_| FrozenRequestError::OutputLimit)?;
++        let limits: OutputLimits =
++            serde_json::from_slice(body.as_bytes()).map_err(|_| FrozenRequestError::OutputLimit)?;
++        if limits.max_output_tokens != max_output_tokens || limits.truncation != "disabled" {
++            return Err(FrozenRequestError::OutputLimit);
++        }
++        let request = request
++            .into_prepared()
++            .map_err(|_| FrozenRequestError::Unsupported)?;
++        let prepared = request
++            .prepare_body_for_send()
++            .map_err(|_| FrozenRequestError::Unsupported)?;
++        if prepared
++            .headers
++            .get_all(http::header::CONTENT_TYPE)
++            .iter()
++            .count()
++            != 1
++            || prepared
++                .headers
++                .get(http::header::CONTENT_TYPE)
++                .and_then(|value| value.to_str().ok())
++                != Some("application/json")
++        {
++            return Err(FrozenRequestError::Unsupported);
++        }
++        Ok(Self {
++            request,
++            prepared,
++            claimed: AtomicBool::new(false),
++        })
++    }
++
++    /// Clone the real prepared request; its encoded body shares the frozen bytes.
++    pub fn prepared_request(&self) -> Request {
++        self.request.clone()
++    }
++
++    /// Borrow the original final wire body for a separate reviewed input proof.
++    pub fn body_bytes(&self) -> &[u8] {
++        self.prepared.body.as_deref().unwrap_or_default()
++    }
++
++    pub(crate) fn claim(
++        &self,
++        request: &reqwest::Request,
++        response_body_limit_bytes: Option<usize>,
++    ) -> Result<(), FrozenRequestError> {
++        // Claim before any network action, and burn even a mismatched attempt.
++        // A build/connection/HTTP/stream failure never restores this capability.
++        self.claimed
++            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
++            .map_err(|_| FrozenRequestError::AlreadyClaimed)?;
++        if request.method() != &self.request.method
++            || request.url().as_str() != self.request.url
++            || request.headers() != &self.prepared.headers
++            || request.timeout().copied() != self.request.timeout
++            || response_body_limit_bytes != self.request.response_body_limit_bytes
++            || request.body().and_then(reqwest::Body::as_bytes) != Some(self.body_bytes())
++            || request
++                .body()
++                .and_then(reqwest::Body::as_bytes)
++                .map(<[u8]>::as_ptr)
++                != Some(self.body_bytes().as_ptr())
++        {
++            return Err(FrozenRequestError::Changed);
++        }
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++#[path = "frozen_responses_request_tests.rs"]
++mod tests;
+diff --git a/codex-rs/http-client/src/frozen_responses_request_tests.rs b/codex-rs/http-client/src/frozen_responses_request_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/http-client/src/frozen_responses_request_tests.rs
+@@ -0,0 +1,346 @@
++use super::*;
++use crate::EncodedJsonBody;
++use crate::HttpTransport;
++use crate::ReqwestTransport;
++use crate::TransportError;
++use pretty_assertions::assert_eq;
++use serde::Serialize;
++use serde::ser::SerializeMap;
++use serde_json::json;
++use std::sync::Arc;
++use std::sync::Barrier;
++use std::time::Duration;
++
++fn output_limit() -> NonZeroU64 {
++    NonZeroU64::new(64).expect("positive output limit")
++}
++
++fn encoded_request(body: &impl Serialize) -> Request {
++    let mut request = Request::new(
++        Method::POST,
++        "https://example.test/v1/responses".to_string(),
++    );
++    request.headers.insert(
++        http::header::ACCEPT,
++        http::HeaderValue::from_static("text/event-stream"),
++    );
++    request.body = Some(RequestBody::EncodedJson(
++        EncodedJsonBody::encode(body).expect("actual serializer should encode"),
++    ));
++    request
++}
++
++fn frozen_request() -> FrozenResponsesRequest {
++    FrozenResponsesRequest::freeze(
++        encoded_request(&json!({
++            "model": "test-model",
++            "input": [{"role": "user", "content": "bounded input"}],
++            "max_output_tokens": 64,
++            "truncation": "disabled"
++        })),
++        output_limit(),
++    )
++    .expect("real encoded request should freeze")
++}
++
++fn built_request(frozen: &FrozenResponsesRequest) -> reqwest::Request {
++    let request = frozen.prepared_request();
++    let prepared = request.prepare_body_for_send().expect("already prepared");
++    let mut built = reqwest::Request::new(request.method, request.url.parse().expect("valid URL"));
++    *built.headers_mut() = prepared.headers;
++    *built.body_mut() = prepared.body.map(Into::into);
++    *built.timeout_mut() = request.timeout;
++    built
++}
++
++#[test]
++fn frozen_responses_request_preserves_the_actual_encoded_allocation() {
++    let request = encoded_request(&json!({"max_output_tokens":64,"truncation":"disabled"}));
++    let original = match request.body.as_ref().expect("encoded body") {
++        RequestBody::EncodedJson(body) => body.as_bytes().as_ptr(),
++        _ => panic!("actual encoded body required"),
++    };
++    let frozen = FrozenResponsesRequest::freeze(request, output_limit()).expect("should freeze");
++    let clone = frozen.prepared_request();
++    let clone_body = clone
++        .prepare_body_for_send()
++        .expect("prepared")
++        .body
++        .expect("body");
++    assert_eq!(frozen.body_bytes().as_ptr(), original);
++    assert_eq!(clone_body.as_ptr(), original);
++    let built = built_request(&frozen);
++    assert_eq!(
++        built
++            .body()
++            .and_then(reqwest::Body::as_bytes)
++            .map(<[u8]>::as_ptr),
++        Some(original)
++    );
++    assert_eq!(
++        frozen.claim(&built, clone.response_body_limit_bytes),
++        Ok(())
++    );
++    assert_eq!(
++        frozen.claim(&built, clone.response_body_limit_bytes),
++        Err(FrozenRequestError::AlreadyClaimed)
++    );
++}
++
++#[test]
++fn frozen_responses_request_rejects_missing_ambiguous_or_changed_output_limits() {
++    for body in [
++        json!({"truncation":"disabled"}),
++        json!({"max_output_tokens":0,"truncation":"disabled"}),
++        json!({"max_output_tokens":65,"truncation":"disabled"}),
++        json!({"max_output_tokens":"64","truncation":"disabled"}),
++        json!({"max_output_tokens":64,"truncation":"auto"}),
++        json!({"max_output_tokens":64}),
++        json!([64, "disabled"]),
++    ] {
++        assert_eq!(
++            FrozenResponsesRequest::freeze(encoded_request(&body), output_limit()).err(),
++            Some(FrozenRequestError::OutputLimit)
++        );
++    }
++}
++
++struct DuplicateNames;
++
++impl Serialize for DuplicateNames {
++    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
++        let mut map = serializer.serialize_map(Some(2))?;
++        map.serialize_entry("content", "first")?;
++        map.serialize_entry("content", "second")?;
++        map.end()
++    }
++}
++
++#[test]
++fn frozen_responses_request_rejects_duplicate_names_inside_real_serialized_input() {
++    #[derive(Serialize)]
++    struct ActualBody {
++        max_output_tokens: u64,
++        truncation: &'static str,
++        input: [DuplicateNames; 1],
++    }
++    let request = encoded_request(&ActualBody {
++        max_output_tokens: 64,
++        truncation: "disabled",
++        input: [DuplicateNames],
++    });
++    assert_eq!(
++        FrozenResponsesRequest::freeze(request, output_limit()).err(),
++        Some(FrozenRequestError::OutputLimit)
++    );
++}
++
++#[test]
++fn frozen_responses_request_excludes_raw_json_compression_and_unsafe_destination_shapes() {
++    let good = frozen_request().prepared_request();
++    let mut json_body = good.clone();
++    json_body.body = Some(RequestBody::Json(
++        json!({"max_output_tokens":64,"truncation":"disabled"}),
++    ));
++    let mut raw_body = good.clone();
++    raw_body.body = Some(RequestBody::Raw(bytes::Bytes::copy_from_slice(
++        frozen_request().body_bytes(),
++    )));
++    let mut compressed = good.clone();
++    compressed.compression = RequestCompression::Zstd;
++    let mut content_encoding = good.clone();
++    content_encoding.headers.insert(
++        http::header::CONTENT_ENCODING,
++        http::HeaderValue::from_static("zstd"),
++    );
++    let mut requests = vec![json_body, raw_body, compressed, content_encoding];
++    for (header, value) in [
++        (http::header::HOST, "other.invalid"),
++        (http::header::CONTENT_LENGTH, "1"),
++        (http::header::TRANSFER_ENCODING, "gzip"),
++        (http::header::CONTENT_TYPE, "text/plain"),
++    ] {
++        let mut request = good.clone();
++        request.headers.insert(
++            header,
++            http::HeaderValue::from_str(value).expect("valid header"),
++        );
++        requests.push(request);
++    }
++    let mut missing_accept = good.clone();
++    missing_accept.headers.remove(http::header::ACCEPT);
++    requests.push(missing_accept);
++    let mut duplicate_content_type = good.clone();
++    duplicate_content_type.headers.append(
++        http::header::CONTENT_TYPE,
++        http::HeaderValue::from_static("text/plain"),
++    );
++    requests.push(duplicate_content_type);
++    for url in [
++        "http://example.test/v1/responses",
++        "https://user:pass@example.test/v1/responses",
++        "https://example.test/v1/responses?redirect=other",
++        "https://example.test/v1/responses#fragment",
++        "https://example.test/v1/compact",
++    ] {
++        let mut request = good.clone();
++        request.url = url.to_string();
++        requests.push(request);
++    }
++    for request in requests {
++        assert_eq!(
++            FrozenResponsesRequest::freeze(request, output_limit()).err(),
++            Some(FrozenRequestError::Unsupported)
++        );
++    }
++}
++
++#[test]
++fn frozen_responses_request_concurrent_clones_share_exactly_one_claim() {
++    let frozen = Arc::new(frozen_request());
++    let barrier = Arc::new(Barrier::new(16));
++    let threads: Vec<_> = (0..16)
++        .map(|_| {
++            let frozen = Arc::clone(&frozen);
++            let barrier = Arc::clone(&barrier);
++            std::thread::spawn(move || {
++                let built = built_request(&frozen);
++                barrier.wait();
++                frozen.claim(&built, frozen.request.response_body_limit_bytes)
++            })
++        })
++        .collect();
++    let results: Vec<_> = threads
++        .into_iter()
++        .map(|thread| thread.join().expect("thread completes"))
++        .collect();
++    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
++    assert_eq!(
++        results
++            .iter()
++            .filter(|result| **result == Err(FrozenRequestError::AlreadyClaimed))
++            .count(),
++        15
++    );
++}
++
++#[tokio::test]
++async fn frozen_responses_request_transport_rejects_mutations_before_any_network_send() {
++    for change in [
++        "method",
++        "url",
++        "headers",
++        "body",
++        "timeout",
++        "response cap",
++        "reserialized bytes",
++    ] {
++        let frozen = Arc::new(frozen_request());
++        let transport = ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen))
++            .expect("client builds without sending");
++        let mut request = frozen.prepared_request();
++        match change {
++            "method" => request.method = Method::GET,
++            "url" => request.url = "https://changed.invalid/v1/responses".to_string(),
++            "headers" => {
++                request.headers.insert(
++                    http::header::AUTHORIZATION,
++                    http::HeaderValue::from_static("Bearer changed"),
++                );
++            }
++            "body" => {
++                request.body = Some(RequestBody::EncodedJson(
++                    EncodedJsonBody::encode(
++                        &json!({"max_output_tokens":128,"truncation":"disabled"}),
++                    )
++                    .expect("encode mutation"),
++                ))
++            }
++            "timeout" => request.timeout = Some(Duration::from_secs(1)),
++            "response cap" => request.response_body_limit_bytes = Some(1),
++            "reserialized bytes" => {
++                let value: serde_json::Value =
++                    serde_json::from_slice(frozen.body_bytes()).expect("valid original JSON");
++                let body = EncodedJsonBody::encode(&value).expect("reserialize same fields");
++                assert_eq!(body.as_bytes(), frozen.body_bytes());
++                request.body = Some(RequestBody::EncodedJson(body));
++            }
++            _ => unreachable!("closed cases"),
++        }
++        let error = transport
++            .stream(request)
++            .await
++            .err()
++            .expect("must reject before DNS or HTTP");
++        assert!(
++            matches!(error, TransportError::Build(ref message) if message == "CODEX_FROZEN_REQUEST_CHANGED")
++        );
++        let error = transport
++            .clone()
++            .execute(frozen.prepared_request())
++            .await
++            .err()
++            .expect("mismatch burns capability");
++        assert!(
++            matches!(error, TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++        );
++    }
++}
++
++#[tokio::test]
++async fn frozen_responses_request_new_transport_cannot_refund_a_claimed_capability() {
++    let frozen = Arc::new(frozen_request());
++    assert_eq!(
++        frozen.claim(
++            &built_request(&frozen),
++            frozen.request.response_body_limit_bytes
++        ),
++        Ok(())
++    );
++    // Simulate any failure/cancellation after claim without making a connection.
++    let first =
++        ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen)).expect("client builds");
++    let second = ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen))
++        .expect("another client builds");
++    for transport in [first, second] {
++        let error = transport
++            .execute(frozen.prepared_request())
++            .await
++            .err()
++            .expect("spent capability rejects before network");
++        assert!(
++            matches!(error, TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++        );
++    }
++}
++
++#[tokio::test]
++async fn frozen_responses_request_connection_failure_does_not_refund_the_real_sender() {
++    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("owned port binds");
++    let address = listener.local_addr().expect("owned address");
++    drop(listener);
++    let mut request = frozen_request().prepared_request();
++    request.url = format!("https://{address}/v1/responses");
++    request.timeout = Some(Duration::from_secs(2));
++    let frozen = Arc::new(
++        FrozenResponsesRequest::freeze(request, output_limit()).expect("freeze owned URL"),
++    );
++    let transport =
++        ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen)).expect("client builds");
++    let error = transport
++        .execute(frozen.prepared_request())
++        .await
++        .err()
++        .expect("owned closed port fails");
++    assert!(matches!(error, TransportError::Connection(_)));
++    let retry = ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen))
++        .expect("client rebuilds");
++    let error = retry
++        .stream(frozen.prepared_request())
++        .await
++        .err()
++        .expect("consumed gate survives rebuilt sender");
++    assert!(
++        matches!(error, TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++    );
++}
