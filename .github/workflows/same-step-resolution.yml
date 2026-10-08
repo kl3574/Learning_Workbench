@@ -1,0 +1,101 @@
+name: Same-Step source38 and existing Clippy
+on:
+  push:
+    branches:
+      - feat/M6.3-g2-same-step-remote-validation
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  same-step-source38-and-clippy:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/feat/M6.3-g2-same-step-remote-validation' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - name: Acquire fixed official source archive
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+          manifest = json.loads(Path('scripts/codex-turn/same-step-resolution-source.json').read_text())
+          archive = Path(os.environ['RUNNER_TEMP']) / 'same-step-a956.tar.gz'
+          receipt = {'url': manifest['source']['archive_url'], 'started_at_utc': datetime.now(timezone.utc).isoformat(), 'status': 'RUNNING'}
+          try:
+              with urllib.request.urlopen(receipt['url'], timeout=60) as response, archive.open('xb') as output:
+                  receipt.update(http_status=response.status, final_url=response.geturl())
+                  budget = 20_000_000
+                  while chunk := response.read(min(1_048_576, budget + 1)):
+                      if len(chunk) > budget:
+                          raise ValueError('Fixed source download exceeds byte budget')
+                      output.write(chunk)
+                      budget -= len(chunk)
+              receipt.update(bytes=archive.stat().st_size, sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+              if receipt['sha256'] != '351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927':
+                  raise ValueError('Fixed source checksum mismatch')
+              receipt['status'] = 'PASS'
+          except Exception:
+              receipt['status'] = 'FAIL'
+              raise
+          finally:
+              receipt['ended_at_utc'] = datetime.now(timezone.utc).isoformat()
+              (archive.parent / 'same-step-source-acquisition.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY
+      - name: Prepare exact same-Step source and test-only metadata
+        run: >-
+          python scripts/codex-turn/replay_same_step_resolution.py --mode prepare
+          --archive "$RUNNER_TEMP/same-step-a956.tar.gz"
+          --output-dir "$RUNNER_TEMP/same-step-prepare"
+      - name: Install checksum-pinned official Rust1.95 in owned prefix
+        run: >-
+          python scripts/codex-turn/replay_same_step_resolution.py --mode provision
+          --output-dir "$RUNNER_TEMP/same-step-provision"
+      - name: Fetch original locked dependencies as explicit setup
+        run: |
+          mkdir "$RUNNER_TEMP/same-step-cargo"
+          python scripts/codex-turn/replay_same_step_resolution.py --mode fetch \
+            --prepared-dir "$RUNNER_TEMP/same-step-prepare" \
+            --toolchain-dir "$RUNNER_TEMP/same-step-provision/toolchain" \
+            --cargo-home "$RUNNER_TEMP/same-step-cargo" \
+            --output-dir "$RUNNER_TEMP/same-step-fetch"
+      - name: Run only the fixed9+22+7 tests and existing two-package Clippy strictly locked and offline
+        run: >-
+          python scripts/codex-turn/replay_same_step_resolution.py --mode test
+          --prepared-dir "$RUNNER_TEMP/same-step-prepare"
+          --toolchain-dir "$RUNNER_TEMP/same-step-provision/toolchain"
+          --cargo-home "$RUNNER_TEMP/same-step-cargo"
+          --output-dir "$RUNNER_TEMP/same-step-test"
+      # Only declared command/graph receipts; no source trees, caches, libraries,
+      # databases, environment dump, original private failures or model material.
+      - name: Retain actual setup and selected tests and Clippy receipts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: same-step-source38-and-clippy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/same-step-source-acquisition.json
+            ${{ runner.temp }}/same-step-prepare/report.json
+            ${{ runner.temp }}/same-step-prepare/receipts/
+            ${{ runner.temp }}/same-step-prepare/source-before-files.json
+            ${{ runner.temp }}/same-step-prepare/test-before-files.json
+            ${{ runner.temp }}/same-step-provision/report.json
+            ${{ runner.temp }}/same-step-provision/receipts/
+            ${{ runner.temp }}/same-step-fetch/report.json
+            ${{ runner.temp }}/same-step-fetch/receipts/
+            ${{ runner.temp }}/same-step-fetch/source-after-files.json
+            ${{ runner.temp }}/same-step-fetch/test-after-files.json
+            ${{ runner.temp }}/same-step-test/report.json
+            ${{ runner.temp }}/same-step-test/receipts/
+            ${{ runner.temp }}/same-step-test/source-after-files.json
+            ${{ runner.temp }}/same-step-test/test-after-files.json
+          retention-days: 3
+          if-no-files-found: warn
+          include-hidden-files: false

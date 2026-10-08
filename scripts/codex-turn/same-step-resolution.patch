@@ -1,0 +1,1401 @@
+diff --git a/codex-rs/models-manager/src/manager.rs b/codex-rs/models-manager/src/manager.rs
+--- a/codex-rs/models-manager/src/manager.rs
++++ b/codex-rs/models-manager/src/manager.rs
+@@ -243,6 +243,20 @@
+         )
+     }
+
++    /// Opt-in retention preserves an unobserved implementation's ordinary getter
++    /// exactly once. It never manufactures a resolution witness for that getter.
++    fn get_model_info_with_resolution<'a>(
++        &'a self,
++        model: &'a str,
++        config: &'a ModelsManagerConfig,
++    ) -> ModelsManagerFuture<'a, retained_model_resolution::RetainedModelSelection> {
++        Box::pin(async move {
++            retained_model_resolution::RetainedModelSelection::unobserved(
++                self.get_model_info(model, config).await,
++            )
++        })
++    }
++
+     /// Refresh models if the provided ETag differs from the cached ETag.
+     ///
+     /// Uses `Online` strategy to fetch latest models when ETags differ.
+@@ -475,6 +489,20 @@
+
+     fn list_collaboration_modes(&self) -> Vec<CollaborationModeMask> {
+         builtin_collaboration_mode_presets()
++    }
++
++    #[tracing::instrument(name = "get_model_info", skip_all, fields(model))]
++    fn get_model_info_with_resolution<'a>(
++        &'a self,
++        model: &'a str,
++        config: &'a ModelsManagerConfig,
++    ) -> ModelsManagerFuture<'a, retained_model_resolution::RetainedModelSelection> {
++        Box::pin(async move {
++            retained_model_resolution::RetainedModelSelection::from_resolution(
++                self.get_model_info_with_retained_resolution(model, config)
++                    .await,
++            )
++        })
+     }
+
+     fn refresh_if_new_etag(
+@@ -921,3 +949,6 @@
+ #[cfg(test)]
+ #[path = "manager_tests.rs"]
+ mod tests;
++
++#[path = "retained_model_resolution.rs"]
++pub mod retained_model_resolution;
+diff --git a/codex-rs/models-manager/src/retained_model_resolution.rs b/codex-rs/models-manager/src/retained_model_resolution.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/models-manager/src/retained_model_resolution.rs
+@@ -0,0 +1,247 @@
++//! Mechanical resolution observations, not catalog authority or request qualification.
++//!
++//! Only the owning manager constructs a record. Ordinary `get_model_info` is unchanged;
++//! this opt-in path retains the typed catalog entry before slug rewriting and overrides.
++
++use super::CatalogSource;
++use super::OpenAiModelsManager;
++use super::find_model_by_longest_prefix;
++use super::find_model_by_namespaced_suffix;
++use crate::ModelsManagerConfig;
++use crate::model_info;
++use chrono::DateTime;
++use chrono::Utc;
++use codex_protocol::config_types::Personality;
++use codex_protocol::openai_models::ModelInfo;
++use std::sync::Arc;
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub(crate) enum ModelMatchRule {
++    LongestPrefix,
++    NamespacedSuffix,
++    ExplicitProviderExact,
++    UnmatchedFallback,
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub(crate) enum CatalogOrigin {
++    IdentityMatchedMemoryEntry,
++    BundledIdentityFallback,
++    EmptyExplicitProviderFallback,
++}
++
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum ResolutionQualification {
++    Unqualified,
++}
++
++/// The memory entry may originate from initialization, cache, or an endpoint.
++/// These observed fields do not establish that origin, a model version, or authority.
++/// Opaque credential identities are compared by the manager and are not copied here.
++pub(crate) struct CatalogObservation {
++    origin: CatalogOrigin,
++    entry_fetched_at: Option<DateTime<Utc>>,
++    entry_etag: Option<String>,
++    entry_client_version: Option<String>,
++}
++
++impl CatalogObservation {
++    pub(crate) fn origin(&self) -> CatalogOrigin {
++        self.origin
++    }
++
++    pub(crate) fn entry_fetched_at(&self) -> Option<&DateTime<Utc>> {
++        self.entry_fetched_at.as_ref()
++    }
++
++    pub(crate) fn entry_etag(&self) -> Option<&str> {
++        self.entry_etag.as_deref()
++    }
++
++    pub(crate) fn entry_client_version(&self) -> Option<&str> {
++        self.entry_client_version.as_deref()
++    }
++}
++
++/// Owned typed observations. No public constructor, serde representation, or Debug output.
++/// In particular, a false serde-skipped fallback flag is never treated as qualification.
++/// This record does not bind a Step, detect later owner changes, or authorize any send.
++pub struct RetainedModelResolution {
++    requested_model: String,
++    match_rule: ModelMatchRule,
++    original_catalog_model: Option<ModelInfo>,
++    before_overrides: ModelInfo,
++    resolved_model: Arc<ModelInfo>,
++    personality: Option<Personality>,
++    catalog: CatalogObservation,
++}
++
++impl RetainedModelResolution {
++    pub(crate) fn requested_model(&self) -> &str {
++        &self.requested_model
++    }
++
++    pub(crate) fn match_rule(&self) -> ModelMatchRule {
++        self.match_rule
++    }
++
++    pub(crate) fn original_catalog_model(&self) -> Option<&ModelInfo> {
++        self.original_catalog_model.as_ref()
++    }
++
++    pub(crate) fn before_overrides(&self) -> &ModelInfo {
++        &self.before_overrides
++    }
++
++    pub(crate) fn resolved_model(&self) -> &ModelInfo {
++        &self.resolved_model
++    }
++
++    pub(crate) fn catalog(&self) -> &CatalogObservation {
++        &self.catalog
++    }
++
++    pub fn authoritative_model_version(&self) -> Option<&str> {
++        None
++    }
++
++    pub fn qualification(&self) -> ResolutionQualification {
++        ResolutionQualification::Unqualified
++    }
++}
++
++/// One owning selection and the exact resolved Arc produced by it. Cross-crate
++/// callers can retain or inspect this pair, but cannot construct or splice it.
++/// Cloning only retains the same Arc identities; it does not perform a lookup.
++#[derive(Clone)]
++pub struct RetainedModelSelection {
++    model_info: Arc<ModelInfo>,
++    resolution: Option<Arc<RetainedModelResolution>>,
++}
++
++impl RetainedModelSelection {
++    pub(super) fn unobserved(model_info: ModelInfo) -> Self {
++        Self {
++            model_info: Arc::new(model_info),
++            resolution: None,
++        }
++    }
++
++    pub(super) fn from_resolution(resolution: RetainedModelResolution) -> Self {
++        Self {
++            model_info: Arc::clone(&resolution.resolved_model),
++            resolution: Some(Arc::new(resolution)),
++        }
++    }
++
++    pub fn model_info(&self) -> &Arc<ModelInfo> {
++        &self.model_info
++    }
++
++    /// None is distinct from a mechanically observed but unqualified resolution.
++    pub fn resolution(&self) -> Option<&Arc<RetainedModelResolution>> {
++        self.resolution.as_ref()
++    }
++
++    pub fn matches_model_info(&self, model_info: &Arc<ModelInfo>) -> bool {
++        Arc::ptr_eq(&self.model_info, model_info)
++            && self
++                .resolution
++                .as_ref()
++                .is_some_and(|resolution| Arc::ptr_eq(&resolution.resolved_model, model_info))
++    }
++
++    pub fn matches_request(&self, model: &str, personality: Option<Personality>) -> bool {
++        self.resolution.as_ref().is_some_and(|resolution| {
++            resolution.requested_model == model && resolution.personality == personality
++        })
++    }
++}
++
++impl OpenAiModelsManager {
++    /// Observe the original lookup without refreshing the catalog or resolving auth.
++    /// The original selected ModelInfo retains every typed field, including its raw
++    /// fallback marker, even when ordinary construction rewrites that marker to false.
++    pub(crate) async fn get_model_info_with_retained_resolution(
++        &self,
++        model: &str,
++        config: &ModelsManagerConfig,
++    ) -> RetainedModelResolution {
++        let (models, catalog) = {
++            let entry = self.remote_models.read().await;
++            if entry.identity.is_some() && entry.identity == self.endpoint_client.identity() {
++                (
++                    entry.models.clone(),
++                    CatalogObservation {
++                        origin: CatalogOrigin::IdentityMatchedMemoryEntry,
++                        entry_fetched_at: Some(entry.fetched_at),
++                        entry_etag: entry.etag.clone(),
++                        entry_client_version: entry.client_version.clone(),
++                    },
++                )
++            } else {
++                let origin = match &self.catalog_source {
++                    CatalogSource::Default => CatalogOrigin::BundledIdentityFallback,
++                    CatalogSource::ExplicitProvider(_) => {
++                        CatalogOrigin::EmptyExplicitProviderFallback
++                    }
++                };
++                (
++                    self.catalog_source.fallback_models().unwrap_or_default(),
++                    CatalogObservation {
++                        origin,
++                        entry_fetched_at: None,
++                        entry_etag: None,
++                        entry_client_version: None,
++                    },
++                )
++            }
++        };
++        let (match_rule, original_catalog_model) = match &self.catalog_source {
++            CatalogSource::Default => {
++                if let Some(candidate) = find_model_by_longest_prefix(model, &models) {
++                    (ModelMatchRule::LongestPrefix, Some(candidate))
++                } else if let Some(candidate) = find_model_by_namespaced_suffix(model, &models) {
++                    (ModelMatchRule::NamespacedSuffix, Some(candidate))
++                } else {
++                    (ModelMatchRule::UnmatchedFallback, None)
++                }
++            }
++            CatalogSource::ExplicitProvider(_) => {
++                if let Some(candidate) =
++                    models.into_iter().find(|candidate| candidate.slug == model)
++                {
++                    (ModelMatchRule::ExplicitProviderExact, Some(candidate))
++                } else {
++                    (ModelMatchRule::UnmatchedFallback, None)
++                }
++            }
++        };
++        let before_overrides = if let Some(original) = original_catalog_model.as_ref() {
++            ModelInfo {
++                slug: model.to_string(),
++                used_fallback_model_metadata: false,
++                ..original.clone()
++            }
++        } else {
++            model_info::model_info_from_slug(model)
++        };
++        let resolved_model = Arc::new(model_info::with_config_overrides(
++            before_overrides.clone(),
++            config,
++        ));
++        RetainedModelResolution {
++            requested_model: model.to_string(),
++            match_rule,
++            original_catalog_model,
++            before_overrides,
++            resolved_model,
++            personality: config.personality,
++            catalog,
++        }
++    }
++}
++
++#[cfg(test)]
++#[path = "retained_model_resolution_tests.rs"]
++mod tests;
+diff --git a/codex-rs/models-manager/src/retained_model_resolution_tests.rs b/codex-rs/models-manager/src/retained_model_resolution_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/models-manager/src/retained_model_resolution_tests.rs
+@@ -0,0 +1,387 @@
++//! Owned mechanical catalog fixtures; none supplies vendor or current-Step authority.
++use super::*;
++use crate::cache::ModelsCacheEntry;
++use crate::manager::ModelsEndpointClient;
++use crate::manager::ModelsEndpointFuture;
++use crate::manager::ModelsEndpointResponse;
++use crate::manager::ModelsManager;
++use codex_http_client::HttpClientFactory;
++use codex_protocol::error::Result as CoreResult;
++use codex_protocol::openai_models::ModelsResponse;
++use codex_protocol::openai_models::TruncationPolicyConfig;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++use std::sync::Arc;
++use std::sync::atomic::AtomicBool;
++use std::sync::atomic::Ordering;
++use tokio::sync::Mutex;
++use tokio::sync::RwLock;
++
++#[derive(Debug)]
++struct InertEndpoint;
++
++impl ModelsEndpointClient for InertEndpoint {
++    fn identity(&self) -> Option<String> {
++        Some("owned-fixture-provider".to_string())
++    }
++
++    fn has_command_auth(&self) -> bool {
++        panic!("resolution must not inspect command auth")
++    }
++
++    fn uses_codex_backend(&self) -> ModelsEndpointFuture<'_, bool> {
++        panic!("resolution must not resolve backend auth")
++    }
++
++    fn list_models<'a>(
++        &'a self,
++        _client_version: &'a str,
++        _http_client_factory: HttpClientFactory,
++    ) -> ModelsEndpointFuture<'a, CoreResult<ModelsEndpointResponse>> {
++        panic!("resolution must not refresh the catalog")
++    }
++}
++
++fn fixture_model(slug: &str, display: &str) -> ModelInfo {
++    serde_json::from_value(json!({
++        "slug": slug, "display_name": display, "description": "owned test fixture",
++        "default_reasoning_level": "medium", "supported_reasoning_levels": [],
++        "shell_type": "shell_command", "visibility": "list", "supported_in_api": true,
++        "priority": 0, "upgrade": null, "availability_nux": null,
++        "model_messages": {"instructions_template": "original", "instructions_variables": null},
++        "support_verbosity": false, "default_verbosity": null, "apply_patch_tool_type": null,
++        "truncation_policy": {"mode": "bytes", "limit": 10000},
++        "context_window": 2000, "max_context_window": 4000, "experimental_supported_tools": []
++    }))
++    .expect("valid owned ModelInfo fixture")
++}
++
++fn fixture_manager(models: Vec<ModelInfo>, catalog_source: CatalogSource) -> OpenAiModelsManager {
++    OpenAiModelsManager {
++        remote_models: RwLock::new(ModelsCacheEntry {
++            fetched_at: DateTime::<Utc>::MIN_UTC,
++            etag: Some("owned-fixture-etag".to_string()),
++            client_version: Some("owned-fixture-client-version".to_string()),
++            identity: Some("owned-fixture-provider".to_string()),
++            models,
++        }),
++        cache: None,
++        endpoint_client: Arc::new(InertEndpoint),
++        catalog_source,
++        api_key_model_discovery_enabled: AtomicBool::new(/*v*/ false),
++        auth_manager: None,
++    }
++}
++
++async fn compare_ordinary(
++    manager: &OpenAiModelsManager,
++    model: &str,
++    config: &ModelsManagerConfig,
++) -> RetainedModelResolution {
++    let ordinary = manager.get_model_info(model, config).await;
++    let retained = manager
++        .get_model_info_with_retained_resolution(model, config)
++        .await;
++    assert_eq!(retained.resolved_model(), &ordinary);
++    assert_eq!(retained.requested_model(), model);
++    assert_eq!(retained.authoritative_model_version(), None);
++    assert_eq!(
++        retained.qualification(),
++        ResolutionQualification::Unqualified
++    );
++    retained
++}
++
++#[tokio::test]
++async fn retains_longest_prefix_first_tie_and_raw_fallback_marker_before_rewrite() {
++    let short = fixture_model("gpt", "short");
++    let mut first = fixture_model("gpt-next", "first tie");
++    first.used_fallback_model_metadata = true;
++    let second = fixture_model("gpt-next", "second tie");
++    let manager = fixture_manager(vec![short, first.clone(), second], CatalogSource::Default);
++    let retained = compare_ordinary(&manager, "gpt-next-trial", &Default::default()).await;
++
++    assert_eq!(retained.match_rule(), ModelMatchRule::LongestPrefix);
++    assert_eq!(retained.original_catalog_model(), Some(&first));
++    let mut rewritten = first.clone();
++    rewritten.slug = "gpt-next-trial".to_string();
++    rewritten.used_fallback_model_metadata = false;
++    assert_eq!(retained.before_overrides(), &rewritten);
++    manager.remote_models.write().await.models.clear();
++    assert_eq!(retained.original_catalog_model(), Some(&first));
++    assert_eq!(retained.before_overrides(), &rewritten);
++}
++
++#[tokio::test]
++async fn namespaced_suffix_preserves_validation_and_whole_getter_results() {
++    let original = fixture_model("gpt", "suffix match");
++    let manager = fixture_manager(vec![original.clone()], CatalogSource::Default);
++    for requested in ["custom/gpt-trial", "custom-provider_2/gpt-trial"] {
++        let retained = compare_ordinary(&manager, requested, &Default::default()).await;
++        assert_eq!(retained.match_rule(), ModelMatchRule::NamespacedSuffix);
++        assert_eq!(retained.original_catalog_model(), Some(&original));
++    }
++    for requested in ["ns1/ns2/gpt", "/gpt", "bad.namespace/gpt", "space ns/gpt"] {
++        let retained = compare_ordinary(&manager, requested, &Default::default()).await;
++        assert_eq!(retained.match_rule(), ModelMatchRule::UnmatchedFallback);
++        assert_eq!(retained.original_catalog_model(), None);
++        assert!(retained.before_overrides().used_fallback_model_metadata);
++    }
++}
++
++#[tokio::test]
++async fn direct_prefix_remains_prior_to_namespaced_suffix() {
++    let direct = fixture_model("custom", "direct prefix");
++    let suffix = fixture_model("gpt", "suffix");
++    let manager = fixture_manager(vec![suffix, direct.clone()], CatalogSource::Default);
++    let retained = compare_ordinary(&manager, "custom/gpt-trial", &Default::default()).await;
++    assert_eq!(retained.match_rule(), ModelMatchRule::LongestPrefix);
++    assert_eq!(retained.original_catalog_model(), Some(&direct));
++}
++
++#[tokio::test]
++async fn explicit_provider_keeps_exact_matching_instead_of_prefix_or_namespace() {
++    let original = fixture_model("gpt", "exact only");
++    let manager = fixture_manager(
++        vec![original.clone()],
++        CatalogSource::ExplicitProvider(Mutex::new(())),
++    );
++    let retained = compare_ordinary(&manager, "gpt", &Default::default()).await;
++    assert_eq!(retained.match_rule(), ModelMatchRule::ExplicitProviderExact);
++    assert_eq!(retained.original_catalog_model(), Some(&original));
++    for requested in ["gpt-trial", "custom/gpt"] {
++        let retained = compare_ordinary(&manager, requested, &Default::default()).await;
++        assert_eq!(retained.match_rule(), ModelMatchRule::UnmatchedFallback);
++        assert_eq!(retained.original_catalog_model(), None);
++        assert!(retained.resolved_model().used_fallback_model_metadata);
++    }
++}
++
++#[tokio::test]
++async fn overrides_preserve_complete_original_and_pre_override_model_info() {
++    let original = fixture_model("gpt", "before overrides");
++    let manager = fixture_manager(vec![original.clone()], CatalogSource::Default);
++    let config = ModelsManagerConfig {
++        model_context_window: Some(9000),
++        model_auto_compact_token_limit: Some(1234),
++        tool_output_token_limit: Some(11),
++        base_instructions: Some("replacement instructions".to_string()),
++        model_catalog: Some(ModelsResponse {
++            models: vec![fixture_model(
++                "gpt",
++                "caller catalog is not this lookup source",
++            )],
++        }),
++        ..Default::default()
++    };
++    let retained = compare_ordinary(&manager, "gpt-trial", &config).await;
++    assert_eq!(retained.original_catalog_model(), Some(&original));
++    let mut before = original;
++    before.slug = "gpt-trial".to_string();
++    assert_eq!(retained.before_overrides(), &before);
++    let mut expected = before;
++    expected.context_window = Some(4000);
++    expected.auto_compact_token_limit = Some(1234);
++    expected.truncation_policy = TruncationPolicyConfig::bytes(/*limit*/ 44);
++    expected
++        .model_messages
++        .as_mut()
++        .expect("fixture messages")
++        .instructions_template = Some("replacement instructions".to_string());
++    assert_eq!(retained.resolved_model(), &expected);
++    assert_eq!(
++        retained.catalog().origin(),
++        CatalogOrigin::IdentityMatchedMemoryEntry
++    );
++    assert_eq!(retained.catalog().entry_etag(), Some("owned-fixture-etag"));
++    assert_eq!(
++        retained.catalog().entry_client_version(),
++        Some("owned-fixture-client-version")
++    );
++    assert_eq!(
++        retained.catalog().entry_fetched_at(),
++        Some(&DateTime::<Utc>::MIN_UTC)
++    );
++}
++
++#[tokio::test]
++async fn mismatched_or_missing_identity_does_not_retain_unused_entry_metadata() {
++    for catalog_source in [
++        CatalogSource::Default,
++        CatalogSource::ExplicitProvider(Mutex::new(())),
++    ] {
++        let original = fixture_model("owned-fixture-unavailable-model", "unused catalog");
++        let manager = fixture_manager(vec![original], catalog_source);
++        for identity in [Some("previous-fixture-provider".to_string()), None] {
++            manager.remote_models.write().await.identity = identity;
++            let retained = compare_ordinary(
++                &manager,
++                "owned-fixture-unavailable-model",
++                &Default::default(),
++            )
++            .await;
++            let expected_origin = match &manager.catalog_source {
++                CatalogSource::Default => CatalogOrigin::BundledIdentityFallback,
++                CatalogSource::ExplicitProvider(_) => CatalogOrigin::EmptyExplicitProviderFallback,
++            };
++            assert_eq!(retained.catalog().origin(), expected_origin);
++            assert_eq!(retained.catalog().entry_fetched_at(), None);
++            assert_eq!(retained.catalog().entry_etag(), None);
++            assert_eq!(retained.catalog().entry_client_version(), None);
++            assert_eq!(retained.original_catalog_model(), None);
++            assert_eq!(retained.match_rule(), ModelMatchRule::UnmatchedFallback);
++            assert!(retained.resolved_model().used_fallback_model_metadata);
++        }
++    }
++}
++
++#[tokio::test]
++async fn manager_pair_reuses_one_resolved_arc_and_rejects_equal_value_replacement() {
++    let manager = fixture_manager(
++        vec![fixture_model("gpt-5", "owned catalog")],
++        CatalogSource::Default,
++    );
++    let config = ModelsManagerConfig {
++        personality: Some(codex_protocol::config_types::Personality::Friendly),
++        model_context_window: Some(75_000),
++        ..Default::default()
++    };
++    let selected = manager
++        .get_model_info_with_resolution("gpt-5-extra", &config)
++        .await;
++    let cloned = selected.clone();
++    let resolution = selected.resolution().expect("owning manager record");
++    assert!(Arc::ptr_eq(
++        selected.model_info(),
++        &resolution.resolved_model
++    ));
++    assert!(Arc::ptr_eq(selected.model_info(), cloned.model_info()));
++    assert!(Arc::ptr_eq(
++        resolution,
++        cloned.resolution().expect("same record")
++    ));
++    assert!(selected.matches_model_info(selected.model_info()));
++    let equal_value = Arc::new(selected.model_info().as_ref().clone());
++    assert_eq!(equal_value.as_ref(), selected.model_info().as_ref());
++    assert!(!selected.matches_model_info(&equal_value));
++    assert!(selected.matches_request("gpt-5-extra", config.personality));
++    assert!(!selected.matches_request("gpt-5", config.personality));
++    assert!(!selected.matches_request("gpt-5-extra", /*personality*/ None));
++    assert_eq!(
++        selected.model_info().as_ref(),
++        &manager.get_model_info("gpt-5-extra", &config).await
++    );
++    assert_eq!(resolution.authoritative_model_version(), None);
++    assert_eq!(
++        resolution.qualification(),
++        ResolutionQualification::Unqualified
++    );
++}
++
++#[tokio::test]
++async fn equal_managers_and_catalog_update_cannot_replace_an_existing_pair() {
++    let first = fixture_manager(
++        vec![fixture_model("gpt-5", "same owned catalog")],
++        CatalogSource::Default,
++    );
++    let other = fixture_manager(
++        vec![fixture_model("gpt-5", "same owned catalog")],
++        CatalogSource::Default,
++    );
++    let selected = first
++        .get_model_info_with_resolution("gpt-5", &Default::default())
++        .await;
++    let other_selected = other
++        .get_model_info_with_resolution("gpt-5", &Default::default())
++        .await;
++    assert_eq!(
++        selected.model_info().as_ref(),
++        other_selected.model_info().as_ref()
++    );
++    assert!(!selected.matches_model_info(other_selected.model_info()));
++    assert!(!Arc::ptr_eq(
++        selected.resolution().expect("first"),
++        other_selected.resolution().expect("other")
++    ));
++    let before = selected.model_info().context_window;
++    first.remote_models.write().await.models[0].context_window = Some(123_456);
++    let next = first
++        .get_model_info_with_resolution("gpt-5", &Default::default())
++        .await;
++    assert_eq!(selected.model_info().context_window, before);
++    assert_eq!(next.model_info().context_window, Some(123_456));
++    assert!(!selected.matches_model_info(next.model_info()));
++    assert!(!Arc::ptr_eq(
++        selected.resolution().expect("old"),
++        next.resolution().expect("new")
++    ));
++    assert_eq!(
++        next.resolution()
++            .expect("new")
++            .authoritative_model_version(),
++        None
++    );
++}
++
++#[derive(Debug)]
++struct UnobservedGetter {
++    inner: super::super::StaticModelsManager,
++    calls: std::sync::atomic::AtomicUsize,
++}
++
++impl ModelsManager for UnobservedGetter {
++    fn raw_model_catalog(
++        &self,
++        strategy: super::super::RefreshStrategy,
++        factory: HttpClientFactory,
++    ) -> super::super::ModelsManagerFuture<'_, codex_protocol::openai_models::ModelsResponse> {
++        self.inner.raw_model_catalog(strategy, factory)
++    }
++    fn get_remote_models(&self) -> super::super::ModelsManagerFuture<'_, Vec<ModelInfo>> {
++        self.inner.get_remote_models()
++    }
++    fn try_get_remote_models(&self) -> Result<Vec<ModelInfo>, tokio::sync::TryLockError> {
++        self.inner.try_get_remote_models()
++    }
++    fn auth_manager(&self) -> Option<&codex_login::AuthManager> {
++        None
++    }
++    fn list_collaboration_modes(&self) -> Vec<codex_protocol::config_types::CollaborationModeMask> {
++        self.inner.list_collaboration_modes()
++    }
++    fn get_model_info<'a>(
++        &'a self,
++        model: &'a str,
++        config: &'a ModelsManagerConfig,
++    ) -> super::super::ModelsManagerFuture<'a, ModelInfo> {
++        self.calls.fetch_add(1, Ordering::SeqCst);
++        self.inner.get_model_info(model, config)
++    }
++    fn refresh_if_new_etag(
++        &self,
++        etag: String,
++        factory: HttpClientFactory,
++    ) -> super::super::ModelsManagerFuture<'_, ()> {
++        self.inner.refresh_if_new_etag(etag, factory)
++    }
++}
++
++#[tokio::test]
++async fn default_retained_trait_calls_the_original_getter_once_without_fabricating_record() {
++    let manager = UnobservedGetter {
++        inner: super::super::StaticModelsManager::new(
++            /*auth_manager*/ None,
++            codex_protocol::openai_models::ModelsResponse {
++                models: vec![fixture_model("gpt-5", "owned static catalog")],
++            },
++        ),
++        calls: std::sync::atomic::AtomicUsize::new(0),
++    };
++    let selected = manager
++        .get_model_info_with_resolution("gpt-5", &Default::default())
++        .await;
++    assert_eq!(manager.calls.load(Ordering::SeqCst), 1);
++    assert!(selected.resolution().is_none());
++    assert!(!selected.matches_model_info(selected.model_info()));
++    assert!(!selected.matches_request("gpt-5", /*personality*/ None));
++}
+diff --git a/codex-rs/core/src/session/step_settings.rs b/codex-rs/core/src/session/step_settings.rs
+--- a/codex-rs/core/src/session/step_settings.rs
++++ b/codex-rs/core/src/session/step_settings.rs
+@@ -6,6 +6,8 @@
+ use codex_config::ConfigRequirements;
+ use codex_models_manager::ModelsManagerConfig;
+ use codex_models_manager::manager::ModelsManager;
++use codex_models_manager::manager::retained_model_resolution::RetainedModelResolution;
++use codex_models_manager::manager::retained_model_resolution::RetainedModelSelection;
+ use codex_otel::SessionTelemetry;
+ use codex_protocol::config_types::ApprovalsReviewer;
+ use codex_protocol::config_types::CollaborationMode;
+@@ -16,6 +18,7 @@
+ use codex_protocol::openai_models::ModelInfo;
+ use codex_protocol::openai_models::ReasoningEffort;
+ use codex_protocol::protocol::AskForApproval;
++use std::fmt;
+ use std::sync::Arc;
+
+ /// Model and execution settings selected for an individual model step within
+@@ -37,12 +40,13 @@
+ ///
+ /// One snapshot may produce several fresh `StepContext`s. Replacing the
+ /// snapshot does not change steps or actions that have already captured it.
+-#[derive(Clone, Debug)]
++#[derive(Clone)]
+ pub(crate) struct ResolvedStepSettings {
+     /// Inputs for later sparse patches. Unset defaults and unsupported requested
+     /// tiers must not be reconstructed from the effective values below.
+     selected: Arc<StepSettings>,
+     pub(crate) model_info: Arc<ModelInfo>,
++    model_selection: Option<RetainedModelSelection>,
+     /// Effective request summary: the configured value or the pinned model's default.
+     pub(crate) reasoning_summary: ReasoningSummary,
+     /// Tier sent on requests, filtered by feature and model support.
+@@ -50,6 +54,23 @@
+     /// MCP historically follows refreshed thread defaults. Preserve that behavior
+     /// for older clients until this turn receives an explicit live reviewer update.
+     pub(crate) mcp_approvals_reviewer_override: Option<ApprovalsReviewer>,
++}
++
++// Keep ordinary diagnostics while never formatting opaque source records.
++impl fmt::Debug for ResolvedStepSettings {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        f.debug_struct("ResolvedStepSettings")
++            .field("selected", &self.selected)
++            .field("model_info", &self.model_info)
++            .field("reasoning_summary", &self.reasoning_summary)
++            .field("service_tier", &self.service_tier)
++            .field(
++                "mcp_approvals_reviewer_override",
++                &self.mcp_approvals_reviewer_override,
++            )
++            .field("model_selection", &"<opaque>")
++            .finish()
++    }
+ }
+
+ impl ResolvedStepSettings {
+@@ -70,10 +91,59 @@
+         Self {
+             selected,
+             model_info,
++            model_selection: None,
+             reasoning_summary,
+             service_tier,
+             mcp_approvals_reviewer_override: None,
+         }
++    }
++
++    /// Consumes a manager-owned pair. Ordinary values remain unchanged even when
++    /// the implementation supplies no provenance; native capture rejects None.
++    pub(super) fn from_model_selection(
++        selected: Arc<StepSettings>,
++        selection: RetainedModelSelection,
++        fast_mode_enabled: bool,
++    ) -> Self {
++        let mut settings = Self::new(
++            selected,
++            Arc::clone(selection.model_info()),
++            fast_mode_enabled,
++        );
++        settings.model_selection = Some(selection);
++        settings
++    }
++
++    pub(super) fn retained_model_resolution(&self) -> Option<&Arc<RetainedModelResolution>> {
++        let selection = self.model_selection.as_ref()?;
++        if !selection.matches_model_info(&self.model_info)
++            || !selection.matches_request(
++                self.selected.collaboration_mode.model(),
++                self.selected.personality,
++            )
++        {
++            return None;
++        }
++        selection.resolution()
++    }
++
++    /// This owner can carry its pair across edits that do not select another
++    /// model/personality. No record is joined to a caller-supplied ModelInfo.
++    /// The new settings identity still invalidates an earlier native capture.
++    pub(super) fn with_selected_preserving_model(
++        &self,
++        selected: Arc<StepSettings>,
++        fast_mode_enabled: bool,
++    ) -> Self {
++        let keep_selection = selected.collaboration_mode.model()
++            == self.selected.collaboration_mode.model()
++            && selected.personality == self.selected.personality
++            && self.retained_model_resolution().is_some();
++        let mut next = Self::new(selected, Arc::clone(&self.model_info), fast_mode_enabled);
++        if keep_selection {
++            next.model_selection = self.model_selection.clone();
++        }
++        next
+     }
+
+     pub(crate) fn reasoning_effort(&self) -> Option<&ReasoningEffort> {
+@@ -132,15 +202,15 @@
+         fast_mode_enabled: bool,
+     ) -> ConstraintResult<Self> {
+         let selected = self.selected.apply(update, constraints)?;
+-        let model_info = if selected.collaboration_mode.model()
++        let mut next = if selected.collaboration_mode.model()
+             == self.selected.collaboration_mode.model()
+             && selected.personality == self.selected.personality
+         {
+-            Arc::clone(&self.model_info)
++            self.with_selected_preserving_model(Arc::new(selected), fast_mode_enabled)
+         } else {
+-            Arc::new(selected.resolve_model_info(models_manager, overrides).await)
++            let selection = selected.resolve_model_info(models_manager, overrides).await;
++            Self::from_model_selection(Arc::new(selected), selection, fast_mode_enabled)
+         };
+-        let mut next = Self::new(Arc::new(selected), model_info, fast_mode_enabled);
+         next.mcp_approvals_reviewer_override = update
+             .approvals_reviewer
+             .or(self.mcp_approvals_reviewer_override);
+@@ -246,10 +316,10 @@
+         &self,
+         models_manager: &dyn ModelsManager,
+         overrides: &ModelInfoOverrides,
+-    ) -> ModelInfo {
++    ) -> RetainedModelSelection {
+         let config = overrides.models_manager_config(self.personality);
+         models_manager
+-            .get_model_info(self.collaboration_mode.model(), &config)
++            .get_model_info_with_resolution(self.collaboration_mode.model(), &config)
+             .await
+     }
+
+diff --git a/codex-rs/core/src/session/step_settings_tests.rs b/codex-rs/core/src/session/step_settings_tests.rs
+--- a/codex-rs/core/src/session/step_settings_tests.rs
++++ b/codex-rs/core/src/session/step_settings_tests.rs
+@@ -473,7 +473,10 @@
+             .await;
+         let resolved = settings
+             .resolve_model_info(&models_manager, &overrides)
+-            .await;
++            .await
++            .model_info()
++            .as_ref()
++            .clone();
+         assert_eq!(resolved, legacy);
+         assert_eq!(
+             render_model_instructions(&resolved),
+diff --git a/codex-rs/core/src/session/turn_context.rs b/codex-rs/core/src/session/turn_context.rs
+--- a/codex-rs/core/src/session/turn_context.rs
++++ b/codex-rs/core/src/session/turn_context.rs
+@@ -634,9 +634,10 @@
+     ) -> Self {
+         let mut config = (*self.config).clone();
+         config.model = Some(model.clone());
+-        let model_info = models_manager
+-            .get_model_info(model.as_str(), &config.to_models_manager_config())
++        let model_selection = models_manager
++            .get_model_info_with_resolution(model.as_str(), &config.to_models_manager_config())
+             .await;
++        let model_info = model_selection.model_info().as_ref();
+         let supported_reasoning_levels = model_info
+             .supported_reasoning_levels
+             .iter()
+@@ -665,16 +666,15 @@
+                 config.http_client_factory(),
+             )
+             .await;
+-        let model_info = Arc::new(model_info);
+         let mut selected = self.initial_settings.selected().clone();
+         selected.collaboration_mode = selected.collaboration_mode.with_updates(
+             Some(model),
+             Some(reasoning_effort),
+             /*developer_instructions*/ None,
+         );
+-        let step_settings = Arc::new(ResolvedStepSettings::new(
++        let step_settings = Arc::new(ResolvedStepSettings::from_model_selection(
+             Arc::new(selected),
+-            model_info,
++            model_selection,
+             config.features.enabled(Feature::FastMode),
+         ));
+         config.service_tier = step_settings.service_tier.clone();
+@@ -1171,20 +1171,21 @@
+             .map(TurnEnvironment::permission_profile)
+             .cloned()
+             .unwrap_or_else(|| session_configuration.permission_profile());
+-        let model_info = session_configuration
++        let model_selection = session_configuration
+             .step_settings
+             .resolve_model_info(
+                 self.services.models_manager.as_ref(),
+                 &session_configuration.model_info_overrides,
+             )
+             .await;
++        let model_info = model_selection.model_info().as_ref();
+         let multi_agent_version = match build_mode {
+             TurnContextBuildMode::Full => {
+                 // Only execution and initial context creation publish model metadata.
+                 self.services
+                     .thread_extension_data
+                     .insert(model_info.clone());
+-                self.resolve_multi_agent_version_for_model(&model_info, &per_turn_config)
++                self.resolve_multi_agent_version_for_model(model_info, &per_turn_config)
+             }
+             TurnContextBuildMode::StartupPrewarm | TurnContextBuildMode::InjectItems => {
+                 per_turn_config.multi_agent_version_for_model(
+@@ -1228,9 +1229,9 @@
+                 .snapshot_for_config(&skills_input, fs)
+                 .await
+         };
+-        let step_settings = Arc::new(ResolvedStepSettings::new(
++        let step_settings = Arc::new(ResolvedStepSettings::from_model_selection(
+             Arc::clone(&session_configuration.step_settings),
+-            Arc::new(model_info),
++            model_selection,
+             self.features.enabled(Feature::FastMode),
+         ));
+         let mut turn_context: TurnContext = Self::make_turn_context(
+diff --git a/codex-rs/core/src/session/mod.rs b/codex-rs/core/src/session/mod.rs
+--- a/codex-rs/core/src/session/mod.rs
++++ b/codex-rs/core/src/session/mod.rs
+@@ -3823,9 +3823,8 @@
+             if settings.selected().service_tier != root_service_tier {
+                 let mut selected = settings.selected().clone();
+                 selected.service_tier = root_service_tier;
+-                let mut inherited_settings = ResolvedStepSettings::new(
++                let mut inherited_settings = settings.with_selected_preserving_model(
+                     Arc::new(selected),
+-                    Arc::clone(&settings.model_info),
+                     self.features.enabled(Feature::FastMode),
+                 );
+                 inherited_settings.mcp_approvals_reviewer_override =
+diff --git a/codex-rs/core/src/session/retained_outbound_snapshot.rs b/codex-rs/core/src/session/retained_outbound_snapshot.rs
+--- a/codex-rs/core/src/session/retained_outbound_snapshot.rs
++++ b/codex-rs/core/src/session/retained_outbound_snapshot.rs
+@@ -12,6 +12,8 @@
+ use crate::responses_metadata::CodexResponsesRequestKind;
+ use crate::state::TaskKind;
+ use crate::state::TurnState;
++use codex_models_manager::manager::retained_model_resolution::ResolutionQualification;
++use codex_models_manager::manager::retained_model_resolution::RetainedModelResolution;
+ use codex_protocol::SessionId;
+ use codex_protocol::ThreadId;
+ use codex_protocol::openai_models::ModelInfo;
+@@ -29,6 +31,8 @@
+     WindowChanged,
+     MetadataChanged,
+     InvalidMetadata,
++    ModelResolutionMissingOrMismatch,
++    UnqualifiedModelResolution,
+ }
+
+ /// Retains actual native references; there is no dict or free-string constructor.
+@@ -41,6 +45,7 @@
+     thread_id: ThreadId,
+     sub_id: String,
+     model_info: Arc<ModelInfo>,
++    model_resolution: Arc<RetainedModelResolution>,
+     metadata: CodexResponsesMetadata,
+     facts: Value,
+     history_version: u64,
+@@ -49,6 +54,7 @@
+ }
+
+ struct Observation {
++    model_resolution: Arc<RetainedModelResolution>,
+     metadata: CodexResponsesMetadata,
+     facts: Value,
+     history_version: u64,
+@@ -63,6 +69,16 @@
+
+     pub(crate) fn model_info(&self) -> &Arc<ModelInfo> {
+         &self.model_info
++    }
++
++    /// Mechanical ownership is never catalog/version qualification. This method
++    /// cannot create InputProof, a dispatch permit or any sender authority.
++    pub(crate) fn require_qualified_model_resolution(&self) -> Result<(), NativeCaptureError> {
++        match self.model_resolution.qualification() {
++            ResolutionQualification::Unqualified => {
++                Err(NativeCaptureError::UnqualifiedModelResolution)
++            }
++        }
+     }
+
+     pub(crate) fn metadata(&self) -> &CodexResponsesMetadata {
+@@ -83,6 +99,11 @@
+             return Err(NativeCaptureError::HistoryChanged);
+         }
+         let observed = observe(session, step).await?;
++        if !Arc::ptr_eq(&self.model_info, &step.settings.model_info)
++            || !Arc::ptr_eq(&self.model_resolution, &observed.model_resolution)
++        {
++            return Err(NativeCaptureError::ModelResolutionMissingOrMismatch);
++        }
+         if !Arc::ptr_eq(&self.owner, &observed.owner) {
+             return Err(NativeCaptureError::OwnerMismatch);
+         }
+@@ -117,6 +138,7 @@
+             thread_id: self.thread_id(),
+             sub_id: step.turn.sub_id.clone(),
+             model_info: Arc::clone(&step.settings.model_info),
++            model_resolution: observed.model_resolution,
+             metadata: observed.metadata,
+             facts: observed.facts,
+             history_version: observed.history_version,
+@@ -136,6 +158,11 @@
+     if !Arc::ptr_eq(&step.settings, &step.turn.next_step_settings.load_full()) {
+         return Err(NativeCaptureError::SettingsChanged);
+     }
++    let model_resolution = Arc::clone(
++        step.settings
++            .retained_model_resolution()
++            .ok_or(NativeCaptureError::ModelResolutionMissingOrMismatch)?,
++    );
+     let window = session.current_window().await;
+     let (history_version, history_reset) = session.history_reset().await;
+     // This is the complete Session getter used by sampling, not the turn template.
+@@ -162,12 +189,20 @@
+     if !Arc::ptr_eq(&step.settings, &step.turn.next_step_settings.load_full()) {
+         return Err(NativeCaptureError::SettingsChanged);
+     }
++    if !step
++        .settings
++        .retained_model_resolution()
++        .is_some_and(|resolution| Arc::ptr_eq(resolution, &model_resolution))
++    {
++        return Err(NativeCaptureError::ModelResolutionMissingOrMismatch);
++    }
+     let facts =
+         capture_metadata_facts(&metadata).map_err(|_| NativeCaptureError::InvalidMetadata)?;
+     if !Arc::ptr_eq(&owner, &current_owner(session, step).await?) {
+         return Err(NativeCaptureError::OwnerMismatch);
+     }
+     Ok(Observation {
++        model_resolution,
+         metadata,
+         facts,
+         history_version,
+diff --git a/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs b/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
+--- a/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
++++ b/codex-rs/core/src/session/retained_outbound_snapshot_tests.rs
+@@ -22,9 +22,7 @@
+ use codex_login::CodexAuth;
+ use codex_login::auth::AgentIdentityAuthPolicy;
+ use codex_model_provider::create_model_provider;
+-use codex_models_manager::test_support::{
+-    construct_model_info_offline_for_tests, get_model_offline_for_tests,
+-};
++use codex_models_manager::test_support::get_model_offline_for_tests;
+ use codex_otel::TelemetryAuthMode;
+ use codex_prompts::render_model_instructions;
+ use codex_protocol::config_types::{CollaborationMode, ModeKind, Settings};
+@@ -81,6 +79,13 @@
+ async fn fixture_with_preempt(
+     preempt: Option<CancellationToken>,
+ ) -> (Arc<Session>, Arc<StepContext>, tempfile::TempDir) {
++    fixture_with_settings(preempt, |_| {}).await
++}
++
++async fn fixture_with_settings(
++    preempt: Option<CancellationToken>,
++    mutate_settings: impl FnOnce(&mut ResolvedStepSettings),
++) -> (Arc<Session>, Arc<StepContext>, tempfile::TempDir) {
+     let (tx_event, _rx_event) = async_channel::unbounded();
+     let codex_home = tempfile::tempdir().expect("create temp dir");
+     let mut loader = LoaderOverrides::without_managed_config_for_tests();
+@@ -118,8 +123,6 @@
+     let exec_policy = Arc::new(ExecPolicyManager::default());
+     let (agent_status_tx, _agent_status_rx) = watch::channel(AgentStatus::PendingInit);
+     let model = get_model_offline_for_tests(config.model.as_deref());
+-    let model_info =
+-        construct_model_info_offline_for_tests(model.as_str(), &config.to_models_manager_config());
+     let reasoning_effort = config.model_reasoning_effort.clone();
+     let collaboration_mode = CollaborationMode {
+         mode: ModeKind::Default,
+@@ -129,6 +132,23 @@
+             developer_instructions: None,
+         },
+     };
++    let selected_settings = Arc::new(StepSettings {
++        collaboration_mode,
++        reasoning_summary: config.model_reasoning_summary,
++        service_tier: None,
++        personality: config.personality,
++        approval_policy: config.permissions.approval_policy.clone(),
++        approvals_reviewer: config.approvals_reviewer,
++    });
++    // Exercise the actual Step resolver once against the existing owned provider's
++    // inert local catalog. It does not refresh or send a request, and cannot qualify.
++    let model_selection = selected_settings
++        .resolve_model_info(
++            models_manager.as_ref(),
++            &config.to_models_manager_config().into(),
++        )
++        .await;
++    let model_info = model_selection.model_info().as_ref();
+     let default_environments = vec![local(config.cwd.clone())];
+     let session_configuration = SessionConfiguration {
+         environments: default_environments.clone(),
+@@ -136,20 +156,13 @@
+             config.model_provider.clone(),
+             Some(Arc::clone(&auth_manager)),
+         ),
+-        step_settings: Arc::new(StepSettings {
+-            collaboration_mode,
+-            reasoning_summary: config.model_reasoning_summary,
+-            service_tier: None,
+-            personality: config.personality,
+-            approval_policy: config.permissions.approval_policy.clone(),
+-            approvals_reviewer: config.approvals_reviewer,
+-        }),
++        step_settings: Arc::clone(&selected_settings),
+         model_info_overrides: config.to_models_manager_config().into(),
+         developer_instructions: config.developer_instructions.clone(),
+         base_instructions: config
+             .base_instructions
+             .clone()
+-            .unwrap_or_else(|| render_model_instructions(&model_info)),
++            .unwrap_or_else(|| render_model_instructions(model_info)),
+         permission_profile_state: config.permissions.permission_profile_state().clone(),
+         allow_login_shell: config.permissions.allow_login_shell,
+         shell_environment_policy: config.permissions.shell_environment_policy.clone(),
+@@ -178,7 +191,7 @@
+     let session_telemetry = session_telemetry(
+         thread_id,
+         config.as_ref(),
+-        &model_info,
++        model_info,
+         session_configuration.session_source.clone(),
+     );
+
+@@ -358,11 +371,13 @@
+         session.services.shell_zsh_path.as_ref(),
+         session.services.main_execve_wrapper_exe.as_ref(),
+         per_turn_config,
+-        Arc::new(crate::session::step_settings::ResolvedStepSettings::new(
+-            Arc::clone(&session_configuration.step_settings),
+-            Arc::new(model_info),
+-            config.features.enabled(Feature::FastMode),
+-        )),
++        Arc::new(
++            crate::session::step_settings::ResolvedStepSettings::from_model_selection(
++                Arc::clone(&session_configuration.step_settings),
++                model_selection,
++                config.features.enabled(Feature::FastMode),
++            ),
++        ),
+         &models_manager,
+         /*network*/ None,
+         resolved_turn_environments,
+@@ -373,9 +388,11 @@
+     let session = Arc::new(session);
+     let turn = Arc::new(turn_context);
+     let mut step = StepContext::for_test(Arc::clone(&turn));
+-    Arc::get_mut(&mut step)
+-        .expect("owned unique step before registration")
+-        .preempt = preempt;
++    let unique_step = Arc::get_mut(&mut step).expect("owned unique step before registration");
++    unique_step.preempt = preempt;
++    let mut fixture_settings = unique_step.settings.as_ref().clone();
++    mutate_settings(&mut fixture_settings);
++    unique_step.settings = Arc::new(fixture_settings);
+     turn.next_step_settings.store(Arc::clone(&step.settings));
+     let active = ActiveTurn {
+         task: Some(RunningTask {
+@@ -743,3 +760,218 @@
+         before
+     );
+ }
++
++#[tokio::test]
++async fn native_capture_rejects_equal_value_model_arc_replacement() {
++    let (session, step, _home) = fixture_with_settings(/*preempt*/ None, |settings| {
++        let equal = Arc::new(settings.model_info.as_ref().clone());
++        assert_eq!(equal.as_ref(), settings.model_info.as_ref());
++        assert!(!Arc::ptr_eq(&equal, &settings.model_info));
++        settings.model_info = equal;
++    })
++    .await;
++    assert_eq!(
++        session.capture_retained_native_context(&step).await.err(),
++        Some(NativeCaptureError::ModelResolutionMissingOrMismatch)
++    );
++}
++
++#[tokio::test]
++async fn native_capture_rejects_missing_record_even_with_the_same_model_arc() {
++    let (session, step, _home) = fixture_with_settings(/*preempt*/ None, |settings| {
++        let same_model = Arc::clone(&settings.model_info);
++        *settings = ResolvedStepSettings::new(
++            Arc::new(settings.selected().clone()),
++            same_model,
++            /*fast_mode_enabled*/ false,
++        );
++        assert!(settings.retained_model_resolution().is_none());
++    })
++    .await;
++    assert_eq!(
++        session.capture_retained_native_context(&step).await.err(),
++        Some(NativeCaptureError::ModelResolutionMissingOrMismatch)
++    );
++}
++
++#[tokio::test]
++async fn native_capture_rejects_another_steps_selection_spliced_with_this_model_arc() {
++    let (_other_session, other_step, _other_home) = fixture().await;
++    let other_settings = other_step.settings.as_ref().clone();
++    let (session, step, _home) = fixture_with_settings(/*preempt*/ None, |settings| {
++        let own_model = Arc::clone(&settings.model_info);
++        assert_eq!(own_model.as_ref(), other_settings.model_info.as_ref());
++        *settings = other_settings;
++        settings.model_info = own_model;
++        assert!(settings.retained_model_resolution().is_none());
++    })
++    .await;
++    assert_eq!(
++        session.capture_retained_native_context(&step).await.err(),
++        Some(NativeCaptureError::ModelResolutionMissingOrMismatch)
++    );
++}
++
++#[tokio::test]
++async fn inherited_tier_keeps_pair_but_new_settings_invalidates_old_capture() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("paired capture");
++    let mut selected = step.settings.selected().clone();
++    selected.service_tier = Some("default".to_string());
++    let inherited = step
++        .settings
++        .with_selected_preserving_model(Arc::new(selected), /*fast_mode_enabled*/ true);
++    assert!(Arc::ptr_eq(
++        &inherited.model_info,
++        &step.settings.model_info
++    ));
++    assert!(Arc::ptr_eq(
++        inherited
++            .retained_model_resolution()
++            .expect("retained pair"),
++        step.settings
++            .retained_model_resolution()
++            .expect("original pair")
++    ));
++    step.turn.next_step_settings.store(Arc::new(inherited));
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(NativeCaptureError::SettingsChanged)
++    );
++}
++
++#[tokio::test]
++async fn model_and_personality_updates_select_new_pairs_without_replacing_old_step() {
++    let (session, step, _home) = fixture().await;
++    let original = step
++        .settings
++        .retained_model_resolution()
++        .expect("original pair");
++    let requirements = codex_config::ConfigRequirements::default();
++    let constraints = crate::session::step_settings::StepSettingsConstraints {
++        requirements: &requirements,
++        guardian_approval_enabled: false,
++        trusted_guardian_reviewer: false,
++        has_full_disk_write_access: true,
++    };
++    let overrides = crate::session::step_settings::ModelInfoOverrides::from(
++        step.turn.config.to_models_manager_config(),
++    );
++    let personality = if step.settings.personality()
++        == Some(codex_protocol::config_types::Personality::Friendly)
++    {
++        codex_protocol::config_types::Personality::None
++    } else {
++        codex_protocol::config_types::Personality::Friendly
++    };
++    for update in [
++        crate::session::step_settings::StepSettingsUpdate {
++            model: Some("owned-new-model-not-requested".to_string()),
++            ..Default::default()
++        },
++        crate::session::step_settings::StepSettingsUpdate {
++            personality: Some(personality),
++            ..Default::default()
++        },
++    ] {
++        let next = step
++            .settings
++            .apply_update(
++                &update,
++                &constraints,
++                session.services.models_manager.as_ref(),
++                &overrides,
++                /*fast_mode_enabled*/ false,
++            )
++            .await
++            .expect("owned settings update");
++        assert!(!Arc::ptr_eq(&next.model_info, &step.settings.model_info));
++        assert!(!Arc::ptr_eq(
++            next.retained_model_resolution()
++                .expect("new owning selection"),
++            original
++        ));
++        assert_eq!(
++            next.retained_model_resolution()
++                .expect("new record")
++                .authoritative_model_version(),
++            None
++        );
++        assert!(Arc::ptr_eq(
++            step.settings
++                .retained_model_resolution()
++                .expect("unchanged original"),
++            original
++        ));
++    }
++}
++
++#[tokio::test]
++async fn same_step_mechanical_capture_cannot_qualify_fallback_or_catalog_metadata() {
++    let (session, step, _home) = fixture().await;
++    let captured = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("mechanical pair only");
++    assert_eq!(
++        captured.model_resolution.authoritative_model_version(),
++        None
++    );
++    assert_eq!(
++        captured.model_resolution.qualification(),
++        ResolutionQualification::Unqualified
++    );
++    assert_eq!(
++        captured.require_qualified_model_resolution(),
++        Err(NativeCaptureError::UnqualifiedModelResolution)
++    );
++}
++
++#[tokio::test]
++async fn sparse_non_model_updates_keep_the_existing_manager_pair() {
++    let (session, step, _home) = fixture().await;
++    let original = step
++        .settings
++        .retained_model_resolution()
++        .expect("original pair");
++    let requirements = codex_config::ConfigRequirements::default();
++    let constraints = crate::session::step_settings::StepSettingsConstraints {
++        requirements: &requirements,
++        guardian_approval_enabled: false,
++        trusted_guardian_reviewer: false,
++        has_full_disk_write_access: true,
++    };
++    let overrides = crate::session::step_settings::ModelInfoOverrides::from(
++        step.turn.config.to_models_manager_config(),
++    );
++    for update in [
++        crate::session::step_settings::StepSettingsUpdate {
++            service_tier: Some(Some("default".to_string())),
++            ..Default::default()
++        },
++        crate::session::step_settings::StepSettingsUpdate {
++            approvals_reviewer: Some(step.settings.approvals_reviewer()),
++            ..Default::default()
++        },
++    ] {
++        let next = step
++            .settings
++            .apply_update(
++                &update,
++                &constraints,
++                session.services.models_manager.as_ref(),
++                &overrides,
++                /*fast_mode_enabled*/ false,
++            )
++            .await
++            .expect("owned sparse update");
++        assert!(Arc::ptr_eq(&next.model_info, &step.settings.model_info));
++        assert!(Arc::ptr_eq(
++            next.retained_model_resolution().expect("same pair"),
++            original
++        ));
++    }
++}
