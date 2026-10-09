@@ -1,0 +1,65 @@
+name: Review scene separate finite fixture budget validation
+on:
+  push:
+    branches:
+      - qa/M6.3-review-scene-fixtures
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review-scene:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/qa/M6.3-review-scene-fixtures' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Verify reviewed parent and unchanged product and test context
+        run: |
+          git log -1 --format=%H
+          git rev-parse HEAD^
+          test "$(git rev-parse HEAD^)" = "3b35f9d7bb2fbefc1bcd24d100810f5e80c88b39"
+          git diff --exit-code 3b35f9d7bb2fbefc1bcd24d100810f5e80c88b39 -- services/api apps/web packages/contracts tests/integration tests/e2e scripts Makefile pyproject.toml uv.lock PRODUCT_DESIGN.md ':(exclude)tests/e2e/review.spec.ts'
+          test "$(git rev-parse HEAD:tests/e2e/review.spec.ts)" = "41fa318d412795051f9b4cca13a13c0e558d7c12"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.21.0'
+      - run: python -m pip install uv==0.11.21
+      - run: uv sync --frozen
+      - name: Install fixed official Ubuntu document sandbox dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap=0.11.1-1ubuntu0.3 apparmor=5.0.2-0ubuntu1~26.04.1 libapparmor1=5.0.2-0ubuntu1~26.04.1 libseccomp2=2.6.0-2ubuntu5
+          dpkg-query -W bubblewrap apparmor libapparmor1 libseccomp2
+          test -f /etc/apparmor.d/bwrap-userns-restrict
+          bwrap --version
+      - run: npm ci --prefix apps/web
+      - run: npm --prefix apps/web exec -- playwright install --with-deps chromium
+      - run: make build
+      - name: Run the unchanged review assertions with only finite fixture budgets separated
+        id: scene
+        run: |
+          bash scripts/node.sh npm --prefix apps/web run test:e2e -- tests/e2e/review.spec.ts --grep 'real history and exact material review preserve original submitted text, null scores and a selected old revision after reload$' --retries=0
+        env:
+          LEARNING_E2E_OUTPUT_DIR: ${{ runner.temp }}/learning-workbench-review-scene-results
+      - name: Retain original synthetic review receipts and screenshots
+        if: ${{ always() && (steps.scene.outcome == 'success' || steps.scene.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: review-scene-outcome-${{ github.event_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/learning-workbench-review-scene-results/**/actual-review-history.json
+            ${{ runner.temp }}/learning-workbench-review-scene-results/**/review-history-timing.json
+            ${{ runner.temp }}/learning-workbench-review-scene-results/**/review-history-setup-helper-timing.json
+            ${{ runner.temp }}/learning-workbench-review-scene-results/**/review-history-after-1440.png
+            ${{ runner.temp }}/learning-workbench-review-scene-results/**/review-history-after-390.png
+            ${{ runner.temp }}/learning-workbench-review-scene-results/**/test-failed*.png
+          retention-days: 3
+          if-no-files-found: warn
+          include-hidden-files: false

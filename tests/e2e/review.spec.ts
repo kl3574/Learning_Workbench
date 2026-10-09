@@ -48,6 +48,18 @@ const test = base.extend<{ runtime: RestartRuntime; setupTiming: SetupTiming }>(
     setupTiming.mark('page-use'); try { await use(page) } finally { setupTimingByPage.delete(page) }
   },
 })
+// Keep this compound scene's body at the original 30-second limit.
+// Only its fresh test-scoped runtime and browser authentication have separate,
+// finite fixture budgets; both setup implementations stay unchanged.
+const materialReviewTest = test.extend({
+  runtime: [async ({ setupTiming }, use) => { setupTiming.mark('runtime-start'); const runtime = await RestartRuntime.start(); setupTiming.mark('runtime-ready'); try { await use(runtime) } finally { await runtime.close() } }, { scope: 'test', timeout: 45_000 }],
+  page: [async ({ runtime, playwright, setupTiming }, use) => {
+    setupTiming.mark('browser-open'); const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; setupTiming.mark('browser-opened')
+    setupTimingByPage.set(page, setupTiming); setupTiming.mark('authentication-start'); await runtime.authenticateOnly(page); setupTiming.mark('authentication-complete')
+    setupTiming.mark('page-use'); try { await use(page) } finally { setupTimingByPage.delete(page) }
+  }, { scope: 'test', timeout: 45_000 }],
+})
+
 async function start(page: Page, prefix: string) {
   const timing = setupTimingByPage.get(page)
   timing?.mark('assessment-fixture-build'); const fixture = originalAssessmentPackage(prefix); timing?.mark('assessment-fixture-built')
@@ -90,7 +102,7 @@ async function manual(page: Page) {
 }
 async function settleLayout(page: Page) { const choice = page.getByRole('button', { name: '采用本地会话并重新保存', exact: true }); if (await choice.isVisible()) { await choice.click(); await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible() } }
 
-test('real history and exact material review preserve original submitted text, null scores and a selected old revision after reload', async ({ page, setupTiming }, info) => {
+materialReviewTest('real history and exact material review preserve original submitted text, null scores and a selected old revision after reload', async ({ page, setupTiming }, info) => {
   // BEGIN REVIEW_HISTORY_TIMING_OBSERVER: metadata only; no request or response bodies.
   type ObservedRequest = import('../../apps/web/node_modules/@playwright/test/index.mjs').Request
   type ObservedResponse = import('../../apps/web/node_modules/@playwright/test/index.mjs').Response
