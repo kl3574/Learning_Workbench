@@ -1,0 +1,499 @@
+{
+  "schema_version": "baseline-terminal-audit-v1",
+  "scope": "Independent read-only actual GitHub CI audit; RAM only; no rerun, cancellation, build, repair or publication.",
+  "normative": {
+    "path": "PRODUCT_DESIGN.md",
+    "version": "3.0.15",
+    "bytes": 520415,
+    "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec"
+  },
+  "repository": "kl3574/Learning_Workbench",
+  "head_sha": "f12e7e1015dc29bb9e5ca0f16d092178011ea442",
+  "parent_sha": "512356313f788cfa91cc82da8802e744fe052dcd",
+  "branch": "feat/M6.3-browser-ack-block-observations",
+  "run_id": 37882597335,
+  "event": "push",
+  "run_attempt": 1,
+  "created_at": "2026-10-09T04:10:00Z",
+  "publication_scope": {
+    "actual_changed_files": 6,
+    "modified_existing": 4,
+    "new_files": 2,
+    "note": "The commit includes two passive observer test-source changes and four progress/evidence changes. This report does not claim only two repository files changed."
+  },
+  "raw_commit_metadata": {
+    "bytes": 55233,
+    "sha256": "ce137cdb314716cbee79874546bdbf3a4c3f97dad01e5420eb1db16935160109"
+  },
+  "logs_download_policy": "Each completed job log downloaded exactly once into this auditor's private RAM; raw bytes hashed before projection. The previous actual512 source129 ZIP and log remain held, with no repeat download.",
+  "jobs": [
+    {
+      "name": "spec-contracts",
+      "job_id": 113665423133,
+      "status": "PASS",
+      "completed_at": "2026-10-09T04:18:12Z",
+      "checkout": {
+        "head_sha": "f12e7e1015dc29bb9e5ca0f16d092178011ea442",
+        "command_log_line": 173,
+        "hash_log_line": 174
+      },
+      "log": {
+        "bytes": 39099,
+        "sha256": "54be78e2fc7b6d3067e1bfba8117a8e2da6612a2e8c91b094bf7b9ae6f556ba0"
+      },
+      "checks": [
+        {
+          "command": "make verify-spec",
+          "step_conclusion": "success",
+          "result": {
+            "status": "PASS",
+            "scope": "M0_structural_baseline_only",
+            "spec_version": "3.0.15",
+            "spec_sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec",
+            "models": 54,
+            "routes": 147,
+            "sql_tables_including_fts": 53,
+            "generated_artifacts": 82,
+            "product_acceptance": "NOT_RUN",
+            "learning_effectiveness": "NOT_RUN",
+            "real_codex": "NOT_RUN",
+            "real_provider": "NOT_RUN",
+            "publication": "NOT_CHECKED"
+          }
+        },
+        {
+          "command": "uv run --frozen pytest tests/contract tests/unit/test_spec_*.py",
+          "step_conclusion": "success",
+          "footer_log_line": 458,
+          "footer": "962 passed, 2 warnings in 447.83s",
+          "passed": 962,
+          "warnings": 2
+        }
+      ],
+      "exit_note": "No numeric process exit 0 line is claimed; successful completed step metadata and the actual footer are the receipts."
+    },
+    {
+      "name": "security-publication",
+      "job_id": 113665423221,
+      "status": "FAIL",
+      "completed_at": "2026-10-09T04:12:55Z",
+      "checkout": {
+        "head_sha": "f12e7e1015dc29bb9e5ca0f16d092178011ea442",
+        "command_log_line": 184,
+        "hash_log_line": 185
+      },
+      "log": {
+        "bytes": 22235,
+        "sha256": "cb0d6b4e8c0cc63e486b33f1e2b2e08078c2f8d1b0c57d298b332f3a75f3c0d7"
+      },
+      "first_failure": {
+        "command": "python scripts/check_publication.py --all-tracked",
+        "step_conclusion": "failure",
+        "exit_code": 1,
+        "failure_log_lines": [
+          232,
+          233,
+          234
+        ],
+        "public_repository_path": "progress/evidence/2026-10-09/M6.3-baseline0a6-actual-terminal-audit.json",
+        "reason": "Publication scanner rejected suspected credential or personal absolute path."
+      },
+      "diagnosis": {
+        "scanner": {
+          "bytes": 3531,
+          "sha256": "b42f875f7d0a41f78cd7a59b97948b59f1e6146c8ba9198e6c737e284a834d33",
+          "git_blob_sha": "a18a0509c31c73476e5b7eea3d85e3afe71b11bc"
+        },
+        "affected_evidence": {
+          "bytes": 19420,
+          "sha256": "09570802bc87e6e29f51c1994118d88c5d22dcf8c2dc3e420480ae963222b9ed",
+          "git_blob_sha": "4769deb6773b46e2332e707f8e0b237c2a5a1a08"
+        },
+        "pattern_class_counts": {
+          "github_token": 0,
+          "github_pat": 0,
+          "provider_secret": 0,
+          "aws_access_key": 0,
+          "private_key": 0,
+          "bootstrap_secret": 0,
+          "absolute_home_path": 5
+        },
+        "owner_class": "All five matching home path owners are the CI runner; values intentionally omitted.",
+        "match_json_pointers": [
+          "results[1].failures[0].details[11]",
+          "results[1].failures[1].details[11]",
+          "results[1].failures[1].details[12]",
+          "results[1].failures[2].details[12]",
+          "results[1].failures[3].details[10]"
+        ],
+        "assessment": "A real violation of the current publication scanner policy, not a current PASS or a credential leak finding. This auditor made no fix. A narrow evidence normalization can remove environment home paths while preserving failure facts and original raw log pins; weakening the scanner is not required."
+      }
+    },
+    {
+      "name": "frontend",
+      "job_id": 113665423281,
+      "status": "PASS",
+      "completed_at": "2026-10-09T04:12:11Z",
+      "checkout": {
+        "head_sha": "f12e7e1015dc29bb9e5ca0f16d092178011ea442",
+        "command_log_line": 185,
+        "hash_log_line": 186
+      },
+      "log": {
+        "bytes": 64854,
+        "sha256": "60c3b590bb4bfc5ba20e7b1bf20281487655dae0dbf402b792efb5d096cc160b"
+      },
+      "checks": [
+        {
+          "command": "npm --prefix apps/web run lint",
+          "step_conclusion": "success"
+        },
+        {
+          "command": "npm --prefix apps/web run typecheck",
+          "step_conclusion": "success"
+        },
+        {
+          "command": "npm --prefix apps/web run test",
+          "step_conclusion": "success",
+          "test_files_passed": 167,
+          "tests_passed": 1424,
+          "footer_log_lines": [
+            493,
+            494
+          ]
+        },
+        {
+          "command": "make build",
+          "step_conclusion": "success",
+          "footer_log_line": 521,
+          "build_ms": 753
+        }
+      ],
+      "exit_note": "Completed successful step metadata; no invented numeric process exit."
+    },
+    {
+      "name": "backend",
+      "job_id": 113665423290,
+      "status": "PASS",
+      "completed_at": "2026-10-09T04:11:51Z",
+      "checkout": {
+        "head_sha": "f12e7e1015dc29bb9e5ca0f16d092178011ea442",
+        "command_log_line": 174,
+        "hash_log_line": 175
+      },
+      "log": {
+        "bytes": 44648,
+        "sha256": "c27edc1f15b5cfcc5fa3e66c58dd291b5c753861b170356021f96316589fbbf5"
+      },
+      "checks": [
+        {
+          "command": "uv run --frozen ruff check .",
+          "step_conclusion": "success",
+          "footer": "All checks passed!",
+          "footer_log_line": 367
+        },
+        {
+          "command": "uv run --frozen mypy",
+          "step_conclusion": "success",
+          "source_files": 296,
+          "footer": "Success: no issues found in 296 source files",
+          "footer_log_line": 379
+        },
+        {
+          "command": "uv run --frozen python scripts/probe_document_sandbox.py",
+          "step_conclusion": "success",
+          "status": "PASS",
+          "scope": "fixed synthetic runtime probe; no uploaded document or environment dump",
+          "exit_code": 0,
+          "python_version": "3.12.13",
+          "synthetic_runtime_ready": true,
+          "result_log_lines": [
+            391,
+            398
+          ]
+        },
+        {
+          "command": "uv run --frozen pytest tests/unit tests/security",
+          "step_conclusion": "success",
+          "passed": 1114,
+          "warnings": 3,
+          "footer": "1114 passed, 3 warnings in 60.20s",
+          "footer_log_line": 492
+        }
+      ],
+      "exit_note": "Only the synthetic probe prints exit_code 0 explicitly; other commands are supported by successful completed steps and their actual footers."
+    },
+    {
+      "name": "browser",
+      "job_id": 113665423326,
+      "status": "PASS",
+      "completed_at": "2026-10-09T04:38:51Z",
+      "checkout": {
+        "head_sha": "f12e7e1015dc29bb9e5ca0f16d092178011ea442",
+        "command_log_line": 175,
+        "hash_log_line": 176
+      },
+      "log": {
+        "bytes": 97018,
+        "sha256": "50218953f99b1299db605600fb6175a09ec360e31052bb9313fb116d25ba1c2f"
+      },
+      "checks": [
+        {
+          "command": "make build",
+          "step_conclusion": "success",
+          "build_ms": 660,
+          "footer_log_line": 642
+        },
+        {
+          "command": "make test-e2e",
+          "step_conclusion": "success",
+          "passed": 133,
+          "footer": "133 passed (27.7m)",
+          "footer_log_line": 825
+        }
+      ],
+      "affected_tests": [
+        {
+          "path": "tests/e2e/grading.spec.ts",
+          "test_source_line": 179,
+          "log_line": 728,
+          "name": "two browser profiles keep a stale manual-review baseline through an actual 412 before explicit three-way rebase",
+          "status": "PASS",
+          "duration_seconds": 20.4
+        },
+        {
+          "path": "tests/e2e/review.spec.ts",
+          "test_source_line": 93,
+          "log_line": 787,
+          "name": "real history and exact material review preserve original submitted text, null scores and a selected old revision after reload",
+          "status": "PASS",
+          "duration_seconds": 22.3
+        }
+      ],
+      "failure_diagnostic_artifact_step": {
+        "name": "Retain synthetic browser failure diagnostics",
+        "number": 15,
+        "status": "SKIPPED",
+        "completed_at": "2026-10-09T04:38:48Z"
+      },
+      "exit_note": "Successful completed make test-e2e step and exact footer; no numeric exit 0 line is invented."
+    },
+    {
+      "name": "integration",
+      "job_id": 113665423347,
+      "status": "RUNNING",
+      "conclusion": null,
+      "started_at": "2026-10-09T04:10:03Z",
+      "completed_at": null,
+      "current_step": {
+        "number": 7,
+        "command": "uv run --frozen pytest tests/integration",
+        "status": "in_progress",
+        "started_at": "2026-10-09T04:10:35Z",
+        "completed_at": null
+      },
+      "log_downloaded": false,
+      "checkout_receipt": "NOT_OBSERVED_IN_LOG",
+      "test_footer": "NOT_OBSERVED",
+      "passed": "NOT_OBSERVED",
+      "failed": "NOT_OBSERVED",
+      "skipped": "NOT_OBSERVED",
+      "exit_code": "NOT_OBSERVED",
+      "note": "Current metadata proves the job and pytest step remain in progress. Historical integration counts are not substituted. The terminal job log will be captured once after completion."
+    }
+  ],
+  "browser_passive_observations": {
+    "artifact_metadata": {
+      "bytes": 2290,
+      "sha256": "f0bd7702ed89de38deb25a012754e620d38029b33e1ae8a3718416d308b8999a",
+      "artifact_count": 3
+    },
+    "downloaded_artifact": {
+      "id": 11596046696,
+      "name": "grading-timing-push-37882597335-1",
+      "expired": false,
+      "bytes": 2581,
+      "sha256": "6db07ac579e4096c0d5c3f2c5df3650bbeb94e5a4205d31a3b4bda8f987767ae",
+      "metadata_digest_verified": true,
+      "safe_unique_members": 1,
+      "crc_errors": 0,
+      "member": {
+        "name": "grading-two-browser-profil-1cfaf-e-explicit-three-way-rebase/grading-two-profile-timing.json",
+        "bytes": 10217,
+        "sha256": "ce4e8cb965e08188a3282e9626f8e5e3df7cc1edd49852ae74e5a5bd43260c1d"
+      }
+    },
+    "regrade_post_ack": {
+      "status": "OBSERVED",
+      "version": "grading-regrade-http-metadata-v1",
+      "clock": "Same test-scoped Node performance.now origin as phases and polls",
+      "observed_timeout_ms": 30000,
+      "retry": 0,
+      "events": 9,
+      "pages_observed": 2,
+      "requests_observed": 3,
+      "pending_at_freeze": 0,
+      "dropped": {
+        "pages": 0,
+        "requests_capacity": 0,
+        "events": 0
+      },
+      "observer_errors": 0,
+      "limits": {
+        "pages": 2,
+        "requests": 8,
+        "pending": 4,
+        "events": 32
+      },
+      "requests": [
+        {
+          "page_ordinal": 2,
+          "request_ordinal": 1,
+          "method": "POST",
+          "route": "/api/v1/attempts/:id/regrade",
+          "events": [
+            "request",
+            "response-headers",
+            "request-finished"
+          ],
+          "status": 202,
+          "ack_202_complete_on_headers": false,
+          "ack_202_complete_on_finished": true
+        },
+        {
+          "page_ordinal": 1,
+          "request_ordinal": 2,
+          "method": "POST",
+          "route": "/api/v1/attempts/:id/regrade",
+          "events": [
+            "request",
+            "response-headers",
+            "request-finished"
+          ],
+          "status": 412,
+          "ack_202_complete_on_headers": false,
+          "ack_202_complete_on_finished": false
+        },
+        {
+          "page_ordinal": 1,
+          "request_ordinal": 3,
+          "method": "POST",
+          "route": "/api/v1/attempts/:id/regrade",
+          "events": [
+            "request",
+            "response-headers",
+            "request-finished"
+          ],
+          "status": 202,
+          "ack_202_complete_on_headers": false,
+          "ack_202_complete_on_finished": true
+        }
+      ],
+      "result_poll_statuses": {
+        "revision-2": [
+          200,
+          202,
+          200
+        ],
+        "revision-3": [
+          200,
+          202,
+          200
+        ]
+      },
+      "status_read_job_enums": [
+        "running",
+        "queued"
+      ],
+      "status_reads_attempted": 2,
+      "status_reads_pending_at_freeze": 0,
+      "phases_dropped": 0,
+      "polls_dropped": 0,
+      "status_reads_dropped": 0,
+      "interpretation": "Two actual 202 request-finished boundaries and one actual 412 request-finished boundary were recorded. These do not establish UI JSON consumption, worker claim, grade completion or causal timing. The original test PASS remains separate evidence."
+    },
+    "block_http": {
+      "status": "NOT_OBSERVED",
+      "reason": "The actual successful browser run uploaded only restore-numeric, single-publication and grading timing artifacts. No review-history-timing.json member or named artifact was retained; the failure diagnostic upload step was skipped.",
+      "test_status": "PASS",
+      "observer_ran": "NOT_PROVEN_BY_RETAINED_ARTIFACT",
+      "body_hash": "NOT_OBSERVED",
+      "metadata_body_integrity": "NOT_OBSERVED",
+      "react_completion": "NOT_OBSERVED",
+      "owner_current": "NOT_OBSERVED",
+      "discarded": "NOT_OBSERVED",
+      "open_called": "NOT_OBSERVED",
+      "interpretation": "Absence of the retained block diagnostic does not prove that its source observer did not execute. Browser133 PASS and source inspection cannot reconstruct missing event values."
+    },
+    "observer_sources": {
+      "grading": {
+        "path": "tests/e2e/grading.spec.ts",
+        "bytes": 23765,
+        "sha256": "8af7aa48a3fb1465eab273c80b1da8265b24a4cf39f6b89a0b63c355b10c8b9b",
+        "git_blob_sha": "193823cec43aaed278ea59744740b6c3e48777f3"
+      },
+      "review": {
+        "path": "tests/e2e/review.spec.ts",
+        "bytes": 29702,
+        "sha256": "75e7deb47694dd280cd68958a89e5394286de5313a18e90d79d2c0be42c7e3ef",
+        "git_blob_sha": "27a62b7b1de16758caca5bd80ae5a9b38652cb0d"
+      }
+    },
+    "not_downloaded_artifacts": [
+      {
+        "id": 11595891283,
+        "name": "restore-numeric-outcome-push-37882597335-1",
+        "size_in_bytes": 5929,
+        "digest": "sha256:2d973ff14f6041209c8dd004002bc59c97eeb3f0d26bd6a84cfa84700e02c1f2"
+      },
+      {
+        "id": 11595493271,
+        "name": "single-publication-outcome-push-37882597335-1",
+        "size_in_bytes": 2829,
+        "digest": "sha256:a3cdeed911b743a3cafb9c2d6a0af960fef8eefbbb5502b9aa0af61cdc8c0f19"
+      }
+    ]
+  },
+  "boundaries": {
+    "real_provider": "NOT_RUN",
+    "real_codex": "NOT_RUN",
+    "production_sampling_admission": "NOT_ADMITTED",
+    "complete_product_acceptance": "NOT_RUN",
+    "learning_effectiveness": "NOT_RUN",
+    "previous_0a6_browser_failures": "HISTORICAL_ONLY",
+    "previous_5aff_browser_failures": "HISTORICAL_ONLY",
+    "source129_at_parent512": "Actual 124 PASS, 3 FAIL and 2 NOT_RUN were previously independently audited and remain failures; f12 baseline success does not repair or supersede that source129 result.",
+    "timing": "No comparison between GitHub UTC timestamps and observer Node monotonic times; no causal attribution from absence or elapsed duration.",
+    "audit_execution": "No local build, filesystem write, package installation, rerun/cancellation, environment/PID probe, cleanup, provider request or repository mutation."
+  },
+  "audit_kind": "FROZEN_RUNNING_SNAPSHOT",
+  "captured_at_utc": "2026-10-09T04:53:25.386638+00:00",
+  "run_status": "in_progress",
+  "run_conclusion": null,
+  "baseline_mandatory_gate": "FAIL",
+  "run_metadata": {
+    "bytes": 12747,
+    "sha256": "57a02a1764c094d050d344692399978587d271b0f94dd5df23acae5d6584ed70"
+  },
+  "jobs_metadata": {
+    "bytes": 19020,
+    "sha256": "362385a4c2e58c4b3260c9832562a9ba20fbd97c1cf7cd2b42a3b9b6419185cc"
+  },
+  "frozen_scope": "Five completed job logs and the grading timing ZIP are fully captured. Integration and overall run remain in progress. A later independent terminal report will supplement this snapshot; this snapshot is not a terminal result.",
+  "summary": {
+    "completed_jobs": 5,
+    "job_success": 4,
+    "job_failure": 1,
+    "running_jobs": 1,
+    "actual_test_footers": {
+      "spec_contracts": 962,
+      "backend": 1114,
+      "frontend": 1424,
+      "browser": 133
+    },
+    "integration": "RUNNING",
+    "security_publication": "FAIL exit1",
+    "baseline_gate": "FAIL because the required publication job failed",
+    "production_sampling_admission": "NOT_ADMITTED"
+  }
+}

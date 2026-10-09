@@ -2,9 +2,10 @@ diff --git a/core/src/session/retained_sampling_executed_state_tests.rs b/core/s
 new file mode 100644
 --- /dev/null
 +++ b/core/src/session/retained_sampling_executed_state_tests.rs
-@@ -0,0 +1,288 @@
+@@ -0,0 +1,317 @@
 +//! Mechanical recorder ownership only; no provider, encoder, grant or sender.
 +use super::*;
++use crate::agent::LocalAgentControl;
 +use crate::session::step_settings::ResolvedStepSettings;
 +use crate::session::tests::HeldStepTask;
 +use crate::session::tests::make_session_and_context;
@@ -18,6 +19,7 @@ new file mode 100644
 +use codex_code_mode::CellId;
 +use codex_features::Feature;
 +use codex_features::Features;
++use codex_protocol::SessionId;
 +use codex_protocol::models::FunctionCallOutputPayload;
 +use codex_protocol::models::ResponseInputItem;
 +use codex_tools::ToolName;
@@ -29,7 +31,16 @@ new file mode 100644
 +    codex_diagnostics::Gauge::new("retained-sampling-executed-state-fixture");
 +
 +async fn fixture() -> (Arc<Session>, Arc<StepContext>) {
-+    let (session, mut turn) = make_session_and_context().await;
++    let (mut session, mut turn) = make_session_and_context().await;
++    // The generic factory assigns independent controller and thread identities.
++    // Bind this fixture's actual controller, runtime and empty session store to
++    // the same root identity already used by its native turn metadata.
++    let agent_control = LocalAgentControl::default()
++        .with_session_id(SessionId::from(session.thread_id()), /*max_threads*/ 1);
++    session.services.local_agent_runtime = agent_control.runtime.clone();
++    session.services.session_extension_data =
++        codex_extension_api::ExtensionData::new(agent_control.session_id().to_string());
++    session.services.agent_control = Arc::new(agent_control);
 +    let selected = Arc::new(turn.next_step_settings.load_full().selected().clone());
 +    // The existing inert local manager supplies the actual selected pair once.
 +    // Neither this mechanical pair nor the fixture can qualify a model version.
@@ -69,6 +80,24 @@ new file mode 100644
 +    };
 +    *session.active_turn.lock().await = Some(active);
 +    session.set_last_known_step_context(&step).await;
++    // Require a valid native owner even for cases that reject an executed
++    // checkpoint before retention, or return through the ordinary-only path.
++    let native = session
++        .capture_retained_native_context(&step)
++        .await
++        .expect("owned sampling fixture native capture");
++    assert_eq!(
++        native.native_identity(),
++        (
++            session.session_id(),
++            session.thread_id(),
++            step.turn.sub_id.as_str(),
++        ),
++    );
++    native
++        .verify_current(&session, &step)
++        .await
++        .expect("owned sampling fixture native owner remains current");
 +    (session, step)
 +}
 +

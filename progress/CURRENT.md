@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-09T04:08:54.155383+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-09T04:58:51.443544+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：ISSUE32_PR56_BODY_UPDATED_AND_READBACK_2026_10_09
+仓库发布：VERIFIED；Issues 同步：ISSUE32_PR56_ACTUAL512_FAIL_BODY_UPDATED_AND_READBACK_2026_10_09; OTHER_TASK_CAPTURE_HISTORICAL
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-核512专用129 run37882179845与baseline37882179842实际终态；核本隔离feat/M6.3-browser-ack-block-observations首次真实baseline/133原测试及被动POST ACK、block/body网络完成证据。不增30s/retry0/worker1，不把networkfinish当哈希/UI/open，不假定四个旧browser失败同因；无当前server-stage producer，不挂空artifact。Directv2静态复审0新P1/P2，须129门后独立集成与真实135测试；InputProof/PREGRANT/权威版本容量token/genuine handle→已有durable-start→单次sender仍缺。Agent/M6.3/AC21 NOT_ACCEPTED、numeric BLOCKED_ENVIRONMENT、M7todo，模型请求0。
+读取新隔离fix/M6.3-sampling-native-identity实际ref/首次129与原Clippy CI；新controller/runtime/store一致fixture和每case native前置检查已双轴静态0P，未证明新Rust类型/129行为。保留512实际124PASS3FAIL2NOTRUN/ClippyNOTRUN，必须新129+Clippy真实通过后重建并审阅HOLD135。512 baseline浏览器131P2F、安全FAIL；f12浏览器133PASS、安全FAIL，两集成仍待真实终态，不能替填历史计数或称整平台验收。公开audit仅5+2处CI路径规范化，原scanner不改；旧进度读回日期/恢复指令和raw-public pin误绑定已归档修正。完整InputProof/PREGRANT/权威版本容量token/真实handle→已有durable-start→单次sender仍缺；Agent/M6.3/AC21 NOT_ACCEPTED，numeric BLOCKED_ENVIRONMENT，M7todo，真实模型请求0。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|

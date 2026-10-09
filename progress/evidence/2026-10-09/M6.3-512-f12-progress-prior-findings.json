@@ -1,0 +1,135 @@
+{
+  "actualprojections": [
+    {
+      "actualchecks": {
+        "CURRENT_exact_real_render": true,
+        "history_prefix_from_previous_snapshot_preserved": true,
+        "nine_milestones_unchanged": true,
+        "other26_tasks_unchanged": true
+      },
+      "body_capture": {
+        "PR_sha256": "c0cdf09c9ad86b5e01b09f9ef55893697e29d2ea2a0c2b03f4bd1a497a04a072",
+        "issue_sha256": "aea2ffadb6f49929c68cbb58fbd9bd8d4c3617366c7982af503a3dd2d293d1b6",
+        "last_issue_readback_at": "2026-10-08T12:13:15.016068+00:00",
+        "task_sync_readback_at": "2026-10-08T12:13:15.016068+00:00",
+        "top_PR_sha256": "c0cdf09c9ad86b5e01b09f9ef55893697e29d2ea2a0c2b03f4bd1a497a04a072"
+      },
+      "canonical_publication_head": "d5ae5953b7fc15dd89efdcb8e8f19f29c353079b",
+      "checkpoint_current_binding129": "V2_REBUILT_STATIC_REVIEWED; RUNTIME_NOT_RUN_AT_CODE_COMMIT",
+      "current_public_ci": {
+        "baseline_status": "FAIL_129PASS_4FAIL_BROWSER",
+        "dedicated_status": "FAIL_E0624; MANAGER9_PASS; REMAINING120_AND_CLIPPY_NOT_RUN",
+        "source_head": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+      },
+      "history_entries": 43,
+      "implementation_commit": "f4e41f613800a01a0a0a52ac2dc0f57cec5933ad",
+      "snapshot": "repair",
+      "source_publication_status": "CANONICAL_PR56_D5_UNCHANGED; VERIFIED_SOURCE121_5AFF; ACTUAL_SOURCE129_0A6_FAIL; E0624_FIXTURE_REPAIR_STATIC_REVIEW_COMPLETE_RUNTIME_NOT_RUN_AT_CODE_COMMIT",
+      "updated_at": "2026-10-09T04:03:17.392803+00:00"
+    },
+    {
+      "actualchecks": {
+        "CURRENT_exact_real_render": true,
+        "history_prefix_from_previous_snapshot_preserved": true,
+        "nine_milestones_unchanged": true,
+        "other26_tasks_unchanged": true
+      },
+      "body_capture": {
+        "PR_sha256": "c0cdf09c9ad86b5e01b09f9ef55893697e29d2ea2a0c2b03f4bd1a497a04a072",
+        "issue_sha256": "aea2ffadb6f49929c68cbb58fbd9bd8d4c3617366c7982af503a3dd2d293d1b6",
+        "last_issue_readback_at": "2026-10-08T12:13:15.016068+00:00",
+        "task_sync_readback_at": "2026-10-08T12:13:15.016068+00:00",
+        "top_PR_sha256": "c0cdf09c9ad86b5e01b09f9ef55893697e29d2ea2a0c2b03f4bd1a497a04a072"
+      },
+      "canonical_publication_head": "d5ae5953b7fc15dd89efdcb8e8f19f29c353079b",
+      "checkpoint_current_binding129": "V2_REBUILT_STATIC_REVIEWED; RUNTIME_NOT_RUN_AT_CODE_COMMIT",
+      "current_public_ci": {
+        "baseline_status": "IN_PROGRESS",
+        "dedicated_status": "IN_PROGRESS; original129 and Clippy unobserved",
+        "source_head": "512356313f788cfa91cc82da8802e744fe052dcd"
+      },
+      "history_entries": 44,
+      "implementation_commit": "f4e41f613800a01a0a0a52ac2dc0f57cec5933ad",
+      "snapshot": "browser",
+      "source_publication_status": "CANONICAL_PR56_D5_UNCHANGED; SOURCE121_5AFF_PASS; SOURCE129_0A6_FAIL; REPAIR512_ACTUALLY_PUBLISHED_CI_RUNNING; TWO_BROWSER_OBSERVATIONS_RUNTIME_NOT_RUN_AT_CODE_COMMIT",
+      "updated_at": "2026-10-09T04:08:54.155383+00:00"
+    }
+  ],
+  "finding_counts": {
+    "P1": 0,
+    "P2": 2
+  },
+  "findings": [
+    {
+      "actual": "Both source snapshots are dated 2026-10-09 and task_sync claims 2026_10_09; hashes are aea2ffadb6f49929c68cbb58fbd9bd8d4c3617366c7982af503a3dd2d293d1b6 and c0cdf09c9ad86b5e01b09f9ef55893697e29d2ea2a0c2b03f4bd1a497a04a072, while both readback fields still say 2026-10-08T12:13:15.016068+00:00",
+      "correction": "Archive exact old fields and pair each body hash with its actual captured readback UTC. Where that matching timestamp is unavailable use null with NOT_CAPTURED, not an invented current UTC. Do not require source snapshots to embed later live body hashes or their own commit SHA",
+      "id": "READBACK_TIMESTAMP_HASH_SCOPE_MISMATCH",
+      "impact": "Old readback UTC cannot attest to the newer body hashes; this mismatch was already inherited from the earlier0a6 progress source snapshot",
+      "paths": [
+        "/task_sync_readback_at",
+        "/tasks/M6.3/last_issue_readback_at",
+        "/tasks/M6.3/last_issue_body_sha256",
+        "/tasks/M6.3/last_pr_body_sha256"
+      ],
+      "severity": "P2",
+      "snapshots": [
+        "repair",
+        "browser"
+      ]
+    },
+    {
+      "actual": "Current checkpoint still instructs continuation of feat/M6.3-executed-sampling-binding-validation from verified5aff and labels binding129 V2_REBUILT_STATIC_REVIEWED; RUNTIME_NOT_RUN_AT_CODE_COMMIT. In the same repair snapshot current_public_ci already records actual0a6 E0624/baseline129PASS4FAIL and top next_action selects the privacy repair branch; the browser snapshot additionally records published512 and its running CI",
+      "correction": "Archive the exact prior checkpoint fields, then update current engineering resume instructions and explicitly dated/scope-qualified execution status for the next135 snapshot. Preserve D5 canonical and f4 prior validated anchors; do not reset or rewrite published512/f12 history",
+      "id": "STALE_CURRENT_RESUME_INSTRUCTIONS",
+      "impact": "A fresh resume following the current checkpoint can select the failed old engineering branch instead of the intended repair and diagnostic route; this contradiction exists at the source snapshot times, independently of later live CI updates",
+      "paths": [
+        "/checkpoint/next_action",
+        "/checkpoint/resume_from",
+        "/checkpoint/current_execution_2026_10_09"
+      ],
+      "severity": "P2",
+      "snapshots": [
+        "repair",
+        "browser"
+      ]
+    }
+  ],
+  "not_findings": [
+    "Runtime NOT_RUN_AT_CODE_COMMIT is a valid immutable capture label and can coexist with a later explicitly observed IN_PROGRESS field",
+    "A later legal Issue32/PR56 body synchronization does not require rewriting earlier source files or self-referential commit/body hashes",
+    "At browser snapshot time the supplied512 runs were in progress; this review does not replace their outcome with a later result",
+    "Historical local/native verified source anchors and archive records were preserved; no general migration or deletion of legacy evidence is requested"
+  ],
+  "observed_at": "2026-10-09T04:18:00.046077+00:00",
+  "required_next_scope": "Append a corrected135 progress record preserving published snapshots and historical prefix; do not amend512/f12 commits or move their refs",
+  "review_limitations": [
+    "Source snapshot bytes and real render were independently verified from RAM relay; publication tree/ref receipts for512/f12 and current live body hashes were supplied by root and not refetched by this reviewer",
+    "First auxiliary projection selected an inherited large nested current_local_checkpoint and tool output truncated; a subsequent bounded scalar projection established findings; no source state was changed",
+    "Earlier independent0a6 progress review did not flag inherited readback timestamp mismatch; this report explicitly corrects that review omission",
+    "No code, Cargo, build, Git/ref, filesystem, environment probe or model action was performed"
+  ],
+  "review_scope": "Independent read-only review of published512 repair and f12 browser progress source snapshots; corrections belong to a later progress commit",
+  "schema": 1,
+  "validatedpins": {
+    "browser-CURRENT-candidate.md": {
+      "bytes": 392618,
+      "sha256": "b8556adaf2fbb0e67fa1c3dd5b1512a3aaf90041525ee740d2a6ef8ea7bea135"
+    },
+    "browser-progress-candidate.json": {
+      "bytes": 1277345,
+      "sha256": "b0529634f0cd6a99fc98f9374289b6cfadc580ed829815dd925f02ac94fba3ca"
+    },
+    "progress-candidate.json": {
+      "bytes": 1255922,
+      "sha256": "ec68080ef1101bb1b61a8b413253981e8543f0035e8ec07d676da55a2203259c"
+    },
+    "repair-CURRENT-candidate.md": {
+      "bytes": 392758,
+      "sha256": "3a24914e997fa6ef058a504ed03d971383092cf97a3bbbaa9166eebdfb129360"
+    },
+    "repair-progress-candidate.json": {
+      "bytes": 1272011,
+      "sha256": "5d28d66e0b2b13c9c5fb51d7da6b6dfca186f8f3cc1f349d032aea82890ef3bd"
+    }
+  }
+}
