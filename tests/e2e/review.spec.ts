@@ -96,6 +96,10 @@ test('real history and exact material review preserve original submitted text, n
   type ObservedResponse = import('../../apps/web/node_modules/@playwright/test/index.mjs').Response
   const timingStarted = performance.now(), timingStartedAt = new Date().toISOString()
   let timingSequence = 0, timingPhaseDropped = 0, timingHttpDropped = 0
+  let timingFrozen = false, materialRequestCount = 0, materialPendingCount = 0, materialRequestDropped = 0, materialEventDropped = 0
+  type MaterialEvent = 'request' | 'response-headers' | 'request-finished' | 'request-failed'
+  type MaterialRead = { kind: 'metadata' | 'body'; ordinal: number; status?: number; settled: boolean }
+  const materialHttp: { sequence: number; elapsed_ms: number; event: MaterialEvent; kind: 'metadata' | 'body'; request_ordinal: number; status?: number; request_elapsed_ms?: number; response_finished: boolean }[] = []
   const timingPhases: { sequence: number; elapsed_ms: number; stage: string }[] = []
   const timingHttp: { sequence: number; elapsed_ms: number; event: string; route: string; method: string; status?: number; request_elapsed_ms?: number }[] = []
   const timingRoutes: [RegExp, string][] = [
@@ -117,21 +121,38 @@ test('real history and exact material review preserve original submitted text, n
     [/^\/api\/v1\/blocks\/[^/]+\/body$/, '/api/v1/blocks/:id/body'],
     [/^\/api\/v1\/learning\/evidence$/, '/api/v1/learning/evidence'],
   ]
-  const timingPending = new WeakMap<ObservedRequest, { route: string; method: string; started: number }>()
+  const timingPending = new WeakMap<ObservedRequest, { route: string; method: string; started: number; material?: MaterialRead }>()
   const timingPhase = (stage: string) => {
     if (timingPhases.length === 128) { timingPhaseDropped++; return }
     timingPhases.push({ sequence: ++timingSequence, elapsed_ms: performance.now() - timingStarted, stage })
   }
   const timingRequest = (request: ObservedRequest) => {
+    if (timingFrozen) return
     const path = new URL(request.url()).pathname, route = timingRoutes.find(([pattern]) => pattern.test(path))?.[1]
     const method = request.method()
     if (!route || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method)) return
-    timingPending.set(request, { route, method, started: performance.now() })
+    let material: MaterialRead | undefined
+    if (method === 'GET' && (route === '/api/v1/blocks/:id' || route === '/api/v1/blocks/:id/body')) {
+      if (materialRequestCount === 32 || materialPendingCount === 8) materialRequestDropped++
+      else { material = { kind: route.endsWith('/body') ? 'body' : 'metadata', ordinal: ++materialRequestCount, settled: false }; materialPendingCount++ }
+    }
+    timingPending.set(request, { route, method, started: performance.now(), ...(material ? { material } : {}) })
     timingEvent(request, 'request')
   }
-  const timingEvent = (request: ObservedRequest, event: string, status?: number) => {
+  const timingEvent = (request: ObservedRequest, event: MaterialEvent, status?: number) => {
+    if (timingFrozen) return
     const value = timingPending.get(request)
     if (!value) return
+    const material = value.material
+    if (material && !material.settled) {
+      if (status !== undefined) material.status = status
+      if (event === 'request-finished' || event === 'request-failed') { material.settled = true; materialPendingCount-- }
+      if (materialHttp.length === 128) materialEventDropped++
+      else materialHttp.push({ sequence: ++timingSequence, elapsed_ms: performance.now() - timingStarted, event, kind: material.kind, request_ordinal: material.ordinal,
+        ...(material.status === undefined ? {} : { status: material.status }),
+        ...(event === 'request' ? {} : { request_elapsed_ms: performance.now() - value.started }),
+        response_finished: event === 'request-finished' })
+    }
     if (timingHttp.length === 512) { timingHttpDropped++; return }
     timingHttp.push({ sequence: ++timingSequence, elapsed_ms: performance.now() - timingStarted, event,
       route: value.route, method: value.method, ...(status === undefined ? {} : { status }),
@@ -226,13 +247,18 @@ test('real history and exact material review preserve original submitted text, n
   timingPhase('original-body-complete')
   } finally {
     // BEGIN REVIEW_HISTORY_TIMING_FINALIZER
-    timingPhase('body-finally')
+    timingPhase('body-finally'); timingFrozen = true
     page.off('request', timingRequest); page.off('response', timingResponse)
     page.off('requestfinished', timingFinished); page.off('requestfailed', timingFailed)
     try {
       writeFileSync(info.outputPath('review-history-timing.json'), JSON.stringify({
         version: 'review-history-metadata-v1', body_started_at: timingStartedAt,
         observed_timeout_ms: info.timeout, retry: info.retry, phases: timingPhases, http: timingHttp,
+        material_http: { version: 'review-material-http-metadata-v1', clock: 'Same body-only Node performance.now origin as phases and http, distinct from setup/helper timing',
+          events: materialHttp, requests_observed: materialRequestCount, pending_at_freeze: materialPendingCount,
+          dropped: { requests_capacity: materialRequestDropped, events: materialEventDropped }, limits: { requests: 32, pending: 8, events: 128 },
+          final_navigation: { owner_current: 'NOT_OBSERVED', discarded: 'NOT_OBSERVED', open_called: 'NOT_OBSERVED' },
+          scope: 'Existing block metadata/body GET only. Ordinals are synthetic counters. Response headers and request-finished are network boundaries; they do not prove JSON consumption, metadata/body hash validation, React completion, owner validity, discard or open callback. No new request, await, timeout, retry, body, header, object ID or query. Existing URL assertion remains the route observation; absence cannot diagnose identity or navigation. Synchronous observation changes scheduling.' },
         dropped: { phases: timingPhaseDropped, http: timingHttpDropped },
         limits: { phases: 128, http: 512 },
         scope: 'Body-only Node monotonic timing; browser HTTP static route templates/status only. No query, ID, header, payload, DOM or error text. Page-request polling and fixture setup are not observed. Synchronous instrumentation changes scheduling; root cause remains unknown.',
