@@ -184,13 +184,13 @@ EXECUTED_REGRESSIONS = {'source_pins': [{'path': 'codex-rs/core/src/tools/execut
           'implementation uses the exact binding after-pin. Collection never substitutes for '
           'behavior.'}
 EXECUTED_SAMPLING_BINDING = {'patch_file': 'retained-sampling-executed-state-binding.patch',
- 'patch_sha256': 'b58de3d6196e79b3f1dc3bf5ca7fd780ad4ffdf990a69b5be73c48cb053d0e94',
+ 'patch_sha256': '56df7a33444aab1a3f48efa3b91ed0cf4708be391848febaee0ccb1eab3d7461',
  'before_graph': {'rows': 8794,
                   'sha256': 'd60b03708a3a5917b747f481a661a1f1fb978d789a045dfb0afb3be7b95b2fa6'},
  'changed_files': [{'path': 'codex-rs/core/src/session/retained_sampling_executed_state_tests.rs',
                     'before_sha256': None,
-                    'after_sha256': 'ab16488fadbb3bbe68eb3897e8ae2bb94b5b1bed2cdbcccea50d46572355443e',
-                    'after_bytes': 10782,
+                    'after_sha256': 'd3d15de5ae5187605ebce22a1785e51c770273b33e62245b808b840a750ba1a4',
+                    'after_bytes': 11346,
                     'after_mode': 436},
                    {'path': 'codex-rs/core/src/session/retained_sampling_preparation.rs',
                     'before_sha256': '8ae505fd218cac5fb3c92e8f39c80619fa0ae39c108c078c2d02ad32c3078a49',
@@ -228,7 +228,8 @@ EXECUTED_SAMPLING_BINDING = {'patch_file': 'retained-sampling-executed-state-bin
                                          '#[path = "sampling_checkpoint_tests.rs"]\n'
                                          'mod sampling_checkpoint_tests;',
                    'expected_nonzero_count': 2}],
- 'status': 'Fresh engineering candidate; source129 and Clippy NOT_RUN until actual CI',
+ 'status': 'E0624 single-test fixture repair candidate; actual129/Clippy NOT_RUN; original '
+           'run37877083953 failed',
  'scope': 'Only sampling attachment binds existing executed Option-state checkpoint lifetime; no '
           'Direct atomics/MCP/post-lock budget/final-contributor version authority, no trusted '
           'PREGRANT/InputProof qualification or durable-start/send connection'}

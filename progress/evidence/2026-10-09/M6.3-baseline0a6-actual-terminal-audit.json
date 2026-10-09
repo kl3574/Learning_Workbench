@@ -1,0 +1,412 @@
+{
+  "acceptance": {
+    "Agent_M63_AC21": "NOT_ACCEPTED",
+    "M7": "todo",
+    "numeric": "BLOCKED_ENVIRONMENT"
+  },
+  "jobs_raw": {
+    "bytes": 19338,
+    "sha256": "1b534b89174fbb06a53014ae27a42c6200417456c6051c5853160a3ae496fd7f"
+  },
+  "limits": [
+    "Six job logs fetched once in parallel in this audit; no ZIP artifacts fetched",
+    "Raw log buffers were hashed before projection; public JSON report retains pins and bounded actual lines, not full raw logs or a filesystem seal",
+    "Explicit nonzero exit markers are reported where printed; job success is not mislabeled as a separately captured explicit exit0 marker",
+    "Numeric BLOCKED_ENVIRONMENT skips are not accepted runtime successes",
+    "Browser failures do not establish root cause or prove a business repair",
+    "Original dedicated129 E0624 failure is a separate gate and remains unchanged",
+    "No filesystem writes, builds, Cargo, Git mutations, environment probes or provider model requests"
+  ],
+  "observed_at": "2026-10-09T04:01:11.654901+00:00",
+  "results": [
+    {
+      "checkout_evidence": [
+        {
+          "line": 100,
+          "text": "[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0a6ef4b1798051c5beca9ff2f1826c91ab208f26:refs/remotes/origin/feat/M6.3-executed-sampling-binding-validation"
+        },
+        {
+          "line": 106,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        },
+        {
+          "line": 168,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        }
+      ],
+      "commands": [
+        "uv run --frozen ruff check .",
+        "uv run --frozen mypy",
+        "uv run --frozen pytest tests/unit tests/security"
+      ],
+      "exact_head_occurrences": 4,
+      "explicit_exit_markers": [],
+      "fetch_exit": 0,
+      "fetch_stderr_bytes": 0,
+      "fetch_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "footers": [
+        {
+          "line": 360,
+          "text": "All checks passed!"
+        },
+        {
+          "line": 372,
+          "text": "Success: no issues found in 296 source files"
+        },
+        {
+          "line": 485,
+          "text": "====================== 1114 passed, 3 warnings in 48.94s ======================="
+        }
+      ],
+      "job_id": 113648036402,
+      "metadata_conclusion": "success",
+      "name": "backend",
+      "raw": {
+        "bytes": 44266,
+        "sha256": "f24a0a1f26d96c52073d38f4b33407ce2e26529035321b3c299688e6c4141dac"
+      }
+    },
+    {
+      "checkout_evidence": [
+        {
+          "line": 102,
+          "text": "[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0a6ef4b1798051c5beca9ff2f1826c91ab208f26:refs/remotes/origin/feat/M6.3-executed-sampling-binding-validation"
+        },
+        {
+          "line": 108,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        },
+        {
+          "line": 188,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        }
+      ],
+      "commands": [
+        "npm --prefix apps/web exec -- playwright install --with-deps chromium",
+        "make build",
+        "make test-e2e"
+      ],
+      "exact_head_occurrences": 4,
+      "explicit_exit_markers": [
+        2
+      ],
+      "failures": [
+        {
+          "details": [
+            "    Test timeout of 30000ms exceeded.",
+            "    Error: expect(locator).toContainText(expected) failed",
+            "    Error: element(s) not found",
+            "      - Expect \"toContainText\" getByRole('region', { name: '当前评分结果', exact: true }) with timeout 5000ms",
+            "      123 |   await settleLayout(page); await page.setViewportSize({ width: 1440, height: 900 }); await current.getByRole('heading', { name: '评分已完成', exact: true }).evaluate(node => node.scrollIntoView({ block: 'start' })); await expect(current).toContainText('总分 1 / 5')",
+            "      124 |   await page.screenshot({ path: info.outputPath('grading-result-1440.png') })",
+            "    > 125 |   await page.reload(); await expect(current).toContainText('评分版本 2'); expect(privateCalls).toEqual([]); expect(errors).toEqual([])",
+            "          |                                              ^",
+            "      126 |   writeFileSync(info.outputPath('actual-grading-form.json'), JSON.stringify({ scope: 'original synthetic UI and real HTTP/SQLite worker', question_count: fixture.questions.length, initial: { status: initial.status, scores: initial.items.map(item => item.score) }, final: { status: final.status, scores: final.items.map(item => item.score), grading_revision: final.grading_revision, signature_count: final.manual_reviews.length, original_solution_reviews: final.solution_reviews.map(item => item.review_status) }, observed_result_http_statuses: resultStatuses, no_private_solution_calls: privateCalls.length === 0, runtime_errors: errors }, null, 2))",
+            "      127 | })",
+            "      128 |",
+            "        at /home/runner/work/Learning_Workbench/Learning_Workbench/tests/e2e/grading.spec.ts:125:46"
+          ],
+          "log_line": 838,
+          "test": "1) ../../tests/e2e/grading.spec.ts:97:1 › unreviewed original content stays null until an explicit author form creates a signed new grade without altering its reference approval"
+        },
+        {
+          "details": [
+            "    Error: expect(received).toBe(expected) // Object.is equality",
+            "    Expected: 3",
+            "    Received: 0",
+            "    - Test timeout of 30000ms exceeded",
+            "      86 |   let result: AssessmentGradingResult | undefined",
+            "      87 |   const timing = gradingTimingByPage.get(page), caller: GradingCaller = revision === 1 ? 'revision-1' : revision === 2 ? 'revision-2' : revision === 3 ? 'revision-3' : 'other-revision'; timing?.mark('grade-enter')",
+            "    > 88 |   await expect.poll(async () => { const started = performance.now(); const response = await page.request.get(`/api/v1/attempts/${id}/result`); const observe = timing?.poll(caller, response.status(), performance.now() - started); if (response.status() === 202) { if (observe) void response.json().then(value => observe(value), () => observe(undefined, true)).catch(() => { /* Diagnostic parsing must not change the original poll. */ }); return 0 }; expect(response.status()).toBe(200); result = await response.json(); return result!.grading_revision }).toBe(revision)",
+            "         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         ^",
+            "      89 |   timing?.mark('grade-returned')",
+            "      90 |   return result!",
+            "      91 | }",
+            "        at grade (/home/runner/work/Learning_Workbench/Learning_Workbench/tests/e2e/grading.spec.ts:88:553)",
+            "        at /home/runner/work/Learning_Workbench/Learning_Workbench/tests/e2e/grading.spec.ts:140:25"
+          ],
+          "log_line": 869,
+          "test": "2) ../../tests/e2e/grading.spec.ts:129:1 › two browser profiles keep a stale manual-review baseline through an actual 412 before explicit three-way rebase"
+        },
+        {
+          "details": [
+            "    Test timeout of 30000ms exceeded.",
+            "    Error: expect(locator).toHaveValue(expected) failed",
+            "    Expected: \"1\"",
+            "    Error: element(s) not found",
+            "      - Expect \"toHaveValue\" getByRole('region', { name: '完整评分历史', exact: true }).getByLabel('选择评分版本') with timeout 5000ms",
+            "      199 |   await page.setViewportSize({ width: 1440, height: 900 }); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); await page.screenshot({ path: info.outputPath('review-history-after-1440.png') })",
+            "      200 |   timingPhase('reload-old-selection')",
+            "    > 201 |   await settleLayout(page); await page.reload(); timingPhase('reload-returned'); await expect(history.getByLabel('选择评分版本')).toHaveValue('1'); await expect(page.getByLabel('第 2 题已提交答案')).toHaveText(answer)",
+            "          |                                                                                                                             ^",
+            "      202 |   timingPhase('exact-material-open')",
+            "      203 |   const material = page.getByRole('region', { name: '本题对应教材', exact: true }); await material.getByRole('button', { name: /r1/ }).first().click()",
+            "      204 |   timingPhase('reader-route')",
+            "        at /home/runner/work/Learning_Workbench/Learning_Workbench/tests/e2e/review.spec.ts:201:125"
+          ],
+          "log_line": 899,
+          "test": "3) ../../tests/e2e/review.spec.ts:93:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload"
+        },
+        {
+          "details": [
+            "    Error: expect(received).toBe(expected) // Object.is equality",
+            "    Expected: true",
+            "    Received: false",
+            "    - Timeout 5000ms exceeded while waiting on the predicate",
+            "      3 | /** Sample only this locator more densely; keep the original five-second budget. */",
+            "      4 | export async function expectTutorCompletion(completed: Locator): Promise<void> {",
+            "    > 5 |   await expect.poll(() => completed.isVisible(), { timeout: 5000, intervals: [25] }).toBe(true)",
+            "        |                                                                                      ^",
+            "      6 | }",
+            "      7 |",
+            "        at /home/runner/work/Learning_Workbench/Learning_Workbench/tests/e2e/tutor.spec.ts:195:22"
+          ],
+          "log_line": 930,
+          "test": "4) ../../tests/e2e/tutor.spec.ts:149:1 › explicit same-Run consent uses the real loopback protocol and restores raw answer without upgrading evidence"
+        }
+      ],
+      "fetch_exit": 0,
+      "fetch_stderr_bytes": 0,
+      "fetch_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "footers": [
+        {
+          "line": 654,
+          "text": "✓ built in 786ms"
+        },
+        {
+          "line": 737,
+          "text": "  ✓   39 ../../tests/e2e/grading-recovery.spec.ts:57:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission (27.6s)"
+        },
+        {
+          "line": 741,
+          "text": "  ✓   43 ../../tests/e2e/grading.spec.ts:144:1 › a failed manual request preserves its durable exact command and editable author draft after browser reload (27.2s)"
+        },
+        {
+          "line": 747,
+          "text": "  ✓   49 ../../tests/e2e/imports-policy.spec.ts:61:1 › a reselected failed original survives a role-policy pause in memory while decoded text must be checked again (13.0s)"
+        },
+        {
+          "line": 756,
+          "text": "  ✓   56 ../../tests/e2e/imports.spec.ts:311:1 › local encoding choice preserves the failed original and creates a separately confirmed UTF-8 import (10.6s)"
+        },
+        {
+          "line": 842,
+          "text": "    Error: expect(locator).toContainText(expected) failed"
+        },
+        {
+          "line": 903,
+          "text": "    Error: expect(locator).toHaveValue(expected) failed"
+        },
+        {
+          "line": 963,
+          "text": "  4 failed"
+        },
+        {
+          "line": 968,
+          "text": "  129 passed (40.9m)"
+        },
+        {
+          "line": 970,
+          "text": "##[error]Process completed with exit code 2."
+        }
+      ],
+      "job_id": 113648036307,
+      "metadata_conclusion": "failure",
+      "name": "browser",
+      "raw": {
+        "bytes": 117045,
+        "sha256": "e21cc852003bafc653c1bf7b0983d2b1719654744db9cc0c10071942427ffaaf"
+      },
+      "summary_lines": [
+        "  4 failed",
+        "  129 passed (40.9m)"
+      ]
+    },
+    {
+      "checkout_evidence": [
+        {
+          "line": 101,
+          "text": "[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0a6ef4b1798051c5beca9ff2f1826c91ab208f26:refs/remotes/origin/feat/M6.3-executed-sampling-binding-validation"
+        },
+        {
+          "line": 107,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        },
+        {
+          "line": 178,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        }
+      ],
+      "commands": [
+        "npm --prefix apps/web run lint",
+        "npm --prefix apps/web run typecheck",
+        "npm --prefix apps/web run test",
+        "make build"
+      ],
+      "exact_head_occurrences": 4,
+      "explicit_exit_markers": [],
+      "fetch_exit": 0,
+      "fetch_stderr_bytes": 0,
+      "fetch_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "footers": [
+        {
+          "line": 372,
+          "text": "   ✓ a failed regrade retains the real previous score and allows a new explicit command with its grading revision 403ms"
+        },
+        {
+          "line": 380,
+          "text": "   ✓ a failed first journal write preserves the exact form and held command; policy hiding and unmount retain close protection until explicit memory save 422ms"
+        },
+        {
+          "line": 463,
+          "text": " Test Files  167 passed (167)"
+        },
+        {
+          "line": 464,
+          "text": "      Tests  1424 passed (1424)"
+        },
+        {
+          "line": 491,
+          "text": "✓ built in 608ms"
+        }
+      ],
+      "job_id": 113648036372,
+      "metadata_conclusion": "success",
+      "name": "frontend",
+      "raw": {
+        "bytes": 60615,
+        "sha256": "bd72ff54071047a519e8fd6175d367c8c491daaabb718b069f4305820054a0e7"
+      }
+    },
+    {
+      "checkout_evidence": [
+        {
+          "line": 100,
+          "text": "[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0a6ef4b1798051c5beca9ff2f1826c91ab208f26:refs/remotes/origin/feat/M6.3-executed-sampling-binding-validation"
+        },
+        {
+          "line": 106,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        },
+        {
+          "line": 170,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        }
+      ],
+      "commands": [
+        "uv run --frozen pytest tests/integration"
+      ],
+      "exact_head_occurrences": 4,
+      "explicit_exit_markers": [],
+      "fetch_exit": 0,
+      "fetch_stderr_bytes": 0,
+      "fetch_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "footers": [
+        {
+          "line": 593,
+          "text": "SKIPPED [1] tests/integration/test_authoring_numeric_runtime.py:46: BLOCKED_ENVIRONMENT: real sealed runtime did not execute the calculator; original FAIL retained"
+        },
+        {
+          "line": 594,
+          "text": "SKIPPED [1] tests/integration/test_restore_numeric_actual_runtime.py:42: BLOCKED_ENVIRONMENT: actual sealed Restore evaluator did not return a numeric PASS; no fallback"
+        },
+        {
+          "line": 595,
+          "text": "=========== 2540 passed, 2 skipped, 2 warnings in 2417.28s (0:40:17) ==========="
+        }
+      ],
+      "job_id": 113648036215,
+      "metadata_conclusion": "success",
+      "name": "integration",
+      "raw": {
+        "bytes": 57830,
+        "sha256": "16fd2b8ffe4b9704def2121d2109c303c3a7332b1c34eb6b0f0d4585069bb6f2"
+      }
+    },
+    {
+      "checkout_evidence": [
+        {
+          "line": 101,
+          "text": "[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0a6ef4b1798051c5beca9ff2f1826c91ab208f26:refs/remotes/origin/feat/M6.3-executed-sampling-binding-validation"
+        },
+        {
+          "line": 107,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        },
+        {
+          "line": 172,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        }
+      ],
+      "commands": [
+        "python scripts/check_publication.py --all-tracked"
+      ],
+      "exact_head_occurrences": 4,
+      "explicit_exit_markers": [],
+      "fetch_exit": 0,
+      "fetch_stderr_bytes": 0,
+      "fetch_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "footers": [
+        {
+          "line": 219,
+          "text": "PASS: scanned 25413 staged/tracked files against path and credential rules. Manual provenance review remains required."
+        }
+      ],
+      "job_id": 113648036311,
+      "metadata_conclusion": "success",
+      "name": "security-publication",
+      "raw": {
+        "bytes": 21365,
+        "sha256": "3d248e231b57e41d84e17fb7c9a0df4f0670ee799346c48e20e133f44882c095"
+      }
+    },
+    {
+      "checkout_evidence": [
+        {
+          "line": 102,
+          "text": "[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0a6ef4b1798051c5beca9ff2f1826c91ab208f26:refs/remotes/origin/feat/M6.3-executed-sampling-binding-validation"
+        },
+        {
+          "line": 108,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        },
+        {
+          "line": 188,
+          "text": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26"
+        }
+      ],
+      "commands": [
+        "make verify-spec",
+        "uv run --frozen pytest tests/contract tests/unit/test_spec_*.py"
+      ],
+      "exact_head_occurrences": 4,
+      "explicit_exit_markers": [],
+      "fetch_exit": 0,
+      "fetch_stderr_bytes": 0,
+      "fetch_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "footers": [
+        {
+          "line": 472,
+          "text": "================= 962 passed, 2 warnings in 650.13s (0:10:50) =================="
+        }
+      ],
+      "job_id": 113648036346,
+      "metadata_conclusion": "success",
+      "name": "spec-contracts",
+      "raw": {
+        "bytes": 40049,
+        "sha256": "fa6b96d0bb237b1613866a28aef155661093d1b523fbd483b4ed8fecfa4ff908"
+      }
+    }
+  ],
+  "run": {
+    "conclusion": "failure",
+    "head_sha": "0a6ef4b1798051c5beca9ff2f1826c91ab208f26",
+    "id": 37877084007,
+    "metadata_scope": "run metadata captured by root; six job metadata and logs independently read by this reviewer",
+    "status": "completed",
+    "updated_at": "2026-10-09T03:40:29Z"
+  },
+  "schema": 1,
+  "sourcebinding": "All six independently fetched full logs contain exact requested 0a6 checkout SHA; no dedicated SDK result or prior5aff footer substituted"
+}

@@ -2,7 +2,7 @@ diff --git a/core/src/session/retained_sampling_executed_state_tests.rs b/core/s
 new file mode 100644
 --- /dev/null
 +++ b/core/src/session/retained_sampling_executed_state_tests.rs
-@@ -0,0 +1,270 @@
+@@ -0,0 +1,288 @@
 +//! Mechanical recorder ownership only; no provider, encoder, grant or sender.
 +use super::*;
 +use crate::session::step_settings::ResolvedStepSettings;
@@ -12,11 +12,15 @@ new file mode 100644
 +use crate::state::ActiveTurn;
 +use crate::state::RunningTask;
 +use crate::state::TaskKind;
++use crate::tools::context::ToolCallSource;
++use crate::tools::context::ToolPayload;
++use crate::tools::router::ToolCall;
 +use codex_code_mode::CellId;
 +use codex_features::Feature;
 +use codex_features::Features;
 +use codex_protocol::models::FunctionCallOutputPayload;
 +use codex_protocol::models::ResponseInputItem;
++use codex_tools::ToolName;
 +use codex_utils_output_truncation::TruncationPolicy;
 +use pretty_assertions::assert_eq;
 +use serde_json::json;
@@ -194,7 +198,21 @@ new file mode 100644
 +    let cell = CellId::new("retained-sampling-cell".to_string());
 +    let call = ExecutedToolCall::new("synthetic_nested_tool".to_string(), json!({"argument": 2}));
 +    recorder.start_cell(&cell, "exec");
-+    recorder.record_nested_tool_call(cell.clone(), "nested".to_string(), call.clone(), 2);
++    recorder.record_tool_call(
++        &ToolCall {
++            tool_name: ToolName::plain("synthetic_nested_tool"),
++            call_id: "nested".to_string(),
++            payload: ToolPayload::Function {
++                arguments: json!({"argument": 2}).to_string(),
++            },
++            encrypted_function_args: None,
++        },
++        &ToolCallSource::CodeMode {
++            cell_id: cell.as_str().to_string(),
++            runtime_tool_call_id: "nested".to_string(),
++        },
++        &step,
++    );
 +    recorder.finish_cell_recording(&cell);
 +    assert_eq!(
 +        retained.verify_current(&session, &step).await,

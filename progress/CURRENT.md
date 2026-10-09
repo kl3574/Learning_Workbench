@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-09T02:56:05Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-09T04:03:17.392803+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：ISSUE32_PR56_BODY_UPDATED_AND_READBACK_2026_10_09
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-核隔离feat/M6.3-executed-sampling-binding-validation实际129测试、10份非零精确--list与原Clippy，失败时只修最窄实际原因。原5aff整平台baseline FAIL/browser131P2F保留，grading/review30s根因未闭环。完整InputProof/PREGRANT/权威版本容量token/genuine handle→已有durable-start→单次sender仍缺；Agent/M6.3/AC21 NOT_ACCEPTED、numeric BLOCKED_ENVIRONMENT、M7todo，模型请求0。
+核隔离fix/M6.3-sampling-binding-fixture-privacy实际129编译、10组精确名称/非零--list/行为footer、六份8796图/所有命令回执与原Clippy；保留0a6实际E0624(9PASS/120NOT_RUN/ClippyNOT_RUN)及同head完整baseline FAIL/browser129PASS4FAIL，四失败根因待审。browser仅两文件被动ACK与block/body诊断候选，原30s/retry0/worker1/断言保持；当前无server-stage producer，不采用挂空产物workflow。Direct取消见证v2静态复审0新P1/P2，未发布未运行；动态reset串行化/旧reserve窗口命中未证明。完整InputProof/PREGRANT/模型版本容量token权威/genuine handle→已有durable-start→单次sender仍缺；Agent/M6.3/AC21 NOT_ACCEPTED、numeric BLOCKED_ENVIRONMENT、M7todo、模型请求0。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
