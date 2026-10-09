@@ -1,0 +1,523 @@
+{
+  "basis": {
+    "no_previous_CI_logs_or_ZIP_redownloaded": true,
+    "readonly_packet_v2": {
+      "bytes": 172753,
+      "complete_Rust_sources": 17,
+      "sha256": "f42b5e52aec331fc0fd0dc6c4098c93cf6ba12e4cff7e039985231f4e6646e5c",
+      "tokenizer_raw_included": false
+    },
+    "readonly_packet_v3": {
+      "bytes": 129479,
+      "complete_sources": 3,
+      "posted_before_review_and_lock_extraction": true,
+      "sha256": "d0f650f48c02f88b280bf91f28b82777c3f8e6153eff69b95b1cf3c0932f1d40"
+    },
+    "v2_report": {
+      "bytes": 34930,
+      "new_exact_sources": 12,
+      "sha256": "97fe56bbc3f00b592f7950ca5b596f6d2998941fca5feddaf53aa5683054a9c6",
+      "status": "SOURCE_ONLY_PARTIAL_NOT_QUALIFIED"
+    }
+  },
+  "captured_at_utc": "2026-10-09T10:06:32.613805+00:00",
+  "checks": [
+    {
+      "id": "formatter_spaced_array_and_object_separators",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "formatter_uses_actual_compact_f64_fallback",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "formatter_negative_small_exponent_rules_visible",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "formatter_serde_json_dependency_not_reimplemented",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "v41_token_spec_constants_exact",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "image_tokens_include_newlines_and_two_delimiters",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "resize_has_finite_ten_iteration_boundary",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "image_validity_only_dimension_fixed_point",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "multimodal_adjustment_is_tokens_minus_one_placeholder",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "zero_dimensions_not_rejected_by_positive_area_upscale_guard",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "tokenizers_locked_package_unique_exact",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    },
+    {
+      "id": "anchored_tokenizers_lock_references_resolve",
+      "result": "PASS_SOURCE_TEXT_OR_ANCHORED_LOCK_ONLY"
+    }
+  ],
+  "internal_render_closure_after_batches": {
+    "conditional_supported_shape": "For a genuine complete captured supported request, the local source transformation can now be traced through text, history, tools/JSON-format and declared image arithmetic without silently treating Unsupported paths as preserved. This is source traceability, not complete online equivalence.",
+    "read_scope": "The project source bodies actually imported by the Responses converter for core message/tool/image representation, tool normalization/validation, V4/V4.1 templates, Python-style JSON rendering and image arithmetic have now been read through the two scoped batches.",
+    "remaining_project_boundaries": [
+      "Crate manifests/features/reexports and external dependency implementations are not fully closed.",
+      "Responses chunk generator, response generator and stream state-machine code remain unreviewed for output enforcement.",
+      "Image resolver/preprocessor and final inference backend construction remain caller-owned and unread in these batches.",
+      "Native actual Prompt/material/config/history/tool/metadata provenance and final retained request capture remain absent."
+    ]
+  },
+  "new_findings": [
+    {
+      "anchors": [
+        "deepseek-recipe-core/src/util/json_formatter.rs:11-31",
+        "deepseek-recipe-core/src/util/json_formatter.rs:33-63",
+        "deepseek-recipe-core/src/util/json_formatter.rs:66-79"
+      ],
+      "closed": "The previously unread project implementation is now fully read. Tool-schema, historical nonstring arguments and JsonObject prompt rendering can be followed through this module.",
+      "fact": "The actual imported formatter spaces array/object separators and colon, uses serde_json CompactFormatter for f64, then changes small negative exponents to zero-padded forms. It serializes a serde_json::Value to UTF8; nonASCII text remains unescaped per this source. Other string/number behavior remains delegated to serde_json.",
+      "id": "actual_json_render_formatter_closed_internally",
+      "not_closed": "Full serde/serde_json implementation, exact enabled features/order/number behavior and compiled outputs. No claim of universal byte equivalence to arbitrary Python json.dumps settings."
+    },
+    {
+      "anchors": [
+        "deepseek-recipe-core/src/multimodal/token_spec.rs:43-71",
+        "deepseek-recipe-core/src/multimodal/token_spec.rs:178-200",
+        "deepseek-recipe-core/src/multimodal/mod.rs:147-168"
+      ],
+      "closed": "The imported image-token arithmetic implementation and its relationship to the placeholder adjustment are now read.",
+      "fact": "V4.1 uses patch14, spatial ratio3, max1024 image tokens and positive-area upscaling toward544*544 pixels. Token grid uses ceil-aligned patch/downsample dimensions. Per-image tokens are h*(w+1)+2 (row newlines and two delimiters); MultiModalData adds that result minus the already encoded one image placeholder.",
+      "id": "image_spec_parameters_and_formula_are_explicit",
+      "not_closed": "Actual decoded/preprocessed image bytes/dimensions/order, backend framing, image resolver/fetcher/OpenCV pipeline, target integer-width/bounds and complete input metering. PromptEncoding.encode itself still omits this separate adjustment."
+    },
+    {
+      "anchors": [
+        "deepseek-recipe-core/src/multimodal/token_spec.rs:118-178",
+        "deepseek-recipe-core/src/multimodal/token_spec.rs:202-231"
+      ],
+      "fact": "calc_resize performs at most10 resize stages and returns NotConverged with the last result if no fixed point. The first stage aligns/scales/fits, and a solve path asserts its result is at most1024 tokens. is_image_valid checks unchanged target dimensions only, never encoded image data.",
+      "falsifiable_condition": "A caller must handle convergence failure, validate actual bytes/dimensions and bound arithmetic/resource inputs. The1024 result is not a proof that arbitrary input bytes represent a valid image.",
+      "id": "resize_is_a_bounded_fixed_point_algorithm"
+    },
+    {
+      "anchors": [
+        "deepseek-recipe-core/src/multimodal/token_spec.rs:99-110",
+        "deepseek-recipe-core/src/multimodal/token_spec.rs:141-160",
+        "deepseek-recipe-core/src/multimodal/token_spec.rs:178-200",
+        "deepseek-recipe-core/src/multimodal/mod.rs:127-136"
+      ],
+      "evidence_kind": "Direct source/algebra deduction only; no Rust call or actual image execution. This falsifies an inferred byte-validity/positive-dimension promise, not the source's explicitly dimension-only comment.",
+      "fact": "There is no positive-dimension rejection here. On the visible zero-width/zero-height path, positive-area upscaling does not run, grid dimensions stay0 and the formula gives2; fixed dimensions therefore pass is_image_valid(0,0). ImageInfo's public width/height fields also have no constructor guard in the read module.",
+      "id": "zero_dimension_counterexample_is_source_deduced_not_executed"
+    },
+    {
+      "anchors": [
+        "deepseek-recipe-core/src/util/json_formatter.rs:81-104",
+        "deepseek-recipe-core/src/multimodal/token_spec.rs:234-314"
+      ],
+      "fact": "The formatter has spaced_separators; token_spec has36 source case tuples and three tests for resizing/validity/floor-ceiling. They were read, not compiled or executed.",
+      "id": "source_unit_tests_exist_but_do_not_supply_runtime_evidence",
+      "result": "NOT_RUN",
+      "tests": [
+        "spaced_separators",
+        "calc_resize_matches_v41_preprocessing",
+        "fitted_images_are_valid",
+        "token_len_has_a_floor_and_a_ceiling"
+      ]
+    },
+    {
+      "anchors": [
+        "Cargo.lock:1-4",
+        "Cargo.lock:2378-2412",
+        "Cargo.lock:416-452"
+      ],
+      "closed": "Fixed lock-layer dependency references and package identities only.",
+      "fact": "The unique tokenizers package is0.23.2 from the crates.io registry with the exact checksum below. Anchored block scanning resolves27 direct references and195 transitive name/version entries without ambiguous/missing references.331 total package blocks were scanned.",
+      "id": "locked_tokenizer_and_external_graph_identity_are_pinned",
+      "not_closed": "Active feature/target selection, source implementation review of195 packages, build scripts/native libraries, effective crate behavior or runtime safety. Lock membership of hf-hub/HTTP-related packages does not prove a network call occurred or that a feature is active."
+    }
+  ],
+  "next_implementable_work": {
+    "data_only_qualification_step": "Use the existing native producer/retained seams to capture a genuine complete owner-produced final Responses body with all implicit contributors. Build explicit input-shape rejection/normalization witnesses and carry actual encoder/config/cap identity; no handwritten simpler Prompt, new DTO/registry or fake token theorem.",
+    "immediate_source_step": "Read exact fixed workspace/encoding/core manifests to close selected serde_json ordering/tokenizers features and identify the actual external tokenizers crate call graph from the locked checksum. Keep optional download APIs distinct from the local encode path; do not expand into online qualification or execute build scripts.",
+    "production_gate": "Keep pregrant/controlled proof rejection and zero provider transport until genuine provenance, complete pre-send InputProof, covered online model versions/framing/capacity/invalidation, hard output enforcement and reviewed runtime/durable-start transport closure actually qualify.",
+    "runtime_later": "Compile and execute the actual fixed recipe+exact tokenizer with those genuine witnesses only when the local execution block is resolved. Source-reading and locked identities do not substitute for that step."
+  },
+  "publication_scan": {
+    "failures": [],
+    "original_checker_bytes": 3531,
+    "original_checker_sha256": "b42f875f7d0a41f78cd7a59b97948b59f1e6146c8ba9198e6c737e284a834d33",
+    "patterns": 7,
+    "result": "PASS",
+    "scope": "Full original inspect() AST with its three original constants in RAM; no original main/Git/process/filesystem enumeration"
+  },
+  "recovery_precision": {
+    "TOML": "Standard full TOML parse NOT_RUN; no current verified Python3.11+ command was available. Parent allowed exact anchored package-block audit.",
+    "authorized_recovery": "Parent explicitly authorized one exact fixed-commit recovery of the three sources and of the four child sources whose handles were unavailable. Each affected source records original read1+recovery read1=total2. No old CI asset was retrieved.",
+    "corrected_handling": "Recovered original bytes exported immediately as readonly packet-v3 before source analysis. The surviving helper catches analysis exceptions and retains its buffers.",
+    "first_attempt": "Three sources were fetched/pin-checked into one RAM helper, then an uncaught JSONDecodeError occurred while incorrectly treating a Cargo.lock TOML array with a trailing comma as JSON. The helper exited and its buffers became unavailable. This is an audit-helper error, not product or official-source failure.",
+    "first_attempt_SHA_receipt": "First helper computed SHA256 internally but did not export the pins before failing; the durable v3 packet contains the actual recovered pins. No independent first exported SHA receipt is claimed.",
+    "owned_v2_state": "Seven own new Rust sources remain complete in own RAM; original tokenizer raw remained in the known named32787 buffer and its first line was read successfully. Tokenizer not re-downloaded."
+  },
+  "review": {
+    "P1": [],
+    "P2": [],
+    "meaning": "No product implementation delta. Explicit unclosed qualification dependencies are blockers, not a fictitious PASS or a reported executed API failure."
+  },
+  "schema": "deepseek-fixed-encoding-source-closure-v3",
+  "scope": {
+    "batch": 2,
+    "fixed_commit": "8cadfede7063c896b944e7bae05daa3549ae97ea",
+    "implementation_delta": "NONE",
+    "new_exact_files": 3,
+    "product_design_DTO_registry_changes": 0,
+    "sole_norm": {
+      "bytes": 520415,
+      "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec",
+      "version": "3.0.15"
+    }
+  },
+  "sources": [
+    {
+      "bytes": 3556,
+      "current_raw_buffer": "RECOVERED_EXACT_FIXED_GITBLOB_AND_BYTES",
+      "first_raw_buffer": "UNAVAILABLE_AFTER_LOCK_JSON_PARSE_HELPER_ERROR",
+      "gitblob": "84c989d89d6e96612c88f5f72a3f2be96695ddc3",
+      "lines": 104,
+      "original_first_read": 1,
+      "path": "deepseek-recipe-core/src/util/json_formatter.rs",
+      "read_evidence": "Complete source text read",
+      "recovery_read": 1,
+      "sha256": "729102bc38ce4d312dc42f00be43f0b212d7410761cd313d5e85a2c9006223ed",
+      "total_reads": 2,
+      "url": "https://github.com/deepseek-ai/deepseek-recipe/blob/8cadfede7063c896b944e7bae05daa3549ae97ea/deepseek-recipe-core/src/util/json_formatter.rs"
+    },
+    {
+      "bytes": 11642,
+      "current_raw_buffer": "RECOVERED_EXACT_FIXED_GITBLOB_AND_BYTES",
+      "first_raw_buffer": "UNAVAILABLE_AFTER_LOCK_JSON_PARSE_HELPER_ERROR",
+      "gitblob": "4bfd6489b80a077c0972e32dcca67d858924fcd2",
+      "lines": 314,
+      "original_first_read": 1,
+      "path": "deepseek-recipe-core/src/multimodal/token_spec.rs",
+      "read_evidence": "Complete source text read",
+      "recovery_read": 1,
+      "sha256": "ebc6b0379a1ff0eea92f02feaa1d6a51b258380759b754cb1d3d7182edb696d0",
+      "total_reads": 2,
+      "url": "https://github.com/deepseek-ai/deepseek-recipe/blob/8cadfede7063c896b944e7bae05daa3549ae97ea/deepseek-recipe-core/src/multimodal/token_spec.rs"
+    },
+    {
+      "bytes": 80107,
+      "current_raw_buffer": "RECOVERED_EXACT_FIXED_GITBLOB_AND_BYTES",
+      "first_raw_buffer": "UNAVAILABLE_AFTER_LOCK_JSON_PARSE_HELPER_ERROR",
+      "gitblob": "ae996317722a2195a171d7b51adb0cb0ec725ea6",
+      "lines": 3205,
+      "original_first_read": 1,
+      "path": "Cargo.lock",
+      "read_evidence": "Whole buffer read/pinned; all331 anchored package blocks scanned; only selected exact package/dependency lines extracted, NOT a complete TOML parse",
+      "recovery_read": 1,
+      "sha256": "0897f68c7220e3fa11b11b03fe45245ab88bd2515586af057d00bf64111c9328",
+      "total_reads": 2,
+      "url": "https://github.com/deepseek-ai/deepseek-recipe/blob/8cadfede7063c896b944e7bae05daa3549ae97ea/Cargo.lock"
+    }
+  ],
+  "status": "INTERNAL_RENDER_AND_IMAGE_ARITHMETIC_SOURCE_READ_LOCK_IDENTITY_PINNED_GLOBAL_QUALIFICATION_OPEN",
+  "tokenizers_lock": {
+    "active_features": "NOT_CLOSED",
+    "all_package_blocks": 331,
+    "anchored_transitive_count": 195,
+    "checksum": "7afbf6e88718afcc138bad01d6ccc3051dbbc3b2ce9793d8b8a3aeb610969cfc",
+    "complete_TOML_parse": "NOT_RUN",
+    "dependencies": [
+      "ahash",
+      "compact_str",
+      "daachorse",
+      "dary_heap",
+      "derive_builder",
+      "esaxx-rs",
+      "getrandom 0.3.4",
+      "hf-hub",
+      "indicatif 0.18.6",
+      "itertools",
+      "log",
+      "macro_rules_attribute",
+      "monostate",
+      "onig",
+      "paste",
+      "rand 0.9.5",
+      "rayon",
+      "rayon-cond",
+      "regex",
+      "regex-syntax",
+      "serde",
+      "serde_json",
+      "spm_precompiled",
+      "thiserror",
+      "unicode-normalization-alignments",
+      "unicode-segmentation",
+      "unicode_categories"
+    ],
+    "direct_resolved": [
+      {
+        "checksum": "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75",
+        "end_line": 24,
+        "name": "ahash",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 11,
+        "version": "0.8.12"
+      },
+      {
+        "checksum": "9dfdd1c2274d9aa354115b09dc9a901d6c5576818cdf70d14cae2bdb47df00ab",
+        "end_line": 291,
+        "name": "compact_str",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 277,
+        "version": "0.9.1"
+      },
+      {
+        "checksum": "5614204febbc33cc07a2806aa6440b904ac012b68eecc37f4493ea4a76455a3d",
+        "end_line": 365,
+        "name": "daachorse",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 360,
+        "version": "3.0.3"
+      },
+      {
+        "checksum": "8b1e3a325bc115f096c8b77bbf027a7c2592230e70be2d985be950d3d5e60ebe",
+        "end_line": 409,
+        "name": "dary_heap",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 401,
+        "version": "0.3.9"
+      },
+      {
+        "checksum": "507dfb09ea8b7fa618fcf76e953f4f5e192547945816d5358edffe39f6f94947",
+        "end_line": 500,
+        "name": "derive_builder",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 492,
+        "version": "0.20.2"
+      },
+      {
+        "checksum": "d817e038c30374a4bcb22f94d0a8a0e216958d4c3dcde369b1439fec4bdda6e6",
+        "end_line": 601,
+        "name": "esaxx-rs",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 593,
+        "version": "0.1.10"
+      },
+      {
+        "checksum": "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd",
+        "end_line": 776,
+        "name": "getrandom",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 765,
+        "version": "0.3.4"
+      },
+      {
+        "checksum": "629d8f3bbeda9d148036d6b0de0a3ab947abd08ce90626327fc3547a49d59d97",
+        "end_line": 837,
+        "name": "hf-hub",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 819,
+        "version": "0.4.3"
+      },
+      {
+        "checksum": "9433806cd6b4ec1aba79c021c7e4c58fb4c3b9977c085062e611ac929998fb0c",
+        "end_line": 1116,
+        "name": "indicatif",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1104,
+        "version": "0.18.6"
+      },
+      {
+        "checksum": "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285",
+        "end_line": 1158,
+        "name": "itertools",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1150,
+        "version": "0.14.0"
+      },
+      {
+        "checksum": "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6",
+        "end_line": 1265,
+        "name": "log",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1260,
+        "version": "0.4.34"
+      },
+      {
+        "checksum": "b3ae8f6d608c795738406608304d30a2dfbdc8e58e44f7ba43236da5208ded3c",
+        "end_line": 1281,
+        "name": "macro_rules_attribute",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1272,
+        "version": "0.2.3"
+      },
+      {
+        "checksum": "3341a273f6c9d5bef1908f17b7267bbab0e95c9bf69a0d4dcf8e9e1b2c76ef67",
+        "end_line": 1362,
+        "name": "monostate",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1352,
+        "version": "0.1.18"
+      },
+      {
+        "checksum": "0cc3cbf698f9438986c11a880c90a6d04b9de27575afd28bbf45b154b6c709e2",
+        "end_line": 1510,
+        "name": "onig",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1499,
+        "version": "6.5.3"
+      },
+      {
+        "checksum": "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a",
+        "end_line": 1590,
+        "name": "paste",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1585,
+        "version": "1.0.15"
+      },
+      {
+        "checksum": "b9ef1d0d795eb7d84685bca4f72f3649f064e6641543d3a8c415898726a57b41",
+        "end_line": 1826,
+        "name": "rand",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1817,
+        "version": "0.9.5"
+      },
+      {
+        "checksum": "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d",
+        "end_line": 1881,
+        "name": "rayon",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1872,
+        "version": "1.12.0"
+      },
+      {
+        "checksum": "2964d0cf57a3e7a06e8183d14a8b527195c706b7983549cd5462d5aa3747438f",
+        "end_line": 1892,
+        "name": "rayon-cond",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1882,
+        "version": "0.4.0"
+      },
+      {
+        "checksum": "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d",
+        "end_line": 1934,
+        "name": "regex",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1923,
+        "version": "1.13.1"
+      },
+      {
+        "checksum": "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4",
+        "end_line": 1951,
+        "name": "regex-syntax",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 1946,
+        "version": "0.8.11"
+      },
+      {
+        "checksum": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba",
+        "end_line": 2082,
+        "name": "serde",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 2073,
+        "version": "1.0.229"
+      },
+      {
+        "checksum": "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14",
+        "end_line": 2116,
+        "name": "serde_json",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 2103,
+        "version": "1.0.151"
+      },
+      {
+        "checksum": "5851699c4033c63636f7ea4cf7b7c1f1bf06d0cc03cfb42e711de5a5c46cf326",
+        "end_line": 2218,
+        "name": "spm_precompiled",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 2207,
+        "version": "0.1.4"
+      },
+      {
+        "checksum": "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f",
+        "end_line": 2311,
+        "name": "thiserror",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 2303,
+        "version": "2.0.20"
+      },
+      {
+        "checksum": "43f613e4fa046e69818dd287fdc4bc78175ff20331479dab6e1b0f98d57062de",
+        "end_line": 2571,
+        "name": "unicode-normalization-alignments",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 2563,
+        "version": "0.1.12"
+      },
+      {
+        "checksum": "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8",
+        "end_line": 2577,
+        "name": "unicode-segmentation",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 2572,
+        "version": "1.13.3"
+      },
+      {
+        "checksum": "39ec24b3121d976906ece63c9daad25b85969647682eee313cb5779fdd69e14e",
+        "end_line": 2589,
+        "name": "unicode_categories",
+        "source": "registry+https://github.com/rust-lang/crates.io-index",
+        "start_line": 2584,
+        "version": "0.1.1"
+      }
+    ],
+    "end_line": 2412,
+    "external_tokenizers_crate_source": "NOT_FETCHED_NOT_AUDITED",
+    "extraction_method": "Anchored exact package/name/version/source/checksum/dependency lines; NOT a full TOML parse, no feature-resolution or compile",
+    "name": "tokenizers",
+    "source": "registry+https://github.com/rust-lang/crates.io-index",
+    "start_line": 2378,
+    "unresolved_references": [],
+    "url": "https://github.com/deepseek-ai/deepseek-recipe/blob/8cadfede7063c896b944e7bae05daa3549ae97ea/Cargo.lock#L2378",
+    "version": "0.23.2"
+  },
+  "validation": {
+    "Agent_M63_AC21": "NOT_ACCEPTED",
+    "Cargo": "NOT_RUN",
+    "Clippy": "NOT_RUN",
+    "FS_writes": 0,
+    "Git_mutations": 0,
+    "Rust": "NOT_COMPILED",
+    "Rust_typecheck": "NOT_RUN",
+    "converter": "NOT_EXECUTED",
+    "environment_process_capacity_probes": 0,
+    "full_TOML_parse": "NOT_RUN",
+    "genuine_native_request": "NO_GENUINE_CAPTURE",
+    "key_reads_transmissions": 0,
+    "model_provider_calls": 0,
+    "online_proof": "NO_ONLINE_PROOF",
+    "production_admission": "REJECT_REMAINS",
+    "production_registry_entries": 0,
+    "source_text_or_anchored_checks_pass": 12,
+    "source_unit_tests": "NOT_RUN",
+    "tokenizer": "NOT_TOKENIZED"
+  }
+}
