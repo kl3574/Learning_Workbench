@@ -157,7 +157,10 @@ def test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_
     storage, _, _, _, original, _ = legacy_storage(tmp_path, monkeypatch, two=True)
     database, identity, _, _ = storage
     with database.transaction() as connection:
-        first = connection.execute("SELECT attempt_id,grading_revision FROM grades ORDER BY attempt_id,grading_revision LIMIT 1").fetchone()
+        # Target the first appended grade consumed by one bounded recovery tick.
+        # Attempt IDs are opaque and need not sort in the producer's append order.
+        first = connection.execute("SELECT attempt_id,grading_revision FROM grades ORDER BY rowid LIMIT 1").fetchone()
+        assert first is not None
         # Fixed SQL trigger with the actual selected key stored separately;
         # this models one late storage failure, not an API-access capability.
         connection.execute("CREATE TABLE independent_recovery_fault(attempt_id TEXT, grading_revision INTEGER)")
@@ -179,6 +182,12 @@ def test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_
     for table in ("learning_events", "learning_progress", "learning_grade_bindings", "learning_evidence_refs", "evidence"):
         assert after[table] == before[table], table
     assert after["learning_evidence_recovery_failures"] == 1
+    with database.connect() as connection:
+        failures = connection.execute(
+            "SELECT attempt_id,grading_revision FROM learning_evidence_recovery_failures ORDER BY rowid").fetchall()
+        assert [tuple(row) for row in failures] == [tuple(first)]
+        assert connection.execute(
+            "SELECT 1 FROM learning_grade_bindings WHERE attempt_id=? AND grading_revision=?", tuple(first)).fetchone() is None
     with database.transaction() as connection:
         connection.execute("DROP TRIGGER independent_late_evidence_failure")
     recovery = EvidenceRecovery(database)

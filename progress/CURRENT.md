@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-09T07:03:01.814141+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-09T09:25:31.752893+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：ISSUE32_PR56_ACTUAL_DBF129_PASS_READBACK_ONLY; FULL27_CAPTURE_HISTORICAL
+仓库发布：VERIFIED；Issues 同步：ISSUE32_PR56_ACTUAL_ORIGINAL1be8_FULL_FAIL_AND_SOURCE_BOUND_RESULTS_READBACK; QA30_REVIEW1_AND_NEW_COMPOSITE_NOT_YET_REMOTE_SYNCED_AT_CAPTURE; FULL27_CAPTURE_HISTORICAL
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-发布已独审当前dbf绑定Direct135及有界证据恢复v2隔离source，并读取其真实135+原Clippy、8项恢复回归/完整Mypy/Ruff/WAL与平台CI结果；自身新source在本代码捕获中NOT_RUN。继续读取dbf baseline integration真实终态，保留f7与更早实际失败及环境skip，不将子组件或旧门禁冒称整体验收。完整InputProof/权威版本容量token/真实owner→已有durable-start→单次sender及qualifiedruntime未闭环；生产不准入，Agent/M6.3/AC21 NOT_ACCEPTED，numeric BLOCKED_ENVIRONMENT，M7todo，模型请求0。
+从当前隔离fix分支真实Git ref恢复并读取原完整平台基线终态；两个完整证据模块及单Review场景的真实QA只闭合各自范围，不能代替新组合head完整门禁。继续真正native outerRequest完整输入/权威版本容量token/owner→已有durable-start→单次sender和qualified runtime；Agent/M6.3/AC21未验收，数值环境阻塞，M7todo，模型0。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -49,7 +49,7 @@
 - real_provider: PLATFORM_PROVIDER_NOT_RUN：production完整InputProof/受控executor未有符合要求注册证明；本轮0actual external model request，无实key使用/存入源码/上传。历史直连成功缺原HTTP可核回执，不作为当前平台通过。
 - real_codex: PHYSICAL_CODEX_MODEL_OR_TOOL_TURN_NOT_RUN：控制bootstrap/纯内存和pureliteral合成执行分别限定，真实CLI模型turn、物理Broker/hosttools/writer-stop/resource验收未完成。
 - learning_effectiveness: NOT_RUN
-- ci: 实际dbf source129/129与原Clippy exit0已独立审阅；dbf平台基线5jobPASS（962规格、1114后端、1424前端、25449安全扫描、133浏览器），integration仍RUNNING。当前Direct135和有界恢复v2的root/独立source审阅均0开放P1/P2，自身135/Clippy和8回归/Mypy/Ruff/完整WAL均NOT_RUN；SQL7仅v1共享SQL子组件实际PASS、NO_RERUN。f7 terminal基线FAIL（131P2F）及更早失败保留；没有浏览器因果修复结论。Agent/M6.3/AC21 NOT_ACCEPTED，numeric BLOCKED_ENVIRONMENT，M7todo，真实模型请求0。
+- ci: 新组合head完整平台基线在代码捕获时NOT_RUN。精确upstream1be8 SDK135/原Clippy实际PASS；原1be8完整平台CI实际FAIL（browser132P1F、integration2545P3F2ENVskip）。独立QA3b35八项PASS、b9cfe两个完整证据模块30PASS、42b1单Review场景1PASS/retry0及原build/精确Reader断言/Review1440与390截图核验均有各自报告；E2E静态tsc未运行，截图不冒称Reader截图。不合并scope为Agent/numeric/全平台PASS，model0。
 - m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
 - m4_1_exact: 5bd8157新lint/types/spec/247web/build/74native均PASS，504源码前后相同；同SHA双workflow12checks成功。
 - m4_1_layout_repair: PASS:真实412布局及焦点回归；原失败保留，限定机制归因；新74完整套件通过。
@@ -438,6 +438,7 @@
 - model_resolution6: 专用pusha562/run37781979493真实6P0F/54filtered/Cargo0，仅原resolver机械事实，versionNone/Unqualified、未接sameStep。证据：progress/evidence/2026-10-08/M6.3-native15-G2six-CI-events/REPORT.json
 - m6_3_source121_actual_2026_10_09: {'source': '5affdc565c266a7cd163fdbe7020ad43c11f934a', 'run': 37837163226, 'tests': '121PASS', 'clippy_exit': 0, 'full_platform_baseline': 'FAIL', 'evidence': 'progress/evidence/2026-10-09/M6.3-source121-actual-audit.json', 'production': 'NOT_ADMITTED'}
 - m6_3_binding129_v2_source_review: {'source': 'isolated SDK patch, candidate selfSHA intentionally null', 'parent': '5affdc565c266a7cd163fdbe7020ad43c11f934a', 'patch_sha256': 'b58de3d6196e79b3f1dc3bf5ca7fd780ad4ffdf990a69b5be73c48cb053d0e94', 'static_Standards': '0P1/0P2', 'static_Spec': '0P1/0P2', 'source_selected': 129, 'Rust_behavior': 'NOT_RUN_AT_CODE_COMMIT', 'Clippy': 'NOT_RUN_AT_CODE_COMMIT', 'production': 'NOT_ADMITTED', 'evidence': {'root': 'progress/evidence/2026-10-09/M6.3-binding129-v2-root-source-review.json', 'standards': 'progress/evidence/2026-10-09/M6.3-binding129-v2-standards-review.json', 'spec': 'progress/evidence/2026-10-09/M6.3-binding129-v2-spec-review.json'}}
+- m6_3_fixture_correction_source_capture: {'scope': 'Final prepublication capture of separately sourcebound actual SDK and QA; self head is null', 'at': '2026-10-09T09:12:42.729637+00:00', 'new_head': None, 'new_full_baseline': 'NOT_RUN_AT_CODE_CAPTURE', 'upstream135': {'bytes': 178230, 'sha256': '89b8324aa45891f92e0e6410eff5c2ec4991ad2686cc1a5dfb501319511f1885'}, 'old_full_baseline_FAIL': {'bytes': 193866, 'sha256': '18568425c08eaa1e33ff20d00c2e05ce443fa688b8539c0aa3c4d9d140dcf280'}, 'fixed8_PASS': {'bytes': 20773, 'sha256': 'b08220048517a34f0d2b4199e78976ce7a64d19722de782cf35a4f958efbb3a7'}, 'two_modules30_PASS': {'bytes': 48529, 'sha256': 'b7787e708132d6be9ff16005b02dab6c71ea43a57dc4fcb2b7813e5e1ce248cd'}, 'review_scene1_PASS': {'bytes': 72355, 'sha256': '2162afa63baaae3d05a8b78645df458313bbc08f64fb8cefe1f3aaf4e54a9850'}, 'E2E_TSC': 'NOT_RUN', 'Agent': 'NOT_ACCEPTED', 'numeric': 'BLOCKED_ENVIRONMENT', 'models': 0}
 
 ## 阻塞与待决项
 
