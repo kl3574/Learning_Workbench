@@ -1,0 +1,174 @@
+{
+  "actual": {
+    "ZIP": {
+      "bytes": 2902648,
+      "sha256": "af58be2fda41b30ae8f0da2b766dbafeec8a7010b523354058e5c4f0ab551ae7"
+    },
+    "audit": {
+      "bytes": 87427,
+      "sha256": "61a7bbf2b87963039e36af95d4f3c889b867edecbf56df886d4a359fe8f7a3b2"
+    },
+    "download_counts": {
+      "artifactZIP": 1,
+      "joblog": 1
+    },
+    "failed_case": "session::retained_sampling_preparation::executed_state_tests::retained_sampling_rejects_ordinary_writer_without_rewriting_historical_prompt",
+    "failure": "final assert_eq(actual,expected) at retained_sampling_executed_state_tests.rs:258:5; actual tool_calls_complete None vs expected Some(true)",
+    "head": "f7e56e1fb74d8dd6296494ad365ef53d90db10a5",
+    "job": 113678420486,
+    "joblog": {
+      "bytes": 54189,
+      "sha256": "f9c8d1b38a6ff01f7c6e7d3490b3ddcc192e63c97192c99cbe748a981f3e6f42"
+    },
+    "native_owner": "GenuineNone and change/revert positive cases now PASS; ordinary case passed native preflight/retain and expected ExecutedState::Changed before final metadata oracle",
+    "run": 37886774975,
+    "stderr": {
+      "bytes": 12865,
+      "sha256": "1561b635fbb2dc62ed635d07f3826c6a4131698c956eab5aa4041e76abe93b7f"
+    },
+    "stdout": {
+      "bytes": 1158,
+      "sha256": "ee8fd4363887b56faeeebfa584ac0dddc140212f5a200fcb85df57fb849ee4dd"
+    },
+    "tests": "127 started/126PASS1FAIL/attachment2NOT_RUN; original121PASS; ClippyNOT_RUN"
+  },
+  "actual_existing_counterfactuals": {
+    "cold_enable_test": "recorder_refreshes_without_changing_execution_features_or_claiming_missing_history: generic state None at460, enabled refresh, finish528, expected None531",
+    "known_history_positive": "compaction_attaches_pending_and_retained_code_mode_metadata: enabled new_recorder(InitialHistory::New), exact exec shape, original Some(true) and full equality survive compaction and retry",
+    "no_new_runtime_claim": true,
+    "scope": "Original f7 executed-metadata36 behavior PASS, with exact names/argv/footer/exit in terminal audit"
+  },
+  "authority_chain": [
+    {
+      "fact": "ExecutedToolCallMetadata default_enabled false",
+      "lines": "1056-1060",
+      "source": "features/src/lib.rs"
+    },
+    {
+      "fact": "Exact generic factory constructs ExecutedToolCalls::new(config.features, InitialHistory::Forked(Vec::new())); unchanged source",
+      "source": "core/src/session/tests.rs"
+    },
+    {
+      "fact": "refresh None to enabled Some initializes SeenIds::unobserved_history",
+      "lines": "407-415",
+      "source": "core/src/tools/executed_tool_calls.rs"
+    },
+    {
+      "fact": "unobserved_history permanently has history_ids_indexed false; supplied initial history can be indexed by constructor",
+      "lines": "35-41",
+      "source": "core/src/tools/executed_tool_calls/seen_ids.rs"
+    },
+    {
+      "fact": "start_cell requires unique runtime cell, unique origin and indexed history to enter Recording; otherwise Incomplete",
+      "lines": "731-760",
+      "source": "core/src/tools/executed_tool_calls.rs"
+    },
+    {
+      "fact": "finish closes dispatch and converts only Recording to Complete, never unverified Incomplete",
+      "lines": "764-786",
+      "source": "core/src/tools/executed_tool_calls.rs"
+    },
+    {
+      "fact": "Unique matching exec/output and Complete cell are required; missing completeness is cleared to None",
+      "lines": "264-301,346-354",
+      "source": "core/src/tools/executed_tool_calls/request_metadata.rs"
+    }
+  ],
+  "classification": {
+    "fixture_missing_precondition": "Recorder must be enabled with known initial history before sharing for a lossless-completion positive case; current generic fixture initializes disabled and later refresh enables unknown history",
+    "missing_result_callback": "NOT_CAUSE; finish_cell_recording completeness certifies closed lossless inventory, not accepted result metadata; adding a result alone cannot repair unindexed-history evidence",
+    "production_bug": "NOT_ESTABLISHED; current None is required by fail-closed source completion contract",
+    "wrong_oracle": "Some(true) is invalid for this cold-enabled setup; must preserve Some(true) for an actually known lossless cell, rather than lowering every expected completion"
+  },
+  "minimal_repair": {
+    "scope": "Only newly added6 fixture source, no production visibility/default/config policy change",
+    "steps": [
+      "Keep existing fixture() as default disabled path delegating to fixture_with_initial_recording(false).",
+      "For explicitly true initial recording, before Arc sharing and before history capture, instantiate existing recorder with enabled Features and exact known empty InitialHistory::Forked(Vec::new()), then construct matching CodeModeService with same recorder clone and original disabled provider/thread/config.",
+      "In existing ordinary writer test run both false cold-enabled and true known-initial branches; keep original true Some(true) expectation and all history/prompt/Changed/full-output assertions.",
+      "False branch explicitly expects no completion marker with calls/cell binding preserved. No manual force complete, private setter or production bridge.",
+      "Preserve other5 behavioral functions and all6 names; original121 and attachment2 scopes unchanged."
+    ]
+  },
+  "normative_boundary": {
+    "internal_flag_definition": "Sole document has zero literal tool_calls_complete or executed_tool_calls definitions; internal engineering semantics are checked against exact owned source, not imported as new product requirements",
+    "production": "Agent/M6.3/AC21 NOT_ACCEPTED, model requests0, qualified runtime unavailable",
+    "section20_17_1_1": "Complete final raw request proof remains mandatory; a mechanical recorder completion marker cannot qualify InputProof/PREGRANT/version/capacity/tokens or sender authority"
+  },
+  "not_run": [
+    "New fixture repair Cargo/types/behavior129/Clippy",
+    "New dedicated acceptance",
+    "Direct135",
+    "Production Agent/provider requests"
+  ],
+  "observed_at": "2026-10-09T05:29:32.859391+00:00",
+  "preservation": {
+    "f7_failure": "Retained; no PASS rewrite",
+    "filesystem_writes": 0,
+    "github_mutations": 0,
+    "log_or_ZIP_redownload": 0,
+    "model_requests": 0,
+    "old512_native_and0a6_E0624": "Retained",
+    "production_source_changes": 0
+  },
+  "publication_scanner": {
+    "report": "PASS",
+    "source": {
+      "bytes": 3531,
+      "sha256": "b42f875f7d0a41f78cd7a59b97948b59f1e6146c8ba9198e6c737e284a834d33"
+    }
+  },
+  "ruled_out_explanations": {
+    "argument_or_metadata_budget": "Call raw JSON length14 below8192, one call below32KiB output budget; exact diff has only complete marker difference",
+    "assembled_history_indexing": "Refuted by full helper capture/assembly and request source. Capture clones history; assembly attaches; empty recorder maps return before metadata traversal. No seen_ids indexing occurs in attach. Changing preload order does not fix cold history.",
+    "exec_origin_collision": "No call-id observation from manual history preload/assembled in current empty recorder; not the sufficient observed cause. Reused origins remain forbidden in actual source.",
+    "wrapper_name_or_output_shape": "Fixture custom exec input/output has same name/default namespace/origin shape as actual original positive compaction test; code_mode is_exec_tool_name checks default namespace and PUBLIC_TOOL_NAME. Actual original36 positive and cold-refresh tests both PASS."
+  },
+  "schema_version": 1,
+  "scope": "Independent actual f7 completeness failure diagnosis and fixture-only repair brief; no publication or runtime re-execution",
+  "sole_spec": {
+    "bytes": 520415,
+    "path": "PRODUCT_DESIGN.md",
+    "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec",
+    "version": "3.0.15"
+  },
+  "source_pins": {
+    "core/src/session/retained_sampling_executed_state_tests.rs": {
+      "bytes": 12681,
+      "sha256": "17993ad62d6c5b2f504e3816e85b1fa2fb37775decb09186d841e3e0de7c4744"
+    },
+    "core/src/session/retained_sampling_preparation.rs": {
+      "bytes": 12906,
+      "sha256": "763b127ca77e181b8d78c4a0e819278173644bfdfb35a73d41ff5c9aa438bac6"
+    },
+    "core/src/session/tests.rs": {
+      "bytes": 476861,
+      "sha256": "c8860a61dadf86e974bb9b8c150dabfbe1935c440825512dec440f1460dab7d7"
+    },
+    "core/src/tools/code_mode/mod.rs": {
+      "bytes": 19820,
+      "sha256": "e7aae18f4043e9d5964779c0a20f129b9f43dc21873328aa2bcb893035b4cf75"
+    },
+    "core/src/tools/executed_tool_calls.rs": {
+      "bytes": 33137,
+      "sha256": "a83c8bd18d01841c884732525b9981fd8a313e7e482e9268cc2135e53eb4d21d"
+    },
+    "core/src/tools/executed_tool_calls/request_metadata.rs": {
+      "bytes": 27384,
+      "sha256": "06d2b4155fe34f725062b4576989c33aada9ec6acf5b671aa2c1be0783a289a6"
+    },
+    "core/src/tools/executed_tool_calls/request_metadata_tests.rs": {
+      "bytes": 85527,
+      "sha256": "efbcb4dd389b66a8b4f04919163519955bc4c0a47f0e3aac043cf9561880e1f1"
+    },
+    "core/src/tools/executed_tool_calls/seen_ids.rs": {
+      "bytes": 4714,
+      "sha256": "7938831770d316429c5aece1bf0aeb7e1df9fedda7aaa2c216f0270616a65223"
+    },
+    "features/src/lib.rs": {
+      "bytes": 65810,
+      "sha256": "124c76d1fbad7b05fd78a62b89a28282c7ecab1de7426ac18696987024ddeae0"
+    }
+  },
+  "status": "SOURCE_CONTRACT_CONFIRMED_FIXTURE_PRECONDITION_AND_ORACLE_MISMATCH_NEW_REPAIR_NOT_RUN"
+}

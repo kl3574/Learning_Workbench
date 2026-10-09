@@ -184,13 +184,13 @@ EXECUTED_REGRESSIONS = {'source_pins': [{'path': 'codex-rs/core/src/tools/execut
           'implementation uses the exact binding after-pin. Collection never substitutes for '
           'behavior.'}
 EXECUTED_SAMPLING_BINDING = {'patch_file': 'retained-sampling-executed-state-binding.patch',
- 'patch_sha256': '60b40645ac1345606e592eb5e9fdda8e354830700852312dac261a4aad92a303',
+ 'patch_sha256': '381352d3bebe91dcce60ff9c8b1b3576dc3220334919865bac8293ec6a257505',
  'before_graph': {'rows': 8794,
                   'sha256': 'd60b03708a3a5917b747f481a661a1f1fb978d789a045dfb0afb3be7b95b2fa6'},
  'changed_files': [{'path': 'codex-rs/core/src/session/retained_sampling_executed_state_tests.rs',
                     'before_sha256': None,
-                    'after_sha256': '17993ad62d6c5b2f504e3816e85b1fa2fb37775decb09186d841e3e0de7c4744',
-                    'after_bytes': 12681,
+                    'after_sha256': 'ae364cfe0f1cdf535ca9b9abafbba06164278a840e9c45315ae16da39e350761',
+                    'after_bytes': 14153,
                     'after_mode': 436},
                    {'path': 'codex-rs/core/src/session/retained_sampling_preparation.rs',
                     'before_sha256': '8ae505fd218cac5fb3c92e8f39c80619fa0ae39c108c078c2d02ad32c3078a49',
@@ -228,8 +228,9 @@ EXECUTED_SAMPLING_BINDING = {'patch_file': 'retained-sampling-executed-state-bin
                                          '#[path = "sampling_checkpoint_tests.rs"]\n'
                                          'mod sampling_checkpoint_tests;',
                    'expected_nonzero_count': 2}],
- 'status': 'Native identity fixture repair candidate; actual512 failed Native(OwnerMismatch); '
-           'new129/Clippy NOT_RUN; earlier E0624 history preserved',
+ 'status': 'Known-initial-history fixture candidate; actualf7 original121 PASS, sampling6 '
+           '5PASS/1FAIL completeness; new129 and originalClippy NOT_RUN; earlier failures '
+           'preserved',
  'scope': 'Only sampling attachment binds existing executed Option-state checkpoint lifetime; no '
           'Direct atomics/MCP/post-lock budget/final-contributor version authority, no trusted '
           'PREGRANT/InputProof qualification or durable-start/send connection'}

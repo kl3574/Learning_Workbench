@@ -2,7 +2,7 @@ diff --git a/core/src/session/retained_sampling_executed_state_tests.rs b/core/s
 new file mode 100644
 --- /dev/null
 +++ b/core/src/session/retained_sampling_executed_state_tests.rs
-@@ -0,0 +1,317 @@
+@@ -0,0 +1,351 @@
 +//! Mechanical recorder ownership only; no provider, encoder, grant or sender.
 +use super::*;
 +use crate::agent::LocalAgentControl;
@@ -11,6 +11,7 @@ new file mode 100644
 +use crate::session::tests::make_session_and_context;
 +use crate::session::tests::update_turn_settings_for_test;
 +use crate::state::ActiveTurn;
++use crate::state::ExecutedToolCalls;
 +use crate::state::RunningTask;
 +use crate::state::TaskKind;
 +use crate::tools::context::ToolCallSource;
@@ -19,6 +20,7 @@ new file mode 100644
 +use codex_code_mode::CellId;
 +use codex_features::Feature;
 +use codex_features::Features;
++use codex_history::InitialHistory;
 +use codex_protocol::SessionId;
 +use codex_protocol::models::FunctionCallOutputPayload;
 +use codex_protocol::models::ResponseInputItem;
@@ -31,7 +33,28 @@ new file mode 100644
 +    codex_diagnostics::Gauge::new("retained-sampling-executed-state-fixture");
 +
 +async fn fixture() -> (Arc<Session>, Arc<StepContext>) {
++    fixture_with_initial_recording(false).await
++}
++
++async fn fixture_with_initial_recording(
++    initial_recording: bool,
++) -> (Arc<Session>, Arc<StepContext>) {
 +    let (mut session, mut turn) = make_session_and_context().await;
++    if initial_recording {
++        // Initialize against the factory's known empty forked history before
++        // sharing the session; a later cold enable cannot establish this proof.
++        let calls = ExecutedToolCalls::new(
++            &recording_features(true),
++            &InitialHistory::Forked(Vec::new()),
++        );
++        session.services.code_mode_service = crate::tools::code_mode::CodeModeService::new(
++            session.thread_id(),
++            Arc::new(codex_code_mode::DisabledCodeModeSessionProvider),
++            &turn.config.code_mode,
++            calls.clone(),
++        );
++        session.services.executed_tool_calls = calls;
++    }
 +    // The generic factory assigns independent controller and thread identities.
 +    // Bind this fixture's actual controller, runtime and empty session store to
 +    // the same root identity already used by its native turn metadata.
@@ -208,60 +231,71 @@ new file mode 100644
 +
 +#[tokio::test]
 +async fn retained_sampling_rejects_ordinary_writer_without_rewriting_historical_prompt() {
-+    let (session, step) = fixture().await;
-+    let recorder = &session.services.executed_tool_calls;
-+    recorder.refresh(&recording_features(true));
-+    session
-+        .state
-+        .lock()
-+        .await
-+        .history
-+        .record_items(&history(), TruncationPolicy::Tokens(8192));
-+    let retained = assembled(&session, &step)
-+        .await
-+        .retain()
-+        .await
-+        .expect("retained before writer");
-+    let prompt_before = retained.prompt.input.clone();
-+    let history_before = session.clone_history().await.into_shared_annotated_items();
-+    let cell = CellId::new("retained-sampling-cell".to_string());
-+    let call = ExecutedToolCall::new("synthetic_nested_tool".to_string(), json!({"argument": 2}));
-+    recorder.start_cell(&cell, "exec");
-+    recorder.record_tool_call(
-+        &ToolCall {
-+            tool_name: ToolName::plain("synthetic_nested_tool"),
-+            call_id: "nested".to_string(),
-+            payload: ToolPayload::Function {
-+                arguments: json!({"argument": 2}).to_string(),
++    for initial_recording in [false, true] {
++        let (session, step) = fixture_with_initial_recording(initial_recording).await;
++        let recorder = &session.services.executed_tool_calls;
++        recorder.refresh(&recording_features(true));
++        session
++            .state
++            .lock()
++            .await
++            .history
++            .record_items(&history(), TruncationPolicy::Tokens(8192));
++        let retained = assembled(&session, &step)
++            .await
++            .retain()
++            .await
++            .expect("retained before writer");
++        let prompt_before = retained.prompt.input.clone();
++        let history_before = session.clone_history().await.into_shared_annotated_items();
++        let cell = CellId::new("retained-sampling-cell".to_string());
++        let call =
++            ExecutedToolCall::new("synthetic_nested_tool".to_string(), json!({"argument": 2}));
++        recorder.start_cell(&cell, "exec");
++        recorder.record_tool_call(
++            &ToolCall {
++                tool_name: ToolName::plain("synthetic_nested_tool"),
++                call_id: "nested".to_string(),
++                payload: ToolPayload::Function {
++                    arguments: json!({"argument": 2}).to_string(),
++                },
++                encrypted_function_args: None,
 +            },
-+            encrypted_function_args: None,
-+        },
-+        &ToolCallSource::CodeMode {
-+            cell_id: cell.as_str().to_string(),
-+            runtime_tool_call_id: "nested".to_string(),
-+        },
-+        &step,
-+    );
-+    recorder.finish_cell_recording(&cell);
-+    assert_eq!(
-+        retained.verify_current(&session, &step).await,
-+        Err(SamplingCaptureError::ExecutedState(
-+            ExecutedToolCallsCheckpointError::Changed
-+        )),
-+    );
-+    assert_eq!(retained.prompt.input, prompt_before);
-+    assert!(Arc::ptr_eq(
-+        &history_before,
-+        &session.clone_history().await.into_shared_annotated_items(),
-+    ));
-+    let mut actual = history();
-+    recorder.attach_to_compaction_prompt(&mut actual);
-+    let mut expected = history();
-+    expected[1].append_executed_tool_calls(vec![call]);
-+    expected[1].set_tool_call_cell_id("exec");
-+    expected[1].mark_tool_calls_complete();
-+    assert_eq!(actual, expected);
-+    assert_eq!(retained.prompt.input, prompt_before);
++            &ToolCallSource::CodeMode {
++                cell_id: cell.as_str().to_string(),
++                runtime_tool_call_id: "nested".to_string(),
++            },
++            &step,
++        );
++        recorder.finish_cell_recording(&cell);
++        assert_eq!(
++            retained.verify_current(&session, &step).await,
++            Err(SamplingCaptureError::ExecutedState(
++                ExecutedToolCallsCheckpointError::Changed
++            )),
++        );
++        assert_eq!(retained.prompt.input, prompt_before);
++        assert!(Arc::ptr_eq(
++            &history_before,
++            &session.clone_history().await.into_shared_annotated_items(),
++        ));
++        let mut actual = history();
++        recorder.attach_to_compaction_prompt(&mut actual);
++        let mut expected = history();
++        expected[1].append_executed_tool_calls(vec![call]);
++        expected[1].set_tool_call_cell_id("exec");
++        if initial_recording {
++            expected[1].mark_tool_calls_complete();
++        }
++        assert_eq!(
++            actual[1]
++                .executed_tool_call_metadata()
++                .and_then(|metadata| metadata.tool_calls_complete),
++            initial_recording.then_some(true),
++        );
++        assert_eq!(actual, expected);
++        assert_eq!(retained.prompt.input, prompt_before);
++    }
 +}
 +
 +#[tokio::test]
