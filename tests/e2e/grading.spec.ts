@@ -111,6 +111,15 @@ const test = base.extend<{ runtime: RestartRuntime; gradingTiming: GradingTiming
     try { await use(page) } finally { gradingTiming.mark('page-finally'); gradingTiming.save('page-finally'); gradingTimingByPage.delete(page) }
   },
 })
+
+const staleReviewTest = test.extend({
+  runtime: [async ({ gradingTiming }, use) => { gradingTiming.mark('runtime-start'); const runtime = await RestartRuntime.start(); gradingTiming.mark('runtime-ready'); try { await use(runtime) } finally { await runtime.close() } }, { scope: 'test', timeout: 45_000 }],
+  page: [async ({ runtime, playwright, gradingTiming }, use) => {
+    gradingTiming.mark('browser-open'); const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; gradingTiming.mark('browser-opened')
+    gradingTimingByPage.set(page, gradingTiming); gradingTiming.observePage(page); gradingTiming.mark('authentication-start'); await runtime.authenticateOnly(page); gradingTiming.mark('authentication-complete'); gradingTiming.mark('page-use')
+    try { await use(page) } finally { gradingTiming.mark('page-finally'); gradingTiming.save('page-finally'); gradingTimingByPage.delete(page) }
+  }, { scope: 'test', timeout: 45_000 }],
+})
 async function start(page: Page, prefix: string) {
   const timing = gradingTimingByPage.get(page); timing?.mark('assessment-fixture-build')
   const fixture = originalAssessmentPackage(prefix)
@@ -176,7 +185,7 @@ test('unreviewed original content stays null until an explicit author form creat
   writeFileSync(info.outputPath('actual-grading-form.json'), JSON.stringify({ scope: 'original synthetic UI and real HTTP/SQLite worker', question_count: fixture.questions.length, initial: { status: initial.status, scores: initial.items.map(item => item.score) }, final: { status: final.status, scores: final.items.map(item => item.score), grading_revision: final.grading_revision, signature_count: final.manual_reviews.length, original_solution_reviews: final.solution_reviews.map(item => item.review_status) }, observed_result_http_statuses: resultStatuses, no_private_solution_calls: privateCalls.length === 0, runtime_errors: errors }, null, 2))
 })
 
-test('two browser profiles keep a stale manual-review baseline through an actual 412 before explicit three-way rebase', async ({ page, browser }) => {
+staleReviewTest('two browser profiles keep a stale manual-review baseline through an actual 412 before explicit three-way rebase', async ({ page, browser }) => {
   const { attempt } = await start(page, 'gradingnativecas'); await submit(page); await beginReview(page)
   await page.getByLabel('人工复核理由', { exact: true }).fill('A 作者保留的原版本复核'); await fillReview(page, 1, '0.25', 'A 本页逐题依据')
   const other = await browser.newContext({ baseURL: new URL(page.url()).origin, storageState: await page.context().storageState() })
