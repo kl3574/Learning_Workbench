@@ -1,0 +1,487 @@
+{
+  "audit_kind": "Independent bounded static review of two current source chains; no runtime reproduction",
+  "captured_at_utc": "2026-10-09T06:19:08.065079+00:00",
+  "diagnostic_evidence": {
+    "grading": {
+      "bytes": 10403,
+      "path": "docs/evidence/f7-grading-timing-artifact.json",
+      "sha256": "f7c638b15ad121b8340405b341b67b459fb1a5f3b7bffaebe07d45a5826eed00"
+    },
+    "observed_grading": [
+      "Third regrade POST request-finished with202 and ack_202_complete=true at27148.918ms.",
+      "Revision3 polls recorded200, then202 queued, then202 queued; no recorded worker tick/claim/final grade follows before freeze.",
+      "Observer grade-enter to page-finally is about3009.472ms on one declared fixture clock; it is not an exact runner deadline or completion SLA."
+    ],
+    "observed_review": [
+      "The late course request was observed at23157.845ms; its200 response headers at23261.798ms; body-finally at23266.689ms.",
+      "No matching course request-finished, lesson or block request was observed after click before freeze.",
+      "Material block/body observer requests=0,pending=0,drops=0; final owner/discard/open remain NOT_OBSERVED."
+    ],
+    "prohibited_inferences": [
+      "Network finish is not UI JSON consumption, hash validation, grade completion or open callback.",
+      "Course200 headers are not DTO validation or completed exact parent chain.",
+      "A click-return stage label reader-route is not successful navigation.",
+      "No subtraction between setup/helper clock, body-only clock and UTC; synchronous instrumentation overhead is not assumed zero.",
+      "No inference about post-freeze progress or global absence of requests."
+    ],
+    "review": {
+      "bytes": 63207,
+      "path": "docs/evidence/f7-review-history-timing-artifact.json",
+      "sha256": "c68529ddaee3398b1b7d75bc2c23f8ca461827b0a7bca55e824974a5fd5395d3"
+    }
+  },
+  "findings": [
+    {
+      "authority": {
+        "line": 1122,
+        "path": "PRODUCT_DESIGN.md",
+        "requirement": "Worker scheduling gives indexing, importing, grading and recommendations bounded rounds; no long write lock or unbounded loop is a reliable scheduling claim.",
+        "section": "20.7"
+      },
+      "id": "P2-RECOVERY-SCAN-UNBOUNDED",
+      "impact": "The per-tick pre-grading scan and write-lock work can grow with unrestricted accumulated history. A fixed bounded-round guarantee and a bounded cancellation checkpoint cannot be established from this implementation.",
+      "not_claimed": [
+        "No literal infinite loop is proved: a finite unchanged database has a finite collection.",
+        "No actual f7 history size, recovery duration, lock wait, worker exception or skipped grading tick was observed.",
+        "This static engineering gap is not established as the cause of either f7 browser failure."
+      ],
+      "priority": "P2",
+      "source_locations": [
+        {
+          "end_line": 333,
+          "path": "services/api/app/application/evidence.py",
+          "start_line": 318
+        },
+        {
+          "end_line": 88,
+          "path": "services/api/app/application/assessment_evidence_access.py",
+          "start_line": 79
+        },
+        {
+          "end_line": 55,
+          "path": "services/api/app/infrastructure/database.py",
+          "start_line": 51
+        },
+        {
+          "end_line": 321,
+          "path": "services/api/app/infrastructure/import_worker.py",
+          "start_line": 308
+        }
+      ],
+      "suggested_narrow_repair": "Bound both selection and stop checks per tick, retain a durable or otherwise correct continuation over verified owner-scoped history, and preserve exact grade/binding/failure integrity checks and atomic recovery. Ensure grading receives its same-tick round after the bounded recovery slice. The concrete repair and regression test were not implemented or executed in this audit.",
+      "title": "The pre-grading evidence recovery scan has no fixed per-tick work bound or bounded stop checks on already-handled history",
+      "verified_static_evidence": [
+        "EvidenceRecovery materializes every workspace in learning_submission_bases inside the default immediate transaction; the workspace query has no LIMIT.",
+        "completed_grade_keys materializes every matching completed grade as a tuple; the query has no LIMIT or per-tick continuation.",
+        "For each key already bound or recorded as a recovery failure, run_once executes a lookup and continues before checking stopping().",
+        "There is at most one newly processed recovery item, but its selection scan is not bounded by a fixed row/work budget; a no-work tick can scan all prior grades.",
+        "The same default BEGIN IMMEDIATE spans the scan and recovery work. Grading is called only after this method returns."
+      ]
+    }
+  ],
+  "findings_count": {
+    "P1": 0,
+    "P2": 1
+  },
+  "frozen_ci_scope": {
+    "Agent_M63_AC21": "NOT_ACCEPTED",
+    "Direct135": "HOLD",
+    "browser": "FAIL_131PASS_2FAIL_EXIT2",
+    "current_new_source_gate": "NOT_REAUDITED_HERE",
+    "head_sha": "f7e56e1fb74d8dd6296494ad365ef53d90db10a5",
+    "integration": "RUNNING_AT_PARENT_CAPTURE_NO_COUNT_INFERRED",
+    "live_metadata_polled_in_this_audit": false,
+    "numerical_runtime": "BLOCKED_ENVIRONMENT_PRESERVED",
+    "parent_audit_capture_utc": "2026-10-09T05:53:59.263947+00:00",
+    "source_run_id": 37886774973
+  },
+  "frozen_progress_changed": false,
+  "frozen_published_progress_head": "dbf1f7f87bf582ddb7ba154584846ba5080c370f",
+  "grading_chain": {
+    "attribution": "CAUSE_NOT_ESTABLISHED",
+    "database_wait": {
+      "actual_lock_wait_in_f7": "NOT_OBSERVED",
+      "configured_default_busy_timeout_ms": 10000,
+      "evidence": "The default sqlite connect timeout and PRAGMA busy_timeout are10000ms; transaction uses BEGIN IMMEDIATE unless immediate=false.",
+      "interpretation": "A potential single busy wait can exceed the observed late grading helper window. This is a source possibility, not a measured wait, cumulative duration or proof of lock contention.",
+      "lines": [
+        34,
+        59
+      ],
+      "path": "services/api/app/infrastructure/database.py"
+    },
+    "entry": {
+      "lines": [
+        301,
+        344
+      ],
+      "order": [
+        "evidence_recovery.run_once",
+        "recommendations.run_once",
+        "retrieval.run_once",
+        "grading.run_once",
+        "import claim/parse"
+      ],
+      "path": "services/api/app/infrastructure/import_worker.py"
+    },
+    "evidence_recovery": {
+      "cancellation_check_before_all_handled_key_continue": false,
+      "dispatcher_consequence": "ApiError with no import lease returns false from ImportWorker.run_once; sqlite3.Error reaches _loop and is converted to worked=false. Both paths skip this tick's later grading call; the loop then waits0.25s. Occurrence in f7 is NOT_OBSERVED.",
+      "item_savepoint_known_failures_isolated": "ApiError/ValueError/TypeError/KeyError/sqlite3.IntegrityError inside the actual recovery item are rolled back and recorded, then the method returns true.",
+      "limitations": "Policy and all downstream owner ports were not recursively expanded within the12-file cap; no particular policy error is asserted to have occurred.",
+      "one_new_item_per_tick": true,
+      "pre_item_errors": "completed_grade_keys catches only ASSESSMENT_ACTIVE locally. Another ApiError propagates; SQL/select/begin failures can also escape before the item savepoint.",
+      "selection_has_fixed_work_bound": false
+    },
+    "queue_presence_short_circuit": "NOT_PRESENT_IN_DISPATCH: maintenance booleans are combined only after grading and the import claim; a successful maintenance result alone does not skip grading",
+    "recommendations": {
+      "active_assessment": "Returnsfalse for ASSESSMENT_ACTIVE without computing a public recommendation.",
+      "primary_known_error_isolation": "PASS_STATIC: run_once catches ApiError,ValueError,TypeError,KeyError,sqlite3.Error, records a fixed failure/retry projection when possible, and returnsfalse. Its recovery recording catches the same group.",
+      "prior_to_try": "database.workspace_id() is called before the main try; initialization/connect errors there are not covered by this local handler. MigrationError is not a normal f7 occurrence claim.",
+      "work_extent": "_no_work and refresh call workspace-wide load_inputs and checked snapshots; the current file has no aggregate wall-clock budget. Not every transitive load/derive/port was expanded; no unbounded runtime or hang is inferred."
+    },
+    "retrieval": {
+      "compute_extent": "compute loops through the frozen scope's block descriptors, checks stopping per block, uses separate short lease-renew/read transactions, and tokenizes outside the database transaction.",
+      "dispatch_isolation": "PASS_STATIC: parent catches ApiError/sqlite3.Error around retrieval.run_once and still reaches grading; damaged derived storage does not automatically skip grading for those groups.",
+      "one_lease": "run_once consumes one invalidation then may claim and fully compute one registered lease.",
+      "other_errors": "Not every possible exception class is covered by the local parent retrieval catch; none is observed in the supplied f7 diagnostics.",
+      "resource_bound": "Normative retrieval-resource-v1 bounds the accepted scope to512 blocks/16MiB registered body bytes. This review did not reread the entire transitive descriptor admission implementation and does not claim that the loop has a fixed millisecond budget."
+    },
+    "simple_starvation_claim": "Cannot reject all pre-grading delay/early-exit possibilities from source; cannot admit any as actual f7 cause without per-tick/claim evidence."
+  },
+  "immutable_source_index": {
+    "bytes": 138369,
+    "entries": 821,
+    "head_sha": "f7e56e1fb74d8dd6296494ad365ef53d90db10a5",
+    "path": "docs/evidence/f7-current-platform-source-index.json",
+    "sha256": "a07bc9768f7b3c3b3692ba1fbb4c143a917140e53b5238c61f681865a27869e1"
+  },
+  "next_falsifiable_actions": [
+    {
+      "action": "Implement only a bounded recovery selection/continuation and test the real dispatch seam with many already-bound/failure history rows. Verify a fixed maximum scan slice, stopping checks, preserved exact recovery history, no repeated/omitted candidate recovery, and actual same-tick grading call. Source-level absence of a budget is resolved only by an explicit bound, not a faster machine or raised timeout.",
+      "not_executed": true,
+      "target": "P2 bounded recovery engineering gap"
+    },
+    {
+      "action": "Use a narrowly approved future diagnostic at actual recovery/recommendation/retrieval/grading tick boundaries and grading claim/result boundary to distinguish delay, error skip, eligibility guard and unobserved later completion. Preserve original command/assertions/timeout/retry. A trace showing all preceding stages finish promptly rejects this pre-grading-delay attribution for that execution; no trace was collected here.",
+      "not_executed": true,
+      "target": "Actual f7 queued grading attribution"
+    },
+    {
+      "action": "A narrowly approved future same-owner observation of course JSON/metadata validation, lesson validation, block/body validation and open callback can distinguish pending transport/body parse, genuine contract mismatch, changed owner and successful open. A completed valid same-owner chain must reach existing open; headers alone cannot decide the outcome.",
+      "not_executed": true,
+      "target": "Actual exact material navigation attribution"
+    }
+  ],
+  "normative": {
+    "authority": "Only product and engineering specification; current implementation is evidence, not a new source of requirements",
+    "bytes": 520415,
+    "path": "PRODUCT_DESIGN.md",
+    "reviewed_sections": [
+      {
+        "lines": [
+          325,
+          329
+        ],
+        "scope": "Open exact revision before reading and context use",
+        "section": "6.2"
+      },
+      {
+        "lines": [
+          663,
+          691
+        ],
+        "scope": "Immutable grade revision, eligibility and local recommendation maintenance",
+        "section": "13.1-13.3"
+      },
+      {
+        "lines": [
+          748,
+          774
+        ],
+        "scope": "Layered actual acceptance and evidence limits",
+        "section": "16.1-16.3"
+      },
+      {
+        "lines": [
+          1081,
+          1124
+        ],
+        "scope": "Exact content scope, resource bounds, durable worker and bounded scheduling",
+        "section": "20.7"
+      },
+      {
+        "lines": [
+          1930,
+          1976
+        ],
+        "scope": "Existing exact content read routes and metadata ETag",
+        "section": "Appendix A"
+      },
+      {
+        "line": 2693,
+        "scope": "Regrade returns202 JobRef; no normative completion latency added",
+        "section": "Appendix A"
+      },
+      {
+        "lines": [
+          3859,
+          3895
+        ],
+        "scope": "Grading and independent-test acceptance",
+        "section": "Appendix F"
+      }
+    ],
+    "runtime_latency_requirement_added": false,
+    "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec",
+    "version": "3.0.15"
+  },
+  "predecessor_report": {
+    "bytes": 26938,
+    "path": "docs/evidence/f7-browser-bounded-cause-source-audit.json",
+    "sha256": "f831bbc737b755f5311c0200c18524cec0407441fa2469e990b6f4166ea10e35",
+    "status": "CAUSE_NOT_ESTABLISHED_NO_PROVEN_PRODUCTION_BUG"
+  },
+  "repository": "kl3574/Learning_Workbench",
+  "review_navigation_chain": {
+    "after_all_validation": {
+      "conditions": "No open call when identity/session generation changed; matching owner receives inline error on failure; missing open callback means optional invocation does nothing. Whether those conditions occurred in f7 is not observed.",
+      "lines": [
+        18,
+        20
+      ],
+      "path": "apps/web/src/features/review/ReviewMaterialLinks.tsx"
+    },
+    "attribution": "CAUSE_NOT_ESTABLISHED",
+    "block_projection_body": {
+      "facts": [
+        "include_provenance=true is explicitly sent",
+        "require block projection and exact block_ref",
+        "metadata ETag is block ref SHA",
+        "body ETag and actual TextEncoder/sha256 body bytes must match body_sha256"
+      ],
+      "lines": [
+        17,
+        25
+      ],
+      "path": "apps/web/src/features/reader/contentClient.ts"
+    },
+    "course_headers_to_dto": {
+      "detected_current_contract_mismatch": "NONE_IN_REVIEWED_CHAIN",
+      "frontend_metadata": {
+        "lines": [
+          6,
+          15
+        ],
+        "path": "apps/web/src/features/reader/contentClient.ts",
+        "required": "DTO id,revision,entity all equal the requested full ContentRef and ETag equals its quoted metadata SHA256."
+      },
+      "frontend_transport": {
+        "facts": [
+          "await fetch resolves at response headers",
+          "on success, record ETag then return awaited-by-caller response.json/text/blob promise",
+          "requestWithMetadata returns only after its created client's operation promise resolves"
+        ],
+        "lines": [
+          19,
+          57
+        ],
+        "path": "apps/web/src/api/client.ts"
+      },
+      "server_owner": {
+        "facts": [
+          "read validates object identity and returns exact loaded revision",
+          "same guarded writer transaction checks workspace and subject access",
+          "body reads the exact block revision and its registered body info"
+        ],
+        "lines": [
+          61,
+          91
+        ],
+        "path": "services/api/app/application/content.py"
+      },
+      "server_repository": {
+        "facts": [
+          "lookup binds workspace/object kind/id/revision",
+          "decode strictly validates domain metadata, id/entity/revision, persisted metadata SHA and published active-or-archived state",
+          "body binding requires registered blob SHA to equal exact block body_sha256"
+        ],
+        "lines": [
+          57,
+          96
+        ],
+        "path": "services/api/app/infrastructure/content_repository.py"
+      },
+      "server_router": {
+        "facts": [
+          "course/lesson GET requires exact revision query",
+          "response models are Course/Lesson",
+          "ETag is quoted metadata_sha256 of the returned value"
+        ],
+        "lines": [
+          43,
+          58
+        ],
+        "path": "services/api/app/interfaces/content_http.py"
+      }
+    },
+    "ownership_observation": {
+      "discarded": "NOT_OBSERVED",
+      "open_called": "NOT_OBSERVED",
+      "owner_current": "NOT_OBSERVED"
+    },
+    "source_route": {
+      "lines": [
+        11,
+        20
+      ],
+      "path": "apps/web/src/features/review/ReviewMaterialLinks.tsx",
+      "sequence": [
+        "Capture current identity/session generation",
+        "read exact course and await response JSON plus metadata verification",
+        "read exact lesson and await response JSON plus metadata verification",
+        "Verify exact lesson membership in course and exact block membership in lesson",
+        "read exact block provenance projection",
+        "verify exact metadata/projection reference",
+        "read body as text and verify response ETag plus UTF8 SHA256",
+        "recheck captured identity and session generation",
+        "invoke existing open callback with pinned exact target"
+      ]
+    },
+    "transitive_limits": [
+      "Generated client endpoint machinery, domain model implementation, BlobStore physical-body implementation, ReaderService provenance implementation and sameRef implementation were not newly read within the12-file cap. No typecheck/runtime or claim of exhaustive transitive verification is made.",
+      "No current source evidence identifies a DTO/ETag mismatch in the frozen f7 course response. Actual JSON values, parsing completion and validation outcome are absent from the bounded metadata."
+    ],
+    "weakening_fix_justified": false
+  },
+  "schema_version": 1,
+  "source_head_sha": "f7e56e1fb74d8dd6296494ad365ef53d90db10a5",
+  "source_readbacks": {
+    "apps/web/src/api/client.ts": {
+      "bytes": 5077,
+      "git_blob_sha": "e38d6b7102b4f408171a45b9413f207e7b5be662",
+      "local_named_bytes_matched": true,
+      "path": "apps/web/src/api/client.ts",
+      "sha256": "f19fef2c82b97e7f503e7fa7017ee397ba6b6a0770dbd42af39ce9355b9ab311"
+    },
+    "apps/web/src/features/reader/contentClient.ts": {
+      "bytes": 2349,
+      "git_blob_sha": "ab09dd53b3bb954999f17bdc8acec7cb080ccc59",
+      "local_named_bytes_matched": true,
+      "path": "apps/web/src/features/reader/contentClient.ts",
+      "sha256": "86f56cbc296803d0ae823935b4504a0f954327ae4f72e324d75f5e0096628e0c"
+    },
+    "apps/web/src/features/review/ReviewMaterialLinks.tsx": {
+      "bytes": 3343,
+      "git_blob_sha": "9be108b932bc7208de5071a88f55bfd6dc6e3887",
+      "local_named_bytes_matched": true,
+      "path": "apps/web/src/features/review/ReviewMaterialLinks.tsx",
+      "sha256": "cbedb03612edf7b80cea22f8b60c0c32c8c3f5e3dc0ec5c964330f35ae04f086"
+    },
+    "services/api/app/application/assessment_evidence_access.py": {
+      "bytes": 4649,
+      "git_blob_sha": "b4832825a2ccf0fea4c65f3f3d30ea1fce3cc540",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/application/assessment_evidence_access.py",
+      "sha256": "2b5b848e43c07f04788308b2e7ee13045c5fea4ca9bf43a50122e01534e68238"
+    },
+    "services/api/app/application/content.py": {
+      "bytes": 34281,
+      "git_blob_sha": "002dee1af0b635a38826af88da58f5906e3b3282",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/application/content.py",
+      "sha256": "cff8ff2c6228772f88ba2428a497ec479527c90161c4e2be4324954d3958a64d"
+    },
+    "services/api/app/application/evidence.py": {
+      "bytes": 23397,
+      "git_blob_sha": "c229a46434cab83c60190b5d4bb71717920f09aa",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/application/evidence.py",
+      "sha256": "b909fd3b940ec2b66dc1d5407f1812fa24ed063cfc031a2590e0bf5afd8fd79b"
+    },
+    "services/api/app/application/recommendations.py": {
+      "bytes": 19632,
+      "git_blob_sha": "0403296054905cbe0fc6464fe6aa38e6244d8a1b",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/application/recommendations.py",
+      "sha256": "734e19c3077a7e2d63fb3aff0e30401317944cf147c122e8bbe2361f0bd7c8c9"
+    },
+    "services/api/app/application/retrieval.py": {
+      "bytes": 23700,
+      "git_blob_sha": "5a20317dfe74a7ecf6360c1d519b7f536b5808ec",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/application/retrieval.py",
+      "sha256": "80971e53a1eba4895ff2e1427a5b1cfd20f15dd6f13ca9f05e0539467f10f1b6"
+    },
+    "services/api/app/infrastructure/content_repository.py": {
+      "bytes": 11748,
+      "git_blob_sha": "5b150e33ac065ba75a012f72313dcad451f80598",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/infrastructure/content_repository.py",
+      "sha256": "fd01f981fb87bb61ec67fffdbae0ca0f9967801c9e902b82ebf852210e3d0afb"
+    },
+    "services/api/app/infrastructure/database.py": {
+      "bytes": 7864,
+      "git_blob_sha": "380345349eca7d7b28a4caccf32820aec170f043",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/infrastructure/database.py",
+      "sha256": "4afd9e4a60364da9e368121f20a84c9decef402a3db5d12444e7dccccb974d7f"
+    },
+    "services/api/app/infrastructure/import_worker.py": {
+      "bytes": 20124,
+      "git_blob_sha": "b18f37800c07011673f46c66d0178f78481092e5",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/infrastructure/import_worker.py",
+      "sha256": "5a1a0973303a2377880ef4a185872d629292eed015813a94649159a3a1d85c54"
+    },
+    "services/api/app/interfaces/content_http.py": {
+      "bytes": 5680,
+      "git_blob_sha": "d297314ef82f5f133de8c96df4b1f420ad797c01",
+      "local_named_bytes_matched": true,
+      "path": "services/api/app/interfaces/content_http.py",
+      "sha256": "fbfafb2eec97e95b9ad351b76e59dc8fa0d5bb56ec9aeaf4c5ec0814b0580c29"
+    }
+  },
+  "status": "STATIC_P2_BOUNDED_RECOVERY_GAP; F7_FAILURE_CAUSE_NOT_ESTABLISHED",
+  "verification_boundaries": {
+    "CI_controls_reruns_cancellations": 0,
+    "GitBlob_byte_identity": "PASS_12_OF_12",
+    "GitHub_mutations": 0,
+    "GitHub_reads_for_logs_or_artifacts": 0,
+    "actual_runtime_tests": "NOT_RUN",
+    "auxiliary_check_failures": [
+      {
+        "correction": "Use datetime.timezone.utc; no environment probe, install or production source change",
+        "failure": "AttributeError: datetime.UTC unavailable in the selected audit interpreter",
+        "scope": "Audit helper only; no product module imported or runtime executed; POST had not occurred",
+        "stage": "report capture timestamp before POST"
+      }
+    ],
+    "backend_frontend_typecheck_or_test": "NOT_RUN",
+    "browser_replay": "NOT_RUN",
+    "concurrency": "All4 team slots occupied; no new subagent spawned.",
+    "diagnosing_bugs_skill": "Used for evidence and falsifiable-next-step discipline. Live feedback-loop/reproduction phases not performed because the assigned task explicitly limits work to read-only current-source review; no repaired-runtime verdict follows.",
+    "diagnostic_projection_assertions": "PASS_ON_ACTUAL_PINNED_JSON",
+    "environment_or_capacity_or_process_probes": 0,
+    "filesystem_writes": 0,
+    "historical_design_or_demo_reads": 0,
+    "input_exact_readbacks": "PASS_5_OF_5",
+    "install_build_Cargo": 0,
+    "model_provider_requests": 0,
+    "production_source_import_or_execution": 0,
+    "publication_scanner": {
+      "bytes": 3531,
+      "path": "scripts/check_publication.py",
+      "sha256": "b42f875f7d0a41f78cd7a59b97948b59f1e6146c8ba9198e6c737e284a834d33",
+      "status": "FULL_INSPECT_PASS",
+      "targets": [
+        "docs/evidence/f7-browser-two-chain-source-audit.json",
+        "docs/evidence/f7-grading-timing-artifact.json",
+        "docs/evidence/f7-review-history-timing-artifact.json"
+      ]
+    },
+    "source_files_cap": 12,
+    "source_files_newly_read": 12,
+    "source_reads": "Only named owned current source bytes; each verified against immutable f7 Git blob identity"
+  }
+}

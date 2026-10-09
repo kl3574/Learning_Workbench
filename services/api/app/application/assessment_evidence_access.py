@@ -1,5 +1,6 @@
 """Assessment-owned verified witnesses for Learning, without grading/qualification recursion."""
 
+from dataclasses import dataclass
 import sqlite3
 from typing import Literal
 
@@ -98,3 +99,45 @@ def verify_applicability_pins(connection: sqlite3.Connection, workspace_id: str,
     for pin in witness.private_pins:
         content.solution(pin)
     return witness
+
+
+# Bound the raw grade prefix before any workspace or recovery-progress filter.
+# The grades owner retains immutable identities; this internal scan is not a DTO.
+GRADE_RECOVERY_SCAN_ROWS = 32
+
+
+@dataclass(frozen=True)
+class GradeRecoveryScan:
+    after_sequence: int
+    ceiling: int
+    through_sequence: int
+    keys: tuple[tuple[int, GradeKey], ...]
+
+
+def completed_grade_recovery_scan(connection: sqlite3.Connection, workspace_id: str,
+                                  *, after_sequence: int, ceiling: int) -> GradeRecoveryScan:
+    if type(after_sequence) is not int or type(ceiling) is not int or min(after_sequence, ceiling) < 0:
+        raise ValueError('Invalid internal grade recovery sequence')
+    Policy(connection, workspace_id).check('subject_read')
+    if after_sequence >= ceiling:
+        after_sequence = 0
+        ceiling = connection.execute('SELECT COALESCE(MAX(rowid),0) FROM grades').fetchone()[0]
+    # LIMIT is inside the rowid range subquery, before JOIN or owner selection.
+    # Every row in this at-most32-row prefix advances the scan, including foreign
+    # workspaces and already bound/failed grades. Rowid gaps cannot stall a tick.
+    rows = connection.execute(
+        'SELECT page.sequence,page.attempt_id,page.grading_revision,a.workspace_id '
+        'FROM (SELECT rowid AS sequence,attempt_id,grading_revision FROM grades '
+        'WHERE rowid>? AND rowid<=? ORDER BY rowid LIMIT ?) AS page '
+        'LEFT JOIN attempts a ON a.id=page.attempt_id ORDER BY page.sequence',
+        (after_sequence, ceiling, GRADE_RECOVERY_SCAN_ROWS),
+    ).fetchall()
+    keys = []
+    for row in rows:
+        if row['workspace_id'] is None:
+            raise invalid_snapshot()
+        if row['workspace_id'] == workspace_id:
+            keys.append((row['sequence'], GradeKey(workspace_id=workspace_id,
+                attempt_id=row['attempt_id'], grading_revision=row['grading_revision'])))
+    return GradeRecoveryScan(after_sequence=after_sequence, ceiling=ceiling,
+        through_sequence=rows[-1]['sequence'] if rows else ceiling, keys=tuple(keys))

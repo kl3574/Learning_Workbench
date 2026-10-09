@@ -396,3 +396,165 @@ def test_stored_qualification_tamper_is_rejected_even_with_recomputed_json_hash(
     with pytest.raises(ApiError) as invalid:
         GradingService(database).result(identity, attempt.id)
     assert invalid.value.code == 'EVIDENCE_HISTORY_INVALID'
+
+
+# Bounded recovery regressions use the original API/SQLite fixtures above.
+# These tests are intended for the normal dependency-complete CI environment.
+def test_recovery_scan_caps_raw_prefix_before_bound_history_filters(storage):
+    from services.api.app.application.assessment_evidence_access import GRADE_RECOVERY_SCAN_ROWS, completed_grade_recovery_scan
+    database, identity, _, _ = storage
+    attempt = submit(storage, mode='open_book')
+    assert GradingWorker(database).run_once()
+    for revision in range(1, GRADE_RECOVERY_SCAN_ROWS + 2):
+        manual(storage, attempt.id, revision=revision, key=f'bounded-review-{revision}')
+    before = raw_history(database)
+    with database.transaction() as connection:
+        first = completed_grade_recovery_scan(connection, identity.workspace_id, after_sequence=0, ceiling=0)
+        assert len(first.keys) == GRADE_RECOVERY_SCAN_ROWS
+        assert first.through_sequence < first.ceiling
+        second = completed_grade_recovery_scan(connection, identity.workspace_id,
+            after_sequence=first.through_sequence, ceiling=first.ceiling)
+        assert len(second.keys) == 2
+        assert second.through_sequence == first.ceiling
+    assert raw_history(database) == before
+
+
+@pytest.mark.parametrize('handled', ['bound', 'failed'])
+def test_recovery_stop_is_checked_on_already_handled_rows_and_keeps_cursor(tmp_path, monkeypatch, handled):
+    from contextlib import contextmanager
+    storage, old, _, _, _, _ = legacy_storage(tmp_path, monkeypatch)
+    database, _, _, _ = storage
+    if handled == 'failed':
+        with database.transaction() as connection:
+            connection.execute("UPDATE outbox SET payload_json='{}' WHERE event_type='assessment.grading.requested' AND json_extract(payload_json,'$.attempt_id')=?", (old.id,))
+    prepared = EvidenceRecovery(database)
+    assert prepared.run_once() and prepared.run_once()
+    before = raw_history(database)
+    stopped = False
+    original_connect = database.connect
+    table = 'learning_grade_bindings' if handled == 'bound' else 'learning_evidence_recovery_failures'
+    @contextmanager
+    def observed_connect(*args, **kwargs):
+        with original_connect(*args, **kwargs) as connection:
+            def observe(statement):
+                nonlocal stopped
+                if statement.startswith('SELECT 1 FROM ' + table + ' '):
+                    stopped = True
+            connection.set_trace_callback(observe)
+            yield connection
+    monkeypatch.setattr(database, 'connect', observed_connect)
+    recovery = EvidenceRecovery(database, stopping=lambda: stopped)
+    assert not recovery.run_once()
+    assert stopped
+    assert recovery._workspace_scan == (0, 0) and recovery._grade_scans == {}
+    assert raw_history(database) == before
+    assert not EvidenceRecovery(database).run_once()
+
+
+def test_recovery_commit_failure_does_not_advance_cursor_or_lose_item(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    storage, old, _, _, _, _ = legacy_storage(tmp_path, monkeypatch)
+    database, identity, _, _ = storage
+    before = counts(database), raw_history(database)
+    original_transaction = database.transaction
+    @contextmanager
+    def fail_at_commit(*args, **kwargs):
+        with original_transaction(*args, **kwargs) as connection:
+            yield connection
+            raise sqlite3.OperationalError('synthetic pre-commit failure')
+    recovery = EvidenceRecovery(database)
+    with monkeypatch.context() as patch:
+        patch.setattr(database, 'transaction', fail_at_commit)
+        with pytest.raises(sqlite3.OperationalError):
+            recovery.run_once()
+    assert recovery._workspace_scan == (0, 0) and recovery._grade_scans == {}
+    assert (counts(database), raw_history(database)) == before
+    assert recovery.run_once()
+    with database.connect() as connection:
+        assert [entry.grading_revision for entry in history(connection, identity.workspace_id, old.id)] == [1]
+
+
+def test_recovery_workspace_round_is_fair_and_new_workspace_is_revisited(tmp_path, monkeypatch):
+    import services.api.app.application.evidence as evidence
+    storage, _, _, _, _, _ = legacy_storage(tmp_path, monkeypatch)
+    database, identity, _, _ = storage
+    second = 'workspace_recovery_second'
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO workspace(id,title,preferences_json,created_at) SELECT ?,title,preferences_json,created_at FROM workspace WHERE id=?',
+            (second, identity.workspace_id))
+    visited = []
+    original = evidence.completed_grade_recovery_scan
+    def observe(connection, workspace_id, **kwargs):
+        visited.append(workspace_id)
+        return original(connection, workspace_id, **kwargs)
+    monkeypatch.setattr(evidence, 'completed_grade_recovery_scan', observe)
+    recovery = EvidenceRecovery(database)
+    assert recovery.run_once()
+    assert not recovery.run_once()
+    assert visited == [identity.workspace_id, second]
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO workspace(id,title,preferences_json,created_at) SELECT ?,title,preferences_json,created_at FROM workspace WHERE id=?',
+            ('workspace_recovery_late', identity.workspace_id))
+    recovery.run_once()
+    recovery.run_once()
+    recovery.run_once()
+    assert visited[2:] == [identity.workspace_id, second, 'workspace_recovery_late']
+
+
+def test_recovery_active_guard_defers_without_losing_grade_prefix(tmp_path, monkeypatch):
+    storage, old, _, _, _, _ = legacy_storage(tmp_path, monkeypatch)
+    database, identity, _, assessment = storage
+    active = start(storage, mode='independent', key='bounded-active')
+    recovery = EvidenceRecovery(database)
+    assert not recovery.run_once()
+    assert recovery._grade_scans == {}
+    assessment.abandon(identity, active.id, dm.AttemptSubmit(expected_revision=active.revision), 'bounded-abandon')
+    assert recovery.run_once()
+    with database.connect() as connection:
+        assert [entry.grading_revision for entry in history(connection, identity.workspace_id, old.id)] == [1]
+
+
+def test_recovery_scan_revisits_new_completion_and_revision_after_frozen_epoch(storage):
+    from services.api.app.application.assessment_evidence_access import completed_grade_recovery_scan
+    database, identity, _, _ = storage
+    first = submit(storage, key='scan-first', mode='open_book')
+    assert GradingWorker(database).run_once()
+    with database.transaction() as connection:
+        frozen = completed_grade_recovery_scan(connection, identity.workspace_id, after_sequence=0, ceiling=0)
+    second = submit(storage, key='scan-later', mode='open_book')
+    assert GradingWorker(database).run_once()
+    manual(storage, first.id, revision=1, key='scan-new-revision')
+    before = raw_history(database)
+    with database.transaction() as connection:
+        fresh = completed_grade_recovery_scan(connection, identity.workspace_id,
+            after_sequence=frozen.through_sequence, ceiling=frozen.ceiling)
+        assert {(key.attempt_id, key.grading_revision) for _, key in fresh.keys} >= {(second.id, 1), (first.id, 2)}
+    assert raw_history(database) == before
+    assert not EvidenceRecovery(database).run_once()
+
+
+def test_dispatch_keeps_same_tick_real_grading_after_handled_recovery_slice(storage, monkeypatch):
+    from contextlib import contextmanager
+    from services.api.app.application.assessment_evidence_access import GRADE_RECOVERY_SCAN_ROWS
+    database, identity, _, _ = storage
+    first = submit(storage, key='handled-first', mode='open_book')
+    assert GradingWorker(database).run_once()
+    for revision in range(1, GRADE_RECOVERY_SCAN_ROWS + 2):
+        manual(storage, first.id, revision=revision, key=f'handled-review-{revision}')
+    pending = submit(storage, key='bounded-pending', mode='open_book')
+    reads = 0
+    original_connect = database.connect
+    @contextmanager
+    def observed_connect(*args, **kwargs):
+        with original_connect(*args, **kwargs) as connection:
+            def observe(statement):
+                nonlocal reads
+                if statement.startswith('SELECT 1 FROM learning_grade_bindings WHERE workspace_id='):
+                    reads += 1
+            connection.set_trace_callback(observe)
+            yield connection
+    monkeypatch.setattr(database, 'connect', observed_connect)
+    worker = ImportWorker(database)
+    assert worker.run_once()
+    assert reads <= GRADE_RECOVERY_SCAN_ROWS
+    assert GradingService(database).result(identity, pending.id).grading_revision == 1

@@ -18,7 +18,7 @@ from ..infrastructure.evidence_repository import EvidenceRepository, invalid_evi
 from ..infrastructure.learning_repository import LearningRepository
 from ..infrastructure.security import guard_subject_access
 from ..learning_dto import LearningProgress, PageEvidence
-from .assessment_evidence_access import SubmissionWitness, completed_grade_keys, completed_grade_witness, submission_witness
+from .assessment_evidence_access import GradeRecoveryScan, SubmissionWitness, completed_grade_keys, completed_grade_recovery_scan, completed_grade_witness, submission_witness
 from .eligibility import evidence_reason, finalize_eligibility, validate_prerequisites
 from .eligibility_models import ItemPrerequisites, Skill
 from .errors import ApiError
@@ -305,47 +305,81 @@ class EvidenceService:
             raise ApiError(503, 'LEARNING_STORAGE_UNAVAILABLE', '学习证据存储暂不可用。', True) from None
 
 
+class _RecoveryStopped(Exception):
+    pass
+
+
 class EvidenceRecovery:
-    """One legacy grade per tick; diagnostics never starve grading or importing."""
+    """One bounded, fair recovery slice; committed bindings/failures stay durable."""
 
     def __init__(self, database: Database, stopping: Callable[[], bool] = lambda: False):
         self.database = database
         self.stopping = stopping
+        # Instance-local scheduling only. Restart safely rescans durable progress.
+        # None of these values advance until the original transaction commits.
+        self._workspace_scan = (0, 0)
+        self._grade_scans: dict[str, tuple[int, int]] = {}
 
     def run_once(self) -> bool:
         if self.stopping():
             return False
-        with self.database.transaction() as connection:
-            workspaces = [row[0] for row in connection.execute('SELECT DISTINCT workspace_id FROM learning_submission_bases ORDER BY workspace_id')]
-            for workspace_id in workspaces:
-                try:
-                    keys = completed_grade_keys(connection, workspace_id)
-                except ApiError as error:
-                    if error.code == 'ASSESSMENT_ACTIVE':
-                        continue
-                    raise
-                for key in keys:
-                    if connection.execute('SELECT 1 FROM learning_grade_bindings WHERE workspace_id=? AND attempt_id=? AND grading_revision=?', (workspace_id, key.attempt_id, key.grading_revision)).fetchone():
-                        continue
-                    if connection.execute('SELECT 1 FROM learning_evidence_recovery_failures WHERE workspace_id=? AND attempt_id=? AND grading_revision=?', (workspace_id, key.attempt_id, key.grading_revision)).fetchone():
-                        continue
-                    if self.stopping():
-                        return False
-                    connection.execute('SAVEPOINT evidence_recovery_item')
+        workspace_id = None
+        grade_progress = None
+        worked = False
+        try:
+            with self.database.transaction() as connection:
+                workspace_id, workspace_sequence, workspace_ceiling = self.database.next_workspace_in_scan(
+                    connection, after_sequence=self._workspace_scan[0], ceiling=self._workspace_scan[1])
+                if self.stopping():
+                    raise _RecoveryStopped()
+                if workspace_id is not None:
+                    after, ceiling = self._grade_scans.get(workspace_id, (0, 0))
+                    scan: GradeRecoveryScan | None = None
                     try:
-                        basis = checked_submission_basis(connection, workspace_id, key.attempt_id)
-                        if basis.basis != 'history_not_frozen':
-                            raise invalid_evidence()
-                        record_grade_finalized(connection, workspace_id, key.attempt_id, key.grading_revision)
-                        if self.stopping():
-                            connection.execute('ROLLBACK TO evidence_recovery_item')
-                            connection.execute('RELEASE evidence_recovery_item')
-                            return False
-                        connection.execute('RELEASE evidence_recovery_item')
-                    except (ApiError, ValueError, TypeError, KeyError, sqlite3.IntegrityError):
-                        connection.execute('ROLLBACK TO evidence_recovery_item')
-                        connection.execute('RELEASE evidence_recovery_item')
-                        connection.execute('INSERT INTO learning_evidence_recovery_failures(workspace_id,attempt_id,grading_revision,code,source_fingerprint,detected_at) VALUES(?,?,?,?,?,?)',
-                            (workspace_id, key.attempt_id, key.grading_revision, 'EVIDENCE_HISTORY_INVALID', metadata_sha256(key), utc_now()))
-                    return True
+                        scan = completed_grade_recovery_scan(connection, workspace_id,
+                            after_sequence=after, ceiling=ceiling)
+                    except ApiError as error:
+                        if error.code != 'ASSESSMENT_ACTIVE':
+                            raise
+                        # Keep this workspace's pending prefix for re-entry after
+                        # the actual policy guard clears; other workspaces get a turn.
+                        scan = None
+                    if scan is not None:
+                        through = scan.through_sequence
+                        for sequence, key in scan.keys:
+                            # Bound/failed rows must not bypass cancellation.
+                            if self.stopping():
+                                raise _RecoveryStopped()
+                            if connection.execute('SELECT 1 FROM learning_grade_bindings WHERE workspace_id=? AND attempt_id=? AND grading_revision=?', (workspace_id, key.attempt_id, key.grading_revision)).fetchone():
+                                continue
+                            if connection.execute('SELECT 1 FROM learning_evidence_recovery_failures WHERE workspace_id=? AND attempt_id=? AND grading_revision=?', (workspace_id, key.attempt_id, key.grading_revision)).fetchone():
+                                continue
+                            connection.execute('SAVEPOINT evidence_recovery_item')
+                            try:
+                                basis = checked_submission_basis(connection, workspace_id, key.attempt_id)
+                                if basis.basis != 'history_not_frozen':
+                                    raise invalid_evidence()
+                                record_grade_finalized(connection, workspace_id, key.attempt_id, key.grading_revision)
+                                if self.stopping():
+                                    raise _RecoveryStopped()
+                                connection.execute('RELEASE evidence_recovery_item')
+                            except (ApiError, ValueError, TypeError, KeyError, sqlite3.IntegrityError):
+                                connection.execute('ROLLBACK TO evidence_recovery_item')
+                                connection.execute('RELEASE evidence_recovery_item')
+                                connection.execute('INSERT INTO learning_evidence_recovery_failures(workspace_id,attempt_id,grading_revision,code,source_fingerprint,detected_at) VALUES(?,?,?,?,?,?)',
+                                    (workspace_id, key.attempt_id, key.grading_revision, 'EVIDENCE_HISTORY_INVALID', metadata_sha256(key), utc_now()))
+                            # At most one actual recovery/quarantine per tick.
+                            # Unvisited rows in this prefix remain for its next turn.
+                            through = sequence
+                            worked = True
+                            break
+                        grade_progress = (through, scan.ceiling)
+                if self.stopping():
+                    raise _RecoveryStopped()
+            # Original Database.transaction has now committed successfully.
+            self._workspace_scan = (workspace_sequence, workspace_ceiling)
+            if workspace_id is not None and grade_progress is not None:
+                self._grade_scans[workspace_id] = grade_progress
+            return worked
+        except _RecoveryStopped:
             return False

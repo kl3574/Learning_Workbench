@@ -1,0 +1,84 @@
+{
+  "Mypy": "NOT_RUN",
+  "Ruff": "NOT_RUN",
+  "SQL7": "Prior actual v1 subcomponent PASS; shared SQL unchanged; NO_RERUN",
+  "WAL": "NOT_RUN",
+  "candidate": {
+    "bytes": 200245,
+    "sha256": "c4cc700678224170342cf93958d98197b23e7c7e16077022a58f44445ce81f33"
+  },
+  "current_parent": "dbf1f7f87bf582ddb7ba154584846ba5080c370f",
+  "existing_toplevel_evidence_functions_exact": 10,
+  "files": [
+    {
+      "after": {
+        "bytes": 25374,
+        "sha256": "c008c17b1425fb59e0c1507d534127e1d91b9c4ac09aadeb83ca029ad842d1bc"
+      },
+      "base_blob": "c229a46434cab83c60190b5d4bb71717920f09aa",
+      "before": {
+        "bytes": 23397,
+        "sha256": "b909fd3b940ec2b66dc1d5407f1812fa24ed063cfc031a2590e0bf5afd8fd79b"
+      },
+      "forward_inverse": "PASS_BYTE_EXACT",
+      "full_inspect": "PASS",
+      "path": "services/api/app/application/evidence.py",
+      "syntax": "PASS_AST_ONLY"
+    },
+    {
+      "after": {
+        "bytes": 6767,
+        "sha256": "1345af058ec614c38feb78fde65705f8f54b4eb1e243df909816416d2849745f"
+      },
+      "base_blob": "b4832825a2ccf0fea4c65f3f3d30ea1fce3cc540",
+      "before": {
+        "bytes": 4649,
+        "sha256": "2b5b848e43c07f04788308b2e7ee13045c5fea4ca9bf43a50122e01534e68238"
+      },
+      "forward_inverse": "PASS_BYTE_EXACT",
+      "full_inspect": "PASS",
+      "path": "services/api/app/application/assessment_evidence_access.py",
+      "syntax": "PASS_AST_ONLY"
+    },
+    {
+      "after": {
+        "bytes": 8780,
+        "sha256": "9dd9dfb5a8df4e09291f88615b8f880c0a973d2975596cf8bd489d71ebccc246"
+      },
+      "base_blob": "380345349eca7d7b28a4caccf32820aec170f043",
+      "before": {
+        "bytes": 7864,
+        "sha256": "4afd9e4a60364da9e368121f20a84c9decef402a3db5d12444e7dccccb974d7f"
+      },
+      "forward_inverse": "PASS_BYTE_EXACT",
+      "full_inspect": "PASS",
+      "path": "services/api/app/infrastructure/database.py",
+      "syntax": "PASS_AST_ONLY"
+    },
+    {
+      "after": {
+        "bytes": 31571,
+        "sha256": "f5afaced0dcbc3b31aa358ab3a51513e6008c90942fefc510fcce72cca86083e"
+      },
+      "base_blob": "062ee83316190a0ce012454e05d195c1f0b8b628",
+      "before": {
+        "bytes": 22995,
+        "sha256": "492505d0a7d526e2e65a249b3d4d39b6acdbdc7324b985caf15374ced1f44bb1"
+      },
+      "forward_inverse": "PASS_BYTE_EXACT",
+      "full_inspect": "PASS",
+      "path": "tests/integration/test_learning_evidence.py",
+      "syntax": "PASS_AST_ONLY"
+    }
+  ],
+  "helper_failures": [
+    "Original root pin assertion compared bytes/SHA-only dict to richer pin metadata and stopped; corrected to explicit projection and separate actual Git blob verification before publication."
+  ],
+  "model_requests": 0,
+  "production_Agent": "NOT_ACCEPTED",
+  "pytest8": "NOT_RUN",
+  "schema": 1,
+  "scope": "Root current dbf bounded recovery v2 Standards/source review, not pytest/Mypy/WAL execution",
+  "source_status": "PASS_AST_INVERSE_SCANNER_ONLY",
+  "v1_to_v2_delta": "--- v1\n+++ v2\n@@ -18,7 +18,7 @@\n from ..infrastructure.learning_repository import LearningRepository\n from ..infrastructure.security import guard_subject_access\n from ..learning_dto import LearningProgress, PageEvidence\n-from .assessment_evidence_access import SubmissionWitness, completed_grade_keys, completed_grade_recovery_scan, completed_grade_witness, submission_witness\n+from .assessment_evidence_access import GradeRecoveryScan, SubmissionWitness, completed_grade_keys, completed_grade_recovery_scan, completed_grade_witness, submission_witness\n from .eligibility import evidence_reason, finalize_eligibility, validate_prerequisites\n from .eligibility_models import ItemPrerequisites, Skill\n from .errors import ApiError\n@@ -312,7 +312,7 @@\n class EvidenceRecovery:\n     \"\"\"One bounded, fair recovery slice; committed bindings/failures stay durable.\"\"\"\n \n-    def __init__(self, database: Database, *, stopping: Callable[[], bool] = lambda: False):\n+    def __init__(self, database: Database, stopping: Callable[[], bool] = lambda: False):\n         self.database = database\n         self.stopping = stopping\n         # Instance-local scheduling only. Restart safely rescans durable progress.\n@@ -334,6 +334,7 @@\n                     raise _RecoveryStopped()\n                 if workspace_id is not None:\n                     after, ceiling = self._grade_scans.get(workspace_id, (0, 0))\n+                    scan: GradeRecoveryScan | None = None\n                     try:\n                         scan = completed_grade_recovery_scan(connection, workspace_id,\n                             after_sequence=after, ceiling=ceiling)\n"
+}

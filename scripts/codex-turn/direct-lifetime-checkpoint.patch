@@ -1,0 +1,315 @@
+diff --git a/core/src/tools/executed_tool_calls.rs b/core/src/tools/executed_tool_calls.rs
+--- a/core/src/tools/executed_tool_calls.rs
++++ b/core/src/tools/executed_tool_calls.rs
+@@ -4,6 +4,9 @@
+ #[cfg(test)]
+ #[path = "executed_tool_calls_checkpoint_tests.rs"]
+ mod checkpoint_tests;
++#[cfg(test)]
++#[path = "executed_tool_calls_direct_checkpoint_tests.rs"]
++mod direct_checkpoint_tests;
+ #[cfg(test)]
+ #[path = "executed_tool_calls_direct_tests.rs"]
+ mod direct_tests;
+@@ -80,8 +83,8 @@
+     }
+ }
+ 
+-/// Checkpoint for this recorder's Option-state mutex only. It does not cover
+-/// pending direct-call atomics, MCP attribution or final request contributors.
++/// Checkpoint for this recorder's Option-state and genuine Direct reservation
++/// and permit lifetimes. It does not cover MCP attribution or final request contributors.
+ #[derive(Clone)]
+ pub(crate) struct ExecutedToolCallsCheckpoint {
+     state_owner: Weak<Mutex<Option<ExecutedToolCallRecorderState>>>,
+@@ -101,6 +104,7 @@
+ pub(crate) struct DirectCallPermit {
+     recording: Weak<()>,
+     pending_direct_calls: Arc<AtomicUsize>,
++    material_reset: Arc<Mutex<CancellationToken>>,
+ }
+ 
+ impl DirectCallPermit {
+@@ -111,7 +115,16 @@
+ 
+ impl Drop for DirectCallPermit {
+     fn drop(&mut self) {
++        // Drop takes only reset: it must never wait for the Option-state mutex.
++        let mut reset = self
++            .material_reset
++            .lock()
++            .unwrap_or_else(std::sync::PoisonError::into_inner);
++        // Keep reset locked through the atomic update so a new checkpoint cannot
++        // be minted between invalidation and this permit's one release.
++        std::mem::replace(&mut *reset, CancellationToken::new()).cancel();
+         self.pending_direct_calls.fetch_sub(1, Ordering::Relaxed);
++        drop(reset);
+     }
+ }
+ 
+@@ -307,8 +320,8 @@
+         self.mcp_attribution.mark_persisted(revision);
+     }
+ 
+-    /// Captures the current recorder state without enabling recording or visiting
+-    /// the ordinary lock seam. A genuine disabled state has the same owner rules.
++    /// Captures Option-state and Direct reservation/permit lifetimes without enabling
++    /// recording or visiting the ordinary lock seam. Disabled states retain ownership.
+     pub(crate) fn state_checkpoint(
+         &self,
+     ) -> Result<ExecutedToolCallsCheckpoint, ExecutedToolCallsCheckpointError> {
+@@ -456,15 +469,19 @@
+     }
+ 
+     fn reserve_direct_call(&self) -> Option<DirectCallPermit> {
+-        let recording = Arc::downgrade(&self.lock_state().as_ref()?.recording);
++        let state = self.lock_state();
++        let recording = Arc::downgrade(&state.as_ref()?.recording);
+         self.pending_direct_calls
+             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pending| {
+                 (pending < MAX_PENDING_EXECUTED_TOOL_CALLS).then_some(pending + 1)
+             })
+             .ok()?;
++        // Keep the state guard through reservation: capture uses state then reset.
++        drop(state);
+         Some(DirectCallPermit {
+             recording,
+             pending_direct_calls: Arc::clone(&self.pending_direct_calls),
++            material_reset: Arc::clone(&self.material_reset),
+         })
+     }
+ 
+diff --git a/core/src/tools/executed_tool_calls/request_metadata.rs b/core/src/tools/executed_tool_calls/request_metadata.rs
+--- a/core/src/tools/executed_tool_calls/request_metadata.rs
++++ b/core/src/tools/executed_tool_calls/request_metadata.rs
+@@ -38,8 +38,9 @@
+         self.attach_to_prompt_inner(items, retry_cache, |_| ());
+     }
+ 
+-    /// Captures only this recorder's Option-state after its ordinary attachment.
+-    /// The checkpoint is not a final byte, Direct-atomic, MCP or InputProof owner.
++    /// Captures after ordinary attachment; Option-state and genuine Direct reserve/Drop
++    /// writers invalidate the returned checkpoint through their shared reset lifetime.
++    /// This is not a complete atomic snapshot, MCP/final-byte owner or InputProof.
+     pub(crate) fn attach_to_prompt_with_checkpoint(
+         &self,
+         items: &mut [ResponseItem],
+@@ -77,8 +78,9 @@
+                     MetadataBudgetScope::AllCalls,
+                 )
+             });
+-            // Still holding the same Option-state guard: no intervening writer
+-            // can make a stale attachment appear current in a fresh checkpoint.
++            // The same guard excludes intervening Option-state writers only.
++            // Reset-only Direct Drop may run concurrently and invalidate its shared
++            // reset lifetime; attachment does not read the pending Direct counter.
+             (attached, after_attachment(self))
+         };
+         let Some(attached) = attached else {
+diff --git a/core/src/tools/executed_tool_calls_direct_checkpoint_tests.rs b/core/src/tools/executed_tool_calls_direct_checkpoint_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/core/src/tools/executed_tool_calls_direct_checkpoint_tests.rs
+@@ -0,0 +1,202 @@
++//! Direct pending lifetimes only; no tool dispatch, provider, InputProof or sender.
++//! The prepared tuple comes from the same native preparation API as Direct regressions.
++
++use std::panic::AssertUnwindSafe;
++use std::panic::catch_unwind;
++use std::sync::Barrier;
++use std::sync::mpsc::sync_channel;
++use std::time::Duration;
++
++use codex_protocol::models::FunctionCallOutputPayload;
++use codex_protocol::models::ResponseInputItem;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++
++use super::*;
++
++fn enabled_recorder() -> ExecutedToolCalls {
++    let mut features = Features::default();
++    features.enable(Feature::ExecutedToolCallMetadata);
++    ExecutedToolCalls::new(&features, &InitialHistory::New)
++}
++
++async fn prepared_direct_call() -> (ExecutedToolCalls, (ExecutedToolCall, DirectCallPermit)) {
++    let (_, turn) = crate::session::tests::make_session_and_context().await;
++    let step = StepContext::for_test(Arc::new(turn));
++    let recorder = enabled_recorder();
++    let call = ToolCall {
++        tool_name: codex_tools::ToolName::plain("test_tool"),
++        call_id: "direct-checkpoint".to_string(),
++        payload: ToolPayload::Function {
++            arguments: json!({"argument": "kept"}).to_string(),
++        },
++        encrypted_function_args: None,
++    };
++    let prepared = recorder
++        .prepare_direct_call(&call, &ToolCallSource::Direct, &step)
++        .expect("native Direct metadata slot");
++    (recorder, prepared)
++}
++
++fn assert_released_and_changed(
++    recorder: &ExecutedToolCalls,
++    checkpoint: &ExecutedToolCallsCheckpoint,
++) {
++    assert_eq!(recorder.pending_direct_calls.load(Ordering::Relaxed), 0);
++    assert_eq!(
++        recorder.verify_state_checkpoint(checkpoint),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++    let current = recorder.state_checkpoint().expect("current checkpoint");
++    assert_eq!(recorder.verify_state_checkpoint(&current), Ok(()));
++}
++
++#[test]
++fn direct_pending_count_revert_does_not_revive_checkpoint() {
++    let recorder = enabled_recorder();
++    let original = recorder
++        .state_checkpoint()
++        .expect("zero-pending checkpoint");
++    let permit = recorder.reserve_direct_call().expect("real reservation");
++    assert_eq!(recorder.pending_direct_calls.load(Ordering::Relaxed), 1);
++    let reserved = recorder.state_checkpoint().expect("reserved checkpoint");
++    assert_eq!(recorder.verify_state_checkpoint(&reserved), Ok(()));
++    drop(permit);
++    assert_released_and_changed(&recorder, &original);
++    assert_released_and_changed(&recorder, &reserved);
++}
++
++#[tokio::test]
++async fn unpolled_direct_future_drop_releases_once_and_revokes_checkpoint() {
++    let (recorder, prepared) = prepared_direct_call().await;
++    let checkpoint = recorder.state_checkpoint().expect("prepared checkpoint");
++    let unpolled = async move {
++        std::future::pending::<()>().await;
++        drop(prepared);
++    };
++    assert_eq!(recorder.pending_direct_calls.load(Ordering::Relaxed), 1);
++    drop(unpolled);
++    assert_released_and_changed(&recorder, &checkpoint);
++}
++
++#[tokio::test]
++async fn started_direct_future_abort_releases_once_and_revokes_checkpoint() {
++    let (recorder, prepared) = prepared_direct_call().await;
++    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
++    let task = tokio::spawn(async move {
++        let held = prepared;
++        started_tx.send(()).expect("observer must remain alive");
++        std::future::pending::<()>().await;
++        drop(held);
++    });
++    tokio::time::timeout(Duration::from_secs(5), started_rx)
++        .await
++        .expect("owned future must start")
++        .expect("owned future must report start");
++    let checkpoint = recorder.state_checkpoint().expect("started checkpoint");
++    assert_eq!(recorder.pending_direct_calls.load(Ordering::Relaxed), 1);
++    task.abort();
++    let error = tokio::time::timeout(Duration::from_secs(5), task)
++        .await
++        .expect("owned abort must finish")
++        .expect_err("aborted future must not complete normally");
++    assert!(error.is_cancelled());
++    assert_released_and_changed(&recorder, &checkpoint);
++}
++
++#[test]
++fn old_direct_permit_drop_revokes_disabled_sampling_checkpoint() {
++    let recorder = enabled_recorder();
++    let permit = recorder.reserve_direct_call().expect("real reservation");
++    recorder.refresh(&Features::default());
++    let mut enabled = Features::default();
++    enabled.enable(Feature::ExecutedToolCallMetadata);
++    recorder.refresh(&enabled);
++    recorder.refresh(&Features::default());
++    assert_eq!(permit.strong_count(), 0);
++    assert_eq!(recorder.pending_direct_calls.load(Ordering::Relaxed), 1);
++
++    let mut items = vec![ResponseItem::from(ResponseInputItem::FunctionCallOutput {
++        call_id: "direct-checkpoint".to_string(),
++        output: FunctionCallOutputPayload::from_text("ordinary output".to_string()),
++    })];
++    let original = serde_json::to_value(&items).expect("ordinary output oracle");
++    let mut cache = HashMap::new();
++    let checkpoint = recorder
++        .attach_to_prompt_with_checkpoint(&mut items, &mut cache)
++        .expect("real disabled sampling attachment");
++    assert!(recorder.state.lock().expect("ordinary state").is_none());
++    assert_eq!(recorder.verify_state_checkpoint(&checkpoint), Ok(()));
++    assert_eq!(
++        serde_json::to_value(&items).expect("ordinary output preserved"),
++        original,
++    );
++    assert!(cache.is_empty());
++
++    drop(permit);
++    assert_released_and_changed(&recorder, &checkpoint);
++    assert!(recorder.state.lock().expect("still disabled").is_none());
++}
++
++#[test]
++fn direct_drop_completes_without_waiting_for_state() {
++    let recorder = enabled_recorder();
++    let permit = recorder.reserve_direct_call().expect("real reservation");
++    let checkpoint = recorder.state_checkpoint().expect("prepared checkpoint");
++    let ready = Arc::new(Barrier::new(2));
++    let worker_ready = Arc::clone(&ready);
++    let (completed_tx, completed_rx) = sync_channel(0);
++    // Spawn before taking either mutex: a failed spawn cannot unwind a permit
++    // on this thread while it owns the reset guard.
++    let worker = std::thread::spawn(move || {
++        worker_ready.wait();
++        drop(permit);
++        completed_tx.send(()).expect("observer must remain alive");
++    });
++
++    let state = recorder.state.lock().expect("ordinary state guard");
++    let reset = recorder
++        .material_reset
++        .lock()
++        .expect("ordinary reset guard");
++    ready.wait();
++    drop(reset);
++    // Only completion while state remains held is observed here. The barrier
++    // does not establish when the worker entered Drop or prove reset serialization.
++    let completed = completed_rx.recv_timeout(Duration::from_secs(5));
++    // Always unlock state before any assertion or join. A broken Drop that takes
++    // state must cause a bounded failure, not hang cleanup while state is held.
++    drop(state);
++    completed.expect("Drop must finish while the Option-state mutex remains held");
++    worker.join().expect("owned Drop worker must finish");
++    assert_released_and_changed(&recorder, &checkpoint);
++}
++
++#[test]
++fn direct_drop_recovers_poisoned_reset_without_authenticating_it() {
++    let recorder = enabled_recorder();
++    let permit = recorder.reserve_direct_call().expect("real reservation");
++    let checkpoint = recorder.state_checkpoint().expect("prepared checkpoint");
++    let reset_owner = Arc::clone(&recorder.material_reset);
++    assert!(
++        catch_unwind(AssertUnwindSafe(move || {
++            // This closure owns only reset, never a permit that could be dropped
++            // recursively while panic unwinding still holds this mutex.
++            let _reset = reset_owner.lock().expect("unpoisoned setup");
++            panic!("poison Direct reset");
++        }))
++        .is_err()
++    );
++    assert!(catch_unwind(AssertUnwindSafe(|| drop(permit))).is_ok());
++    assert_eq!(recorder.pending_direct_calls.load(Ordering::Relaxed), 0);
++    assert!(checkpoint.reset.is_cancelled());
++    assert!(recorder.material_reset.is_poisoned());
++    assert!(matches!(
++        recorder.state_checkpoint(),
++        Err(ExecutedToolCallsCheckpointError::ResetPoisoned),
++    ));
++    assert_eq!(
++        recorder.verify_state_checkpoint(&checkpoint),
++        Err(ExecutedToolCallsCheckpointError::ResetPoisoned),
++    );
++}

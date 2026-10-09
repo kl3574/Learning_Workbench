@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-09T05:55:56.566365+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-09T07:03:01.814141+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：ISSUE32_PR56_F7_ACTUAL_FAIL_AND512_F12_BASELINE_FINAL_READBACK_ONLY; FULL27_CAPTURE_HISTORICAL
+仓库发布：VERIFIED；Issues 同步：ISSUE32_PR56_ACTUAL_DBF129_PASS_READBACK_ONLY; FULL27_CAPTURE_HISTORICAL
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-读取新隔离fix/M6.3-sampling-known-history-fixture实际ref和首次129/原Clippy门禁；root与独立source审阅仅静态，不能冒称新类型或运行通过。保留f7实际126PASS1FAIL2NOT_RUN/ClippyNOT_RUN、512与f12 whole baseline FAIL和2个numeric环境skip。最新f7 baseline五job终态4成功/1browser失败，browser131PASS2FAIL/exit2，integration在05:53:59Z捕获仍RUNNING；ACK/零block观察不能证明worker、owner或UI完成。新129+原Clippy实际双通过才可重建、独审和运行HOLD135。并沿唯一规范继续完整raw-byte InputProof/PREGRANT/权威版本容量token/真实handle→已有durable-start→单次sender及qualifiedruntime；未闭环生产不准入，Agent/M6.3/AC21 NOT_ACCEPTED，numeric BLOCKED_ENVIRONMENT，M7todo，真实模型请求0。
+发布已独审当前dbf绑定Direct135及有界证据恢复v2隔离source，并读取其真实135+原Clippy、8项恢复回归/完整Mypy/Ruff/WAL与平台CI结果；自身新source在本代码捕获中NOT_RUN。继续读取dbf baseline integration真实终态，保留f7与更早实际失败及环境skip，不将子组件或旧门禁冒称整体验收。完整InputProof/权威版本容量token/真实owner→已有durable-start→单次sender及qualifiedruntime未闭环；生产不准入，Agent/M6.3/AC21 NOT_ACCEPTED，numeric BLOCKED_ENVIRONMENT，M7todo，模型请求0。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -49,7 +49,7 @@
 - real_provider: PLATFORM_PROVIDER_NOT_RUN：production完整InputProof/受控executor未有符合要求注册证明；本轮0actual external model request，无实key使用/存入源码/上传。历史直连成功缺原HTTP可核回执，不作为当前平台通过。
 - real_codex: PHYSICAL_CODEX_MODEL_OR_TOOL_TURN_NOT_RUN：控制bootstrap/纯内存和pureliteral合成执行分别限定，真实CLI模型turn、物理Broker/hosttools/writer-stop/resource验收未完成。
 - learning_effectiveness: NOT_RUN
-- ci: Last actually audited f7 dedicated37886774975 FAIL126PASS1FAIL2NOT_RUN, original121PASS andClippyNOTRUN; new known-history candidate NOT_RUN_AT_CODE_COMMIT. Original512/f12 complete baselines bothFAIL with each integration2540PASS2BLOCKED_ENVIRONMENT skip; actualf7 baseline securityscan25433PASS andspec962/backend1114/frontend1424PASS, browserFAIL131PASS2FAIL/exit2 andintegrationRUNNING at05:53:59Z; ACK andzero block-observer records are bounded evidence only. No historical success relabeled as current.
+- ci: 实际dbf source129/129与原Clippy exit0已独立审阅；dbf平台基线5jobPASS（962规格、1114后端、1424前端、25449安全扫描、133浏览器），integration仍RUNNING。当前Direct135和有界恢复v2的root/独立source审阅均0开放P1/P2，自身135/Clippy和8回归/Mypy/Ruff/完整WAL均NOT_RUN；SQL7仅v1共享SQL子组件实际PASS、NO_RERUN。f7 terminal基线FAIL（131P2F）及更早失败保留；没有浏览器因果修复结论。Agent/M6.3/AC21 NOT_ACCEPTED，numeric BLOCKED_ENVIRONMENT，M7todo，真实模型请求0。
 - m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
 - m4_1_exact: 5bd8157新lint/types/spec/247web/build/74native均PASS，504源码前后相同；同SHA双workflow12checks成功。
 - m4_1_layout_repair: PASS:真实412布局及焦点回归；原失败保留，限定机制归因；新74完整套件通过。

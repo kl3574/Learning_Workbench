@@ -151,3 +151,19 @@ class Database:
             if row is None:
                 raise MigrationError("Workspace is not initialized.")
             return str(row["id"])
+
+
+    def next_workspace_in_scan(self, connection: sqlite3.Connection, *,
+                               after_sequence: int, ceiling: int) -> tuple[str | None, int, int]:
+        """One workspace in a frozen rowid round, owned by Database."""
+        if type(after_sequence) is not int or type(ceiling) is not int or min(after_sequence, ceiling) < 0:
+            raise ValueError('Invalid internal workspace scan sequence')
+        if after_sequence >= ceiling:
+            after_sequence = 0
+            ceiling = connection.execute('SELECT COALESCE(MAX(rowid),0) FROM workspace').fetchone()[0]
+        row = connection.execute(
+            'SELECT rowid AS sequence,id FROM workspace '
+            'WHERE rowid>? AND rowid<=? ORDER BY rowid LIMIT 1',
+            (after_sequence, ceiling),
+        ).fetchone()
+        return (row['id'], row['sequence'], ceiling) if row is not None else (None, ceiling, ceiling)
