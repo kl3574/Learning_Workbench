@@ -1,0 +1,48 @@
+name: Bounded evidence recovery8 named regression validation
+on:
+  push:
+    branches:
+      - qa/M6.3-bounded-evidence-recovery-8
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery8-named-cases:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/qa/M6.3-bounded-evidence-recovery-8' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Verify unchanged reviewed implementation and exact parent
+        run: |
+          git log -1 --format=%H
+          git rev-parse HEAD^
+          test "$(git rev-parse HEAD^)" = "1be8fc671e4821de953a0771c887c129b6e90294"
+          git diff --exit-code 1be8fc671e4821de953a0771c887c129b6e90294 -- services/api tests/integration pyproject.toml uv.lock PRODUCT_DESIGN.md
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - run: python -m pip install uv==0.11.21
+      - run: uv sync --frozen
+      - name: Install original fixed document sandbox dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap=0.11.1-1ubuntu0.3 apparmor=5.0.2-0ubuntu1~26.04.1 libapparmor1=5.0.2-0ubuntu1~26.04.1 libseccomp2=2.6.0-2ubuntu5
+          dpkg-query -W bubblewrap apparmor libapparmor1 libseccomp2
+          test -f /etc/apparmor.d/bwrap-userns-restrict
+          bwrap --version
+      - name: Run only the eight reviewed recovery cases with individual outcomes
+        run: |
+          uv run --frozen pytest -vv -rA \
+            'tests/integration/test_learning_evidence.py::test_recovery_scan_caps_raw_prefix_before_bound_history_filters' \
+            'tests/integration/test_learning_evidence.py::test_recovery_stop_is_checked_on_already_handled_rows_and_keeps_cursor[bound]' \
+            'tests/integration/test_learning_evidence.py::test_recovery_stop_is_checked_on_already_handled_rows_and_keeps_cursor[failed]' \
+            'tests/integration/test_learning_evidence.py::test_recovery_commit_failure_does_not_advance_cursor_or_lose_item' \
+            'tests/integration/test_learning_evidence.py::test_recovery_workspace_round_is_fair_and_new_workspace_is_revisited' \
+            'tests/integration/test_learning_evidence.py::test_recovery_active_guard_defers_without_losing_grade_prefix' \
+            'tests/integration/test_learning_evidence.py::test_recovery_scan_revisits_new_completion_and_revision_after_frozen_epoch' \
+            'tests/integration/test_learning_evidence.py::test_dispatch_keeps_same_tick_real_grading_after_handled_recovery_slice'
