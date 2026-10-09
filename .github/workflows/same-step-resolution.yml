@@ -1,14 +1,14 @@
-name: Same-Step source121 prior70 plus checkpoint12 and original39 and Clippy
+name: Same-Step source129 original121 plus sampling executed binding8 and Clippy
 on:
   push:
     branches:
-      - feat/M6.3-executed-state-checkpoint-validation
+      - feat/M6.3-executed-sampling-binding-validation
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  same-step-source121-and-clippy:
-    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/feat/M6.3-executed-state-checkpoint-validation' }}
+  same-step-source129-and-clippy:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/feat/M6.3-executed-sampling-binding-validation' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -66,7 +66,7 @@ jobs:
             --toolchain-dir "$RUNNER_TEMP/same-step-provision/toolchain" \
             --cargo-home "$RUNNER_TEMP/same-step-cargo" \
             --output-dir "$RUNNER_TEMP/same-step-fetch"
-      - name: Run only the fixed prior70+checkpoint12+original39 (121) tests and existing two-package Clippy strictly locked and offline
+      - name: Run only the fixed original121+sampling-executed6+attachment2 (129) tests and existing two-package Clippy strictly locked and offline
         run: >-
           python scripts/codex-turn/replay_same_step_resolution.py --mode test
           --prepared-dir "$RUNNER_TEMP/same-step-prepare"
@@ -79,7 +79,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: same-step-source121-and-clippy-${{ github.run_id }}-${{ github.run_attempt }}
+          name: same-step-source129-and-clippy-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/same-step-source-acquisition.json
             ${{ runner.temp }}/same-step-prepare/report.json

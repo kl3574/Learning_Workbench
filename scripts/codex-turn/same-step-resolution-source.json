@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "Engineering source121 prior70+checkpoint12+original39 executed candidate; true121/Clippy NOT_RUN, no production qualification",
+  "status": "Fresh source129 candidate: original121 plus sampling-executed6/attachment2; actual129/Clippy NOT_RUN, no production qualification",
   "spec": {
     "version": "3.0.15",
     "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec"
@@ -143,12 +143,12 @@
   ],
   "complete_source_graph": {
     "source": {
-      "rows": 8794,
-      "sha256": "d60b03708a3a5917b747f481a661a1f1fb978d789a045dfb0afb3be7b95b2fa6"
+      "rows": 8796,
+      "sha256": "6d40bebcbc54ce40c551b4fa1a598a5ea902a571ac2deb24d16d713ab06833eb"
     },
     "normalized": {
-      "rows": 8794,
-      "sha256": "9d4b718e405b94648a7ede6560a99daddb4fda0dc6414f0d4285041e95fc52b2"
+      "rows": 8796,
+      "sha256": "4cca0aa67c8d956c07b0d7b19fe4e5248d9a580d7cb681928f7b68331886d671"
     }
   },
   "test_metadata": {
@@ -480,11 +480,57 @@
           "--",
           "--nocapture"
         ]
+      },
+      {
+        "label": "sampling-executed6",
+        "package": "codex-core",
+        "filter": "session::retained_sampling_preparation::executed_state_tests::",
+        "expected_passed": 6,
+        "test_names": [
+          "session::retained_sampling_preparation::executed_state_tests::retained_sampling_genuine_none_checkpoint_stays_current_and_capture_is_inert",
+          "session::retained_sampling_preparation::executed_state_tests::retained_sampling_rejects_checkpoint_from_distinct_genuine_session_recorder",
+          "session::retained_sampling_preparation::executed_state_tests::retained_sampling_rejects_ordinary_writer_without_rewriting_historical_prompt",
+          "session::retained_sampling_preparation::executed_state_tests::retained_sampling_rejects_recorder_change_and_revert_to_genuine_none",
+          "session::retained_sampling_preparation::executed_state_tests::retained_sampling_rejects_writer_between_attachment_and_retain",
+          "session::retained_sampling_preparation::executed_state_tests::stale_attachment_checkpoint_keeps_into_ordinary_values_exact"
+        ],
+        "argv_tail": [
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "codex-core",
+          "--lib",
+          "session::retained_sampling_preparation::executed_state_tests::",
+          "--",
+          "--nocapture"
+        ]
+      },
+      {
+        "label": "sampling-attachment2",
+        "package": "codex-core",
+        "filter": "tools::executed_tool_calls::request_metadata::sampling_checkpoint_tests::",
+        "expected_passed": 2,
+        "test_names": [
+          "tools::executed_tool_calls::request_metadata::sampling_checkpoint_tests::attachment_checkpoint_is_minted_after_attachment_without_self_revocation",
+          "tools::executed_tool_calls::request_metadata::sampling_checkpoint_tests::attachment_poison_failure_sidechannel_preserves_ordinary_wire_and_budget"
+        ],
+        "argv_tail": [
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "codex-core",
+          "--lib",
+          "tools::executed_tool_calls::request_metadata::sampling_checkpoint_tests::",
+          "--",
+          "--nocapture"
+        ]
       }
     ],
     "same_step_selected_total": 48,
     "affected_ordinary_selected_total": 7,
-    "selected_total": 121,
+    "selected_total": 129,
     "filtered": "Observe actual counts only; do not infer54/2694",
     "step_case_names": "Source five direct names plus two explicit test_case labels; bounded actual Cargo --list must match before execution",
     "affected_metadata_selected_total": 10,
@@ -501,7 +547,12 @@
     "original_request_metadata_selected_total": 36,
     "executed_regression_case_names": "Exact original direct3/request36 source names; separate nonzero Cargo --list required before each unchanged regression behavior scope",
     "executed_state_selected_total": 12,
-    "executed_state_case_names": "Exact executed checkpoint child12 source names; separate nonzero Cargo --list required before behavior"
+    "executed_state_case_names": "Exact executed checkpoint child12 source names; separate nonzero Cargo --list required before behavior",
+    "prior121_selected_total": 121,
+    "sampling_executed_selected_total": 6,
+    "sampling_attachment_selected_total": 2,
+    "sampling_binding_selected_total": 8,
+    "sampling_binding_case_names": "Exact new source six/two names and parent child declarations; separate nonzero Cargo --list before each behavior scope"
   },
   "profile": {
     "CARGO_PROFILE_DEV_DEBUG": "0",
@@ -743,7 +794,7 @@
       }
     ],
     "status": "RAM candidate; source121 and Clippy NOT_RUN; no production admission",
-    "scope": "ExecutedToolCalls Option-state mutex visits only; pending Direct atomics, MCP revision and final contributors excluded; no retained sampling binding or InputProof authority"
+    "scope": "Foundation Option-state mutex-visit checkpoint only; separate executed_sampling_binding adds sampling attachment. Pending Direct atomics, MCP revision and final contributors excluded; no InputProof authority."
   },
   "executed_regressions": {
     "source_pins": [
@@ -755,8 +806,8 @@
       },
       {
         "path": "codex-rs/core/src/tools/executed_tool_calls/request_metadata.rs",
-        "bytes": 25731,
-        "sha256": "5f13e13ea19c60eecaba864507906ca9bc74dc3b57ba976bbd7a7b7d50233359",
+        "bytes": 27384,
+        "sha256": "06d2b4155fe34f725062b4576989c33aada9ec6acf5b671aa2c1be0783a289a6",
         "mode": 436
       },
       {
@@ -770,6 +821,71 @@
     "direct_count": 3,
     "request_metadata_prefix": "tools::executed_tool_calls::request_metadata::tests::",
     "request_metadata_count": 36,
-    "scope": "Original finite direct/request-metadata regressions, byteexact fixtures; collection never substitutes for behavior"
+    "scope": "Original finite direct/request-metadata test fixtures stay byteexact; request-metadata implementation uses the exact binding after-pin. Collection never substitutes for behavior."
+  },
+  "executed_sampling_binding": {
+    "patch_file": "retained-sampling-executed-state-binding.patch",
+    "patch_sha256": "b58de3d6196e79b3f1dc3bf5ca7fd780ad4ffdf990a69b5be73c48cb053d0e94",
+    "before_graph": {
+      "rows": 8794,
+      "sha256": "d60b03708a3a5917b747f481a661a1f1fb978d789a045dfb0afb3be7b95b2fa6"
+    },
+    "changed_files": [
+      {
+        "path": "codex-rs/core/src/session/retained_sampling_executed_state_tests.rs",
+        "before_sha256": null,
+        "after_sha256": "ab16488fadbb3bbe68eb3897e8ae2bb94b5b1bed2cdbcccea50d46572355443e",
+        "after_bytes": 10782,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/retained_sampling_preparation.rs",
+        "before_sha256": "8ae505fd218cac5fb3c92e8f39c80619fa0ae39c108c078c2d02ad32c3078a49",
+        "after_sha256": "763b127ca77e181b8d78c4a0e819278173644bfdfb35a73d41ff5c9aa438bac6",
+        "after_bytes": 12906,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/tools/executed_tool_calls/request_metadata.rs",
+        "before_sha256": "5f13e13ea19c60eecaba864507906ca9bc74dc3b57ba976bbd7a7b7d50233359",
+        "after_sha256": "06d2b4155fe34f725062b4576989c33aada9ec6acf5b671aa2c1be0783a289a6",
+        "after_bytes": 27384,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/tools/executed_tool_calls/sampling_checkpoint_tests.rs",
+        "before_sha256": null,
+        "after_sha256": "a37ff251c31e16b3aac89d172f2cc94a15773cced8103d63230149763b4aada0",
+        "after_bytes": 5040,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/tools/mod.rs",
+        "before_sha256": "510635e3ae67e4c63e1feaf6d645f25dc2590f54391645dddeec0a84c1d17616",
+        "after_sha256": "f03cc3cfda6d6df4cb8f1de3fdf734fa0298e0f649f7c3fb4671d77fc00490ec",
+        "after_bytes": 5375,
+        "after_mode": 436
+      }
+    ],
+    "source_cases": [
+      {
+        "label": "sampling-executed6",
+        "prefix": "session::retained_sampling_preparation::executed_state_tests::",
+        "path": "codex-rs/core/src/session/retained_sampling_executed_state_tests.rs",
+        "parent_path": "codex-rs/core/src/session/retained_sampling_preparation.rs",
+        "parent_declaration": "#[cfg(test)]\n#[path = \"retained_sampling_executed_state_tests.rs\"]\nmod executed_state_tests;",
+        "expected_nonzero_count": 6
+      },
+      {
+        "label": "sampling-attachment2",
+        "prefix": "tools::executed_tool_calls::request_metadata::sampling_checkpoint_tests::",
+        "path": "codex-rs/core/src/tools/executed_tool_calls/sampling_checkpoint_tests.rs",
+        "parent_path": "codex-rs/core/src/tools/executed_tool_calls/request_metadata.rs",
+        "parent_declaration": "#[cfg(test)]\n#[path = \"sampling_checkpoint_tests.rs\"]\nmod sampling_checkpoint_tests;",
+        "expected_nonzero_count": 2
+      }
+    ],
+    "status": "Fresh engineering candidate; source129 and Clippy NOT_RUN until actual CI",
+    "scope": "Only sampling attachment binds existing executed Option-state checkpoint lifetime; no Direct atomics/MCP/post-lock budget/final-contributor version authority, no trusted PREGRANT/InputProof qualification or durable-start/send connection"
   }
 }

@@ -1,0 +1,641 @@
+diff --git a/core/src/session/retained_sampling_executed_state_tests.rs b/core/src/session/retained_sampling_executed_state_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/core/src/session/retained_sampling_executed_state_tests.rs
+@@ -0,0 +1,270 @@
++//! Mechanical recorder ownership only; no provider, encoder, grant or sender.
++use super::*;
++use crate::session::step_settings::ResolvedStepSettings;
++use crate::session::tests::HeldStepTask;
++use crate::session::tests::make_session_and_context;
++use crate::session::tests::update_turn_settings_for_test;
++use crate::state::ActiveTurn;
++use crate::state::RunningTask;
++use crate::state::TaskKind;
++use codex_code_mode::CellId;
++use codex_features::Feature;
++use codex_features::Features;
++use codex_protocol::models::FunctionCallOutputPayload;
++use codex_protocol::models::ResponseInputItem;
++use codex_utils_output_truncation::TruncationPolicy;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++
++static EXECUTED_STATE_FIXTURE_TASKS: codex_diagnostics::Gauge =
++    codex_diagnostics::Gauge::new("retained-sampling-executed-state-fixture");
++
++async fn fixture() -> (Arc<Session>, Arc<StepContext>) {
++    let (session, mut turn) = make_session_and_context().await;
++    let selected = Arc::new(turn.next_step_settings.load_full().selected().clone());
++    // The existing inert local manager supplies the actual selected pair once.
++    // Neither this mechanical pair nor the fixture can qualify a model version.
++    let selection = selected
++        .resolve_model_info(
++            session.services.models_manager.as_ref(),
++            &turn.config.to_models_manager_config().into(),
++        )
++        .await;
++    let fast_mode_enabled = turn.config.features.enabled(Feature::FastMode);
++    // The actual test constructor reads initial_settings and creates a fresh Arc.
++    update_turn_settings_for_test(&mut turn, |settings| {
++        *settings =
++            ResolvedStepSettings::from_model_selection(selected, selection, fast_mode_enabled);
++    });
++    let session = Arc::new(session);
++    let turn = Arc::new(turn);
++    let step = StepContext::for_test(Arc::clone(&turn));
++    turn.next_step_settings.store(Arc::clone(&step.settings));
++    let active = ActiveTurn {
++        task: Some(RunningTask {
++            done: Arc::new(tokio::sync::Notify::new()),
++            kind: TaskKind::Regular,
++            task: Arc::new(HeldStepTask {
++                kind: TaskKind::Regular,
++                finish: Arc::new(tokio::sync::Notify::new()),
++            }),
++            cancellation_token: CancellationToken::new(),
++            // The owned task object is registered, but its run method is never called.
++            handle: tokio_util::task::AbortOnDropHandle::new(tokio::spawn(std::future::pending())),
++            turn_context: Arc::clone(&turn),
++            _agent_execution_guard: None,
++            _diagnostics_guard: EXECUTED_STATE_FIXTURE_TASKS.track(),
++            _timer: None,
++        }),
++        ..ActiveTurn::default()
++    };
++    *session.active_turn.lock().await = Some(active);
++    session.set_last_known_step_context(&step).await;
++    (session, step)
++}
++
++fn recording_features(enabled: bool) -> Features {
++    let mut features = Features::default();
++    features.set_enabled(Feature::ExecutedToolCallMetadata, enabled);
++    features
++}
++
++async fn assembled(session: &Arc<Session>, step: &Arc<StepContext>) -> AssembledSamplingPrompt {
++    let input = NativeSamplingInput::capture(session, step).await;
++    let instructions = NativeSamplingInstructions::capture(session, step).await;
++    assemble_sampling_prompt(input, &instructions, &mut SamplingToolCache::new())
++        .await
++        .expect("ordinary local assembly without sampling")
++}
++
++fn history() -> Vec<ResponseItem> {
++    vec![
++        serde_json::from_value(json!({
++            "type": "custom_tool_call", "call_id": "exec", "name": "exec", "input": "",
++        }))
++        .expect("synthetic exec input"),
++        ResponseItem::from(ResponseInputItem::CustomToolCallOutput {
++            call_id: "exec".to_string(),
++            name: None,
++            output: FunctionCallOutputPayload::from_text("synthetic historical output".to_string()),
++        }),
++    ]
++}
++
++#[tokio::test]
++async fn retained_sampling_genuine_none_checkpoint_stays_current_and_capture_is_inert() {
++    let (session, step) = fixture().await;
++    let recorder = &session.services.executed_tool_calls;
++    recorder.refresh(&recording_features(false));
++    let retained = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("genuine None retention");
++    let checkpoint = retained.executed_state_checkpoint.clone();
++    let history_before = session.clone_history().await.into_shared_annotated_items();
++    let prompt_before = retained.prompt.input.clone();
++    let metadata_before = capture_metadata_facts(&retained.metadata).expect("metadata before");
++    retained
++        .verify_current(&session, &step)
++        .await
++        .expect("same native owner");
++    let second = recorder.state_checkpoint().expect("inert repeat capture");
++    assert_eq!(recorder.verify_state_checkpoint(&checkpoint), Ok(()));
++    assert_eq!(recorder.verify_state_checkpoint(&second), Ok(()));
++    assert!(Arc::ptr_eq(
++        &history_before,
++        &session.clone_history().await.into_shared_annotated_items(),
++    ));
++    assert_eq!(retained.prompt.input, prompt_before);
++    assert_eq!(
++        capture_metadata_facts(&retained.metadata).expect("metadata after"),
++        metadata_before
++    );
++    assert_eq!(
++        retained.controlled_prompt().err(),
++        Some(SamplingCaptureError::CompleteMaterialVersionsUnavailable),
++    );
++    assert_eq!(
++        prepare_pregrant(&session, &step).err(),
++        Some(SamplingCaptureError::PregrantOwnerUnavailable),
++    );
++}
++
++#[tokio::test]
++async fn retained_sampling_rejects_checkpoint_from_distinct_genuine_session_recorder() {
++    let (session, step) = fixture().await;
++    let (foreign, _foreign_step) = fixture().await;
++    session
++        .services
++        .executed_tool_calls
++        .refresh(&recording_features(false));
++    foreign
++        .services
++        .executed_tool_calls
++        .refresh(&recording_features(false));
++    let mut prompt = assembled(&session, &step).await;
++    prompt.executed_state_checkpoint = foreign.services.executed_tool_calls.state_checkpoint();
++    assert_eq!(
++        prompt.retain().await.err(),
++        Some(SamplingCaptureError::ExecutedState(
++            ExecutedToolCallsCheckpointError::OwnerMismatch
++        )),
++    );
++}
++
++#[tokio::test]
++async fn retained_sampling_rejects_writer_between_attachment_and_retain() {
++    let (session, step) = fixture().await;
++    let recorder = &session.services.executed_tool_calls;
++    recorder.refresh(&recording_features(false));
++    let prompt = assembled(&session, &step).await;
++    recorder.refresh(&recording_features(false));
++    assert_eq!(
++        prompt.retain().await.err(),
++        Some(SamplingCaptureError::ExecutedState(
++            ExecutedToolCallsCheckpointError::Changed
++        )),
++    );
++}
++
++#[tokio::test]
++async fn retained_sampling_rejects_ordinary_writer_without_rewriting_historical_prompt() {
++    let (session, step) = fixture().await;
++    let recorder = &session.services.executed_tool_calls;
++    recorder.refresh(&recording_features(true));
++    session
++        .state
++        .lock()
++        .await
++        .history
++        .record_items(&history(), TruncationPolicy::Tokens(8192));
++    let retained = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("retained before writer");
++    let prompt_before = retained.prompt.input.clone();
++    let history_before = session.clone_history().await.into_shared_annotated_items();
++    let cell = CellId::new("retained-sampling-cell".to_string());
++    let call = ExecutedToolCall::new("synthetic_nested_tool".to_string(), json!({"argument": 2}));
++    recorder.start_cell(&cell, "exec");
++    recorder.record_nested_tool_call(cell.clone(), "nested".to_string(), call.clone(), 2);
++    recorder.finish_cell_recording(&cell);
++    assert_eq!(
++        retained.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::ExecutedState(
++            ExecutedToolCallsCheckpointError::Changed
++        )),
++    );
++    assert_eq!(retained.prompt.input, prompt_before);
++    assert!(Arc::ptr_eq(
++        &history_before,
++        &session.clone_history().await.into_shared_annotated_items(),
++    ));
++    let mut actual = history();
++    recorder.attach_to_compaction_prompt(&mut actual);
++    let mut expected = history();
++    expected[1].append_executed_tool_calls(vec![call]);
++    expected[1].set_tool_call_cell_id("exec");
++    expected[1].mark_tool_calls_complete();
++    assert_eq!(actual, expected);
++    assert_eq!(retained.prompt.input, prompt_before);
++}
++
++#[tokio::test]
++async fn retained_sampling_rejects_recorder_change_and_revert_to_genuine_none() {
++    let (session, step) = fixture().await;
++    let recorder = &session.services.executed_tool_calls;
++    recorder.refresh(&recording_features(false));
++    let retained = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("None before change");
++    recorder.refresh(&recording_features(true));
++    recorder.refresh(&recording_features(false));
++    assert_eq!(
++        retained.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::ExecutedState(
++            ExecutedToolCallsCheckpointError::Changed
++        )),
++    );
++    assert_eq!(
++        recorder
++            .verify_state_checkpoint(&recorder.state_checkpoint().expect("current genuine None")),
++        Ok(()),
++    );
++}
++
++#[tokio::test]
++async fn stale_attachment_checkpoint_keeps_into_ordinary_values_exact() {
++    let (session, step) = fixture().await;
++    let recorder = &session.services.executed_tool_calls;
++    recorder.refresh(&recording_features(false));
++    let assembled = assembled(&session, &step).await;
++    let expected = assembled.prompt.clone();
++    let expected_metadata = capture_metadata_facts(&assembled.metadata).expect("original metadata");
++    recorder.refresh(&recording_features(false));
++    assert_eq!(
++        recorder.verify_state_checkpoint(
++            assembled
++                .executed_state_checkpoint
++                .as_ref()
++                .expect("checkpoint")
++        ),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++    let (ordinary, metadata) = assembled.into_ordinary();
++    assert_eq!(ordinary.input, expected.input);
++    assert!(Arc::ptr_eq(&ordinary.tools, &expected.tools));
++    assert_eq!(ordinary.parallel_tool_calls, expected.parallel_tool_calls);
++    assert_eq!(ordinary.base_instructions, expected.base_instructions);
++    assert_eq!(ordinary.output_schema, expected.output_schema);
++    assert_eq!(ordinary.output_schema_strict, expected.output_schema_strict);
++    assert_eq!(ordinary.cyber_access_program, expected.cyber_access_program);
++    assert_eq!(
++        capture_metadata_facts(&metadata).expect("ordinary metadata"),
++        expected_metadata
++    );
++}
+diff --git a/core/src/session/retained_sampling_preparation.rs b/core/src/session/retained_sampling_preparation.rs
+--- a/core/src/session/retained_sampling_preparation.rs
++++ b/core/src/session/retained_sampling_preparation.rs
+@@ -15,6 +15,8 @@
+ use crate::config::Config;
+ use crate::responses_metadata::CodexResponsesMetadata;
+ use crate::responses_metadata::CodexResponsesRequestKind;
++use crate::tools::ExecutedToolCallsCheckpoint;
++use crate::tools::ExecutedToolCallsCheckpointError;
+ use crate::tools::router::ToolRouter;
+ use codex_history::ResponseItemEnvelope;
+ use codex_protocol::error::Result as CodexResult;
+@@ -135,6 +137,8 @@
+     origin: NativeSamplingInput,
+     instructions_owner_matches: bool,
+     instruction_materials: NativeInstructionMaterials,
++    executed_state_checkpoint:
++        Result<ExecutedToolCallsCheckpoint, ExecutedToolCallsCheckpointError>,
+     tool_router: Arc<ToolRouter>,
+     prompt: Prompt,
+     metadata: CodexResponsesMetadata,
+@@ -149,10 +153,10 @@
+ ) -> CodexResult<AssembledSamplingPrompt> {
+     let session = &input.session;
+     let step = &input.step;
+-    session
++    let executed_state_checkpoint = session
+         .services
+         .executed_tool_calls
+-        .attach_to_prompt(&mut input.input, executed_tool_calls_by_output);
++        .attach_to_prompt_with_checkpoint(&mut input.input, executed_tool_calls_by_output);
+     let mut prompt = build_prompt(
+         std::mem::take(&mut input.input),
+         step.as_ref(),
+@@ -172,6 +176,7 @@
+         origin: input,
+         instructions_owner_matches,
+         instruction_materials: instructions.materials.clone(),
++        executed_state_checkpoint,
+         tool_router,
+         prompt,
+         metadata,
+@@ -184,6 +189,7 @@
+     InstructionsOwnerMismatch,
+     InstructionsChanged,
+     AppliedInstructionsChanged,
++    ExecutedState(ExecutedToolCallsCheckpointError),
+     HistoryChanged,
+     ToolPlanChanged,
+     MetadataChanged,
+@@ -204,12 +210,27 @@
+         if !self.instructions_owner_matches {
+             return Err(SamplingCaptureError::InstructionsOwnerMismatch);
+         }
++        let executed_state_checkpoint = self
++            .executed_state_checkpoint
++            .map_err(SamplingCaptureError::ExecutedState)?;
++        self.origin
++            .session
++            .services
++            .executed_tool_calls
++            .verify_state_checkpoint(&executed_state_checkpoint)
++            .map_err(SamplingCaptureError::ExecutedState)?;
+         let native = self
+             .origin
+             .session
+             .capture_retained_native_context(&self.origin.step)
+             .await
+             .map_err(SamplingCaptureError::Native)?;
++        self.origin
++            .session
++            .services
++            .executed_tool_calls
++            .verify_state_checkpoint(&executed_state_checkpoint)
++            .map_err(SamplingCaptureError::ExecutedState)?;
+         if capture_metadata_facts(&self.metadata)
+             .map_err(|_| SamplingCaptureError::MetadataChanged)?
+             != capture_metadata_facts(native.metadata())
+@@ -221,6 +242,7 @@
+             native,
+             origin: self.origin,
+             instruction_materials: self.instruction_materials,
++            executed_state_checkpoint,
+             tool_router: self.tool_router,
+             prompt: self.prompt,
+             metadata: self.metadata,
+@@ -238,6 +260,7 @@
+     native: RetainedNativeContext,
+     origin: NativeSamplingInput,
+     instruction_materials: NativeInstructionMaterials,
++    executed_state_checkpoint: ExecutedToolCallsCheckpoint,
+     tool_router: Arc<ToolRouter>,
+     prompt: Prompt,
+     metadata: CodexResponsesMetadata,
+@@ -250,21 +273,24 @@
+         (&self.prompt, &self.metadata, self.native.model_info())
+     }
+ 
+-    /// Recheck retained native identities and the instruction/config/applied lifetimes.
+-    /// Executed-tool facts and later client contributors still have no complete version owner.
++    /// Recheck retained native identities, instructions and the recorder Option-state.
++    /// Direct atomics, MCP attribution and final client contributors remain outside this checkpoint.
+     pub(super) async fn verify_current(
+         &self,
+         session: &Arc<Session>,
+         step: &Arc<StepContext>,
+     ) -> Result<(), SamplingCaptureError> {
++        self.verify_executed_state()?;
+         self.native
+             .verify_current(session, step)
+             .await
+             .map_err(SamplingCaptureError::Native)?;
++        self.verify_executed_state()?;
+         if self.origin.history_reset.is_cancelled() {
+             return Err(SamplingCaptureError::HistoryChanged);
+         }
+         let current = session.clone_history().await.into_shared_annotated_items();
++        self.verify_executed_state()?;
+         if !Arc::ptr_eq(&self.origin.history, &current) {
+             return Err(SamplingCaptureError::HistoryChanged);
+         }
+@@ -276,7 +302,17 @@
+         self.instruction_materials
+             .verify_current(session, step)
+             .await?;
+-        Ok(())
++        // No await or recapture may follow the final same-recorder check.
++        self.verify_executed_state()
++    }
++
++    fn verify_executed_state(&self) -> Result<(), SamplingCaptureError> {
++        self.origin
++            .session
++            .services
++            .executed_tool_calls
++            .verify_state_checkpoint(&self.executed_state_checkpoint)
++            .map_err(SamplingCaptureError::ExecutedState)
+     }
+ 
+     /// Complete executed-material/contributor versions and trusted PREGRANT ownership
+@@ -295,3 +331,7 @@
+ ) -> Result<RetainedSamplingPreparation, SamplingCaptureError> {
+     Err(SamplingCaptureError::PregrantOwnerUnavailable)
+ }
++
++#[cfg(test)]
++#[path = "retained_sampling_executed_state_tests.rs"]
++mod executed_state_tests;
+diff --git a/core/src/tools/executed_tool_calls/request_metadata.rs b/core/src/tools/executed_tool_calls/request_metadata.rs
+--- a/core/src/tools/executed_tool_calls/request_metadata.rs
++++ b/core/src/tools/executed_tool_calls/request_metadata.rs
+@@ -2,6 +2,10 @@
+ //! Final request budgeting runs after the recorder lock is released; it never changes tool execution.
+ 
+ use super::*;
++
++#[cfg(test)]
++#[path = "sampling_checkpoint_tests.rs"]
++mod sampling_checkpoint_tests;
+ 
+ #[derive(Clone, Copy, PartialEq, Eq)]
+ enum MetadataBudgetScope {
+@@ -31,21 +35,56 @@
+         items: &mut [ResponseItem],
+         retry_cache: &mut ExecutedToolCallCache,
+     ) {
+-        let attached = {
++        self.attach_to_prompt_inner(items, retry_cache, |_| ());
++    }
++
++    /// Captures only this recorder's Option-state after its ordinary attachment.
++    /// The checkpoint is not a final byte, Direct-atomic, MCP or InputProof owner.
++    pub(crate) fn attach_to_prompt_with_checkpoint(
++        &self,
++        items: &mut [ResponseItem],
++        retry_cache: &mut ExecutedToolCallCache,
++    ) -> Result<ExecutedToolCallsCheckpoint, ExecutedToolCallsCheckpointError> {
++        self.attach_to_prompt_inner(items, retry_cache, |recorder| {
++            if recorder.state.is_poisoned() {
++                return Err(ExecutedToolCallsCheckpointError::StatePoisoned);
++            }
++            let reset = recorder
++                .material_reset
++                .lock()
++                .map_err(|_| ExecutedToolCallsCheckpointError::ResetPoisoned)?;
++            Ok(ExecutedToolCallsCheckpoint {
++                state_owner: Arc::downgrade(&recorder.state),
++                reset_owner: Arc::downgrade(&recorder.material_reset),
++                reset: reset.child_token(),
++            })
++        })
++    }
++
++    fn attach_to_prompt_inner<T>(
++        &self,
++        items: &mut [ResponseItem],
++        retry_cache: &mut ExecutedToolCallCache,
++        after_attachment: impl FnOnce(&Self) -> T,
++    ) -> T {
++        let (attached, checkpoint) = {
+             let mut state = self.lock_state();
+-            state.as_mut().map(|state| {
++            let attached = state.as_mut().map(|state| {
+                 Self::attach_pending_to_prompt_with_state(
+                     state,
+                     items,
+                     retry_cache,
+                     MetadataBudgetScope::AllCalls,
+                 )
+-            })
++            });
++            // Still holding the same Option-state guard: no intervening writer
++            // can make a stale attachment appear current in a fresh checkpoint.
++            (attached, after_attachment(self))
+         };
+         let Some(attached) = attached else {
+             // Direct records now live in history; disabling capture also stops replaying them.
+             clear_direct_call_metadata(items);
+-            return;
++            return checkpoint;
+         };
+         if attached || items.iter().any(has_direct_call_metadata) {
+             metadata_metrics::bound_prompt_metadata(
+@@ -55,6 +94,7 @@
+                 codex_otel::global().as_ref(),
+             );
+         }
++        checkpoint
+     }
+ 
+     fn attach_pending_to_prompt_with_state(
+diff --git a/core/src/tools/executed_tool_calls/sampling_checkpoint_tests.rs b/core/src/tools/executed_tool_calls/sampling_checkpoint_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/core/src/tools/executed_tool_calls/sampling_checkpoint_tests.rs
+@@ -0,0 +1,118 @@
++//! Same-lock attachment capture; ordinary wire recovery and budgeting stay intact.
++use super::*;
++use codex_protocol::models::FunctionCallOutputPayload;
++use codex_protocol::models::ResponseInputItem;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++use std::panic::AssertUnwindSafe;
++use std::panic::catch_unwind;
++
++fn recorder(enabled: bool) -> ExecutedToolCalls {
++    let mut features = Features::default();
++    features.set_enabled(Feature::ExecutedToolCallMetadata, enabled);
++    ExecutedToolCalls::new(&features, &InitialHistory::New)
++}
++
++fn history() -> Vec<ResponseItem> {
++    vec![
++        serde_json::from_value(json!({
++            "type": "custom_tool_call", "call_id": "exec", "name": "exec", "input": "",
++        }))
++        .expect("synthetic exec input"),
++        ResponseItem::from(ResponseInputItem::CustomToolCallOutput {
++            call_id: "exec".to_string(),
++            name: None,
++            output: FunctionCallOutputPayload::from_text("synthetic output".to_string()),
++        }),
++    ]
++}
++
++#[test]
++fn attachment_checkpoint_is_minted_after_attachment_without_self_revocation() {
++    let recorder = recorder(true);
++    let cell = CellId::new("attachment-checkpoint-cell".to_string());
++    let call = ExecutedToolCall::new("synthetic_nested_tool".to_string(), json!({"argument": 2}));
++    recorder.start_cell(&cell, "exec");
++    recorder.record_nested_tool_call(cell.clone(), "nested".to_string(), call.clone(), 2);
++    recorder.finish_cell_recording(&cell);
++    let before = recorder.state_checkpoint().expect("before attachment");
++    let mut actual = history();
++    let mut cache = ExecutedToolCallCache::new();
++    let checkpoint = recorder
++        .attach_to_prompt_with_checkpoint(&mut actual, &mut cache)
++        .expect("checkpoint after attachment in same state guard");
++    assert_eq!(
++        recorder.verify_state_checkpoint(&before),
++        Err(ExecutedToolCallsCheckpointError::Changed),
++    );
++    assert_eq!(recorder.verify_state_checkpoint(&checkpoint), Ok(()));
++    let repeated = recorder.state_checkpoint().expect("inert capture");
++    assert_eq!(recorder.verify_state_checkpoint(&checkpoint), Ok(()));
++    assert_eq!(recorder.verify_state_checkpoint(&repeated), Ok(()));
++    let mut expected = history();
++    expected[1].append_executed_tool_calls(vec![call]);
++    expected[1].set_tool_call_cell_id("exec");
++    expected[1].mark_tool_calls_complete();
++    assert_eq!(actual, expected);
++    assert!(!cache.is_empty());
++}
++
++#[test]
++fn attachment_poison_failure_sidechannel_preserves_ordinary_wire_and_budget() {
++    for enabled in [false, true] {
++        for poison_state in [false, true] {
++            let retained_recorder = recorder(enabled);
++            let ordinary_recorder = recorder(enabled);
++            let mut original = history();
++            original[1].append_executed_tool_calls(vec![ExecutedToolCall::new(
++                "synthetic_direct_tool".to_string(),
++                json!({"payload": "x".repeat(96 * 1024)}),
++            )]);
++            let mut expected = original.clone();
++            if enabled {
++                bound_executed_tool_calls_for_prompt(&mut expected);
++                assert!(
++                    serde_json::to_vec(&expected).expect("bounded wire").len()
++                        < serde_json::to_vec(&original).expect("unbounded wire").len(),
++                );
++            } else {
++                clear_direct_call_metadata(&mut expected);
++                assert!(expected[1].executed_tool_call_metadata().is_none());
++            }
++            assert!(
++                catch_unwind(AssertUnwindSafe(|| {
++                    if poison_state {
++                        let _guard = retained_recorder.state.lock().expect("state setup");
++                        panic!("synthetic state poison");
++                    } else {
++                        let _guard = retained_recorder
++                            .material_reset
++                            .lock()
++                            .expect("reset setup");
++                        panic!("synthetic reset poison");
++                    }
++                }))
++                .is_err()
++            );
++            let mut actual = original.clone();
++            let mut retained_cache = ExecutedToolCallCache::new();
++            let failure = retained_recorder
++                .attach_to_prompt_with_checkpoint(&mut actual, &mut retained_cache)
++                .err();
++            assert_eq!(
++                failure,
++                Some(if poison_state {
++                    ExecutedToolCallsCheckpointError::StatePoisoned
++                } else {
++                    ExecutedToolCallsCheckpointError::ResetPoisoned
++                }),
++            );
++            let mut ordinary = original;
++            let mut ordinary_cache = ExecutedToolCallCache::new();
++            ordinary_recorder.attach_to_prompt(&mut ordinary, &mut ordinary_cache);
++            assert_eq!(actual, expected);
++            assert_eq!(ordinary, expected);
++            assert_eq!(retained_cache, ordinary_cache);
++        }
++    }
++}
+diff --git a/core/src/tools/mod.rs b/core/src/tools/mod.rs
+--- a/core/src/tools/mod.rs
++++ b/core/src/tools/mod.rs
+@@ -38,6 +38,8 @@
+ use codex_utils_output_truncation::formatted_truncate_text;
+ use codex_utils_output_truncation::truncate_text;
+ pub(crate) use executed_tool_calls::ExecutedToolCalls;
++pub(crate) use executed_tool_calls::ExecutedToolCallsCheckpoint;
++pub(crate) use executed_tool_calls::ExecutedToolCallsCheckpointError;
+ pub(crate) use multi_agent_tool::MULTI_AGENT_V2_NAMESPACE_DESCRIPTION;
+ pub use router::ToolRouter;
+ 

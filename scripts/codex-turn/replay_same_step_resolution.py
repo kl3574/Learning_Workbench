@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare pinned same-Step repair sources or validate prior70+checkpoint12+original39 (121) and Clippy.
+"""Prepare pinned same-Step repair sources or validate original121+sampling-executed6+attachment2 (129) and Clippy.
 
 Only explicit CI setup provisions Rust/fetches dependencies. This engineering
 entry never runs Codex CLI, AppServer, a model, foreign handle or a sender, and
@@ -33,7 +33,7 @@ ASSETS = {
 FIELDS = {
     "schema_version", "status", "spec", "source", "inherited_inputs", "native03", "patch",
     "changed_files", "complete_source_graph", "test_metadata", "lock_sha256", "rust",
-    "test_selection", "profile", "source_binding", "clippy", "clippy_repair", "sampling_preparation", "instruction_materials", "executed_state_checkpoint", "executed_regressions", "production_boundary", "licensing",
+    "executed_sampling_binding", "test_selection", "profile", "source_binding", "clippy", "clippy_repair", "sampling_preparation", "instruction_materials", "executed_state_checkpoint", "executed_regressions", "production_boundary", "licensing",
 }
 SOURCE_SHA = "351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927"
 BASE_SHA = "9a8c163b2683280dfdae0145018f7f8c0cd14804ac87741ef4cf52a20988be28"
@@ -161,15 +161,16 @@ EXECUTED_STATE_CHECKPOINT = {'patch_file': 'executed-tool-calls-checkpoint.patch
                     'after_bytes': 11527,
                     'after_mode': 436}],
  'status': 'RAM candidate; source121 and Clippy NOT_RUN; no production admission',
- 'scope': 'ExecutedToolCalls Option-state mutex visits only; pending Direct atomics, MCP revision '
-          'and final contributors excluded; no retained sampling binding or InputProof authority'}
+ 'scope': 'Foundation Option-state mutex-visit checkpoint only; separate executed_sampling_binding '
+          'adds sampling attachment. Pending Direct atomics, MCP revision and final contributors '
+          'excluded; no InputProof authority.'}
 EXECUTED_REGRESSIONS = {'source_pins': [{'path': 'codex-rs/core/src/tools/executed_tool_calls_direct_tests.rs',
                   'bytes': 6978,
                   'sha256': '21febb49952f70795cbdeb24c83d02c027cb20dbd67eb64e385fa2099f59ddf1',
                   'mode': 436},
                  {'path': 'codex-rs/core/src/tools/executed_tool_calls/request_metadata.rs',
-                  'bytes': 25731,
-                  'sha256': '5f13e13ea19c60eecaba864507906ca9bc74dc3b57ba976bbd7a7b7d50233359',
+                  'bytes': 27384,
+                  'sha256': '06d2b4155fe34f725062b4576989c33aada9ec6acf5b671aa2c1be0783a289a6',
                   'mode': 436},
                  {'path': 'codex-rs/core/src/tools/executed_tool_calls/request_metadata_tests.rs',
                   'bytes': 85527,
@@ -179,8 +180,58 @@ EXECUTED_REGRESSIONS = {'source_pins': [{'path': 'codex-rs/core/src/tools/execut
  'direct_count': 3,
  'request_metadata_prefix': 'tools::executed_tool_calls::request_metadata::tests::',
  'request_metadata_count': 36,
- 'scope': 'Original finite direct/request-metadata regressions, byteexact fixtures; collection '
-          'never substitutes for behavior'}
+ 'scope': 'Original finite direct/request-metadata test fixtures stay byteexact; request-metadata '
+          'implementation uses the exact binding after-pin. Collection never substitutes for '
+          'behavior.'}
+EXECUTED_SAMPLING_BINDING = {'patch_file': 'retained-sampling-executed-state-binding.patch',
+ 'patch_sha256': 'b58de3d6196e79b3f1dc3bf5ca7fd780ad4ffdf990a69b5be73c48cb053d0e94',
+ 'before_graph': {'rows': 8794,
+                  'sha256': 'd60b03708a3a5917b747f481a661a1f1fb978d789a045dfb0afb3be7b95b2fa6'},
+ 'changed_files': [{'path': 'codex-rs/core/src/session/retained_sampling_executed_state_tests.rs',
+                    'before_sha256': None,
+                    'after_sha256': 'ab16488fadbb3bbe68eb3897e8ae2bb94b5b1bed2cdbcccea50d46572355443e',
+                    'after_bytes': 10782,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/retained_sampling_preparation.rs',
+                    'before_sha256': '8ae505fd218cac5fb3c92e8f39c80619fa0ae39c108c078c2d02ad32c3078a49',
+                    'after_sha256': '763b127ca77e181b8d78c4a0e819278173644bfdfb35a73d41ff5c9aa438bac6',
+                    'after_bytes': 12906,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/tools/executed_tool_calls/request_metadata.rs',
+                    'before_sha256': '5f13e13ea19c60eecaba864507906ca9bc74dc3b57ba976bbd7a7b7d50233359',
+                    'after_sha256': '06d2b4155fe34f725062b4576989c33aada9ec6acf5b671aa2c1be0783a289a6',
+                    'after_bytes': 27384,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/tools/executed_tool_calls/sampling_checkpoint_tests.rs',
+                    'before_sha256': None,
+                    'after_sha256': 'a37ff251c31e16b3aac89d172f2cc94a15773cced8103d63230149763b4aada0',
+                    'after_bytes': 5040,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/tools/mod.rs',
+                    'before_sha256': '510635e3ae67e4c63e1feaf6d645f25dc2590f54391645dddeec0a84c1d17616',
+                    'after_sha256': 'f03cc3cfda6d6df4cb8f1de3fdf734fa0298e0f649f7c3fb4671d77fc00490ec',
+                    'after_bytes': 5375,
+                    'after_mode': 436}],
+ 'source_cases': [{'label': 'sampling-executed6',
+                   'prefix': 'session::retained_sampling_preparation::executed_state_tests::',
+                   'path': 'codex-rs/core/src/session/retained_sampling_executed_state_tests.rs',
+                   'parent_path': 'codex-rs/core/src/session/retained_sampling_preparation.rs',
+                   'parent_declaration': '#[cfg(test)]\n'
+                                         '#[path = "retained_sampling_executed_state_tests.rs"]\n'
+                                         'mod executed_state_tests;',
+                   'expected_nonzero_count': 6},
+                  {'label': 'sampling-attachment2',
+                   'prefix': 'tools::executed_tool_calls::request_metadata::sampling_checkpoint_tests::',
+                   'path': 'codex-rs/core/src/tools/executed_tool_calls/sampling_checkpoint_tests.rs',
+                   'parent_path': 'codex-rs/core/src/tools/executed_tool_calls/request_metadata.rs',
+                   'parent_declaration': '#[cfg(test)]\n'
+                                         '#[path = "sampling_checkpoint_tests.rs"]\n'
+                                         'mod sampling_checkpoint_tests;',
+                   'expected_nonzero_count': 2}],
+ 'status': 'Fresh engineering candidate; source129 and Clippy NOT_RUN until actual CI',
+ 'scope': 'Only sampling attachment binds existing executed Option-state checkpoint lifetime; no '
+          'Direct atomics/MCP/post-lock budget/final-contributor version authority, no trusted '
+          'PREGRANT/InputProof qualification or durable-start/send connection'}
 EXECUTED_DIRECT_PREFIX = 'tools::executed_tool_calls::direct_tests::'
 EXECUTED_METADATA_PREFIX = 'tools::executed_tool_calls::request_metadata::tests::'
 EXECUTED_PREFIX = 'tools::executed_tool_calls::checkpoint_tests::'
@@ -196,6 +247,8 @@ SCOPES = [
     ("executed-state12", "codex-core", EXECUTED_PREFIX, 12),
     ("executed-direct3", "codex-core", EXECUTED_DIRECT_PREFIX, 3),
     ("executed-metadata36", "codex-core", EXECUTED_METADATA_PREFIX, 36),
+    ('sampling-executed6', 'codex-core', 'session::retained_sampling_preparation::executed_state_tests::', 6),
+    ('sampling-attachment2', 'codex-core', 'tools::executed_tool_calls::request_metadata::sampling_checkpoint_tests::', 2),
 ]
 CHANGED = {
     "codex-rs/models-manager/src/manager.rs",
@@ -317,6 +370,10 @@ def verify_inputs(bundle: Path) -> dict:
             "Closed two-row Option-state checkpoint patch after exact source70 required")
     require(manifest["executed_regressions"] == EXECUTED_REGRESSIONS,
             "Original finite executed regression source contract required")
+    binding = manifest["executed_sampling_binding"]
+    require(binding == EXECUTED_SAMPLING_BINDING
+            and sha256(bundle / binding["patch_file"]) == binding["patch_sha256"],
+            "Closed three-existing/two-new sampling executed binding after source121 required")
     rows = manifest["changed_files"]
     require(len(rows) == 9 and {row["path"] for row in rows} == CHANGED,
             "Exactly nine same-Step source paths required")
@@ -328,9 +385,9 @@ def verify_inputs(bundle: Path) -> dict:
     for phase in ["source", "normalized"]:
         graph = manifest["complete_source_graph"][phase]
         require(set(graph) == {"rows", "sha256"} and type(graph["rows"]) is int
-                and graph["rows"] == 8794, "Complete source graph required")
+                and graph["rows"] == 8796, "Complete source graph required")
     selections = manifest["test_selection"]
-    require(len(selections["scopes"]) == 8 and selections["selected_total"] == 121
+    require(len(selections["scopes"]) == 10 and selections["selected_total"] == 129
             and selections["same_step_selected_total"] == 48 and selections["affected_ordinary_selected_total"] == 7
             and selections["affected_metadata_selected_total"] == 10
             and selections["native_guard_selected_total"] == 22
@@ -342,8 +399,12 @@ def verify_inputs(bundle: Path) -> dict:
             and selections["checkpoint_subtotal"] == 82
             and selections["executed_regression_selected_total"] == 39
             and selections["original_executed_direct_selected_total"] == 3
-            and selections["original_request_metadata_selected_total"] == 36,
-            "Fixed nonzero manager9/native39/ordinary7/metadata10/applied5/checkpoint12/direct3/request36 required")
+            and selections["original_request_metadata_selected_total"] == 36
+            and selections["prior121_selected_total"] == 121
+            and selections["sampling_executed_selected_total"] == 6
+            and selections["sampling_attachment_selected_total"] == 2
+            and selections["sampling_binding_selected_total"] == 8,
+            "Fixed original121 plus sampling-executed6/attachment2 required")
     for scope, (label, package, selector, count) in zip(selections["scopes"], SCOPES):
         require(scope["label"] == label and scope["package"] == package and scope["filter"] == selector
                 and type(scope["expected_passed"]) is int and scope["expected_passed"] == count
@@ -452,6 +513,16 @@ def source_test_names(root: Path) -> list[list[str]]:
         require(len(names) == len(set(names)) == count and "#[test_case" not in child,
                 "Unique fixed original executed regression source names required")
         result.append(sorted(prefix + name for name in names))
+    for case in EXECUTED_SAMPLING_BINDING["source_cases"]:
+        parent = (root / case["parent_path"]).read_text()
+        require(parent.count(case["parent_declaration"]) == 1,
+                "Exact sampling executed-state child module required")
+        child = (root / case["path"]).read_text()
+        names = re.findall(r"#\[(?:test|tokio::test)\]\s+(?:async )?fn (\w+)\(", child)
+        count = case["expected_nonzero_count"]
+        require(count > 0 and len(names) == len(set(names)) == count and "#[test_case" not in child,
+                "Unique nonzero sampling executed-state source names required")
+        result.append(sorted(case["prefix"] + name for name in names))
     return result
 
 def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict,
@@ -489,6 +560,7 @@ def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict
         ("sampling-preparation", manifest["sampling_preparation"]["patch_file"], manifest["sampling_preparation"]),
         ("instruction-materials", manifest["instruction_materials"]["patch_file"], manifest["instruction_materials"]),
         ("executed-state-checkpoint", manifest["executed_state_checkpoint"]["patch_file"], manifest["executed_state_checkpoint"]),
+        ("executed-sampling-binding", manifest["executed_sampling_binding"]["patch_file"], manifest["executed_sampling_binding"]),
     ]:
         before = full_inventory(source)
         if label == "clippy-repair":
@@ -507,7 +579,11 @@ def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict
             graph = manifest["executed_state_checkpoint"]["before_graph"]
             require(len(before) == graph["rows"] and graph_digest(before) == graph["sha256"],
                     "Exact source70 required before Option-state checkpoint patch")
-        patch_root = source / "codex-rs" if label in {"instruction-materials", "executed-state-checkpoint"} else source
+        if label == "executed-sampling-binding":
+            graph = manifest["executed_sampling_binding"]["before_graph"]
+            require(len(before) == graph["rows"] and graph_digest(before) == graph["sha256"],
+                    "Exact source121 required before sampling executed-state binding")
+        patch_root = source / "codex-rs" if label in {"instruction-materials", "executed-state-checkpoint", "executed-sampling-binding"} else source
         for suffix, flags in [("check", ["--check"]), ("apply", [])]:
             row = recorder.run(label + "-" + suffix, ["git", "apply", *flags, str(bundle / filename)], patch_root)
             if row["exit_code"] != 0:
@@ -728,6 +804,8 @@ def run_stage(args: argparse.Namespace, output: Path, report: dict, manifest: di
                     collections = [("executed-direct", EXECUTED_DIRECT_PREFIX, scope["test_names"], 3)]
                 elif scope["label"] == "executed-metadata36":
                     collections = [("executed-metadata", EXECUTED_METADATA_PREFIX, scope["test_names"], 36)]
+                elif scope["label"] in {"sampling-executed6", "sampling-attachment2"}:
+                    collections = [(scope["label"], scope["filter"], scope["test_names"], scope["expected_passed"])]
                 for label, selector, expected_names, expected_count in collections:
                     prelaunch_health(output, report, label + "-list")
                     argv = [str(bins["cargo"]), "test", "--locked", "--offline", "-p", "codex-core",
@@ -774,7 +852,7 @@ def run_stage(args: argparse.Namespace, output: Path, report: dict, manifest: di
                 if row["exit_code"] != 0 or not observed["selection_matches"]:
                     result = positive_exit(row["exit_code"]) or 1
                     break
-            report["tests"]["status"] = "PASS" if result == 0 and report["tests"]["selected_total_passed"] == 121 else "FAIL"
+            report["tests"]["status"] = "PASS" if result == 0 and report["tests"]["selected_total_passed"] == 129 else "FAIL"
             if report["tests"]["status"] == "PASS":
                 prelaunch_health(output, report, "clippy")
                 row = recorder.run("cargo-clippy", [str(bins["cargo"])] + CLIPPY_ARGV,
