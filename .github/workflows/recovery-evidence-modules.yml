@@ -1,0 +1,42 @@
+name: Bounded recovery evidence modules regression validation
+on:
+  push:
+    branches:
+      - qa/M6.3-recovery-evidence-modules
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  recovery-evidence-modules:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/qa/M6.3-recovery-evidence-modules' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Verify unchanged reviewed implementation and exact parent
+        run: |
+          git log -1 --format=%H
+          git rev-parse HEAD^
+          test "$(git rev-parse HEAD^)" = "3b35f9d7bb2fbefc1bcd24d100810f5e80c88b39"
+          git diff --exit-code 3b35f9d7bb2fbefc1bcd24d100810f5e80c88b39 -- services/api apps/web packages/contracts tests scripts Makefile pyproject.toml uv.lock PRODUCT_DESIGN.md .github/workflows/ci.yml ':(exclude)tests/integration/test_evidence_independent_review.py'
+          test "$(git rev-parse HEAD:tests/integration/test_learning_evidence.py)" = "d12079804e3d225cd012b0e6b4ed51a8c15f5f7d"
+          test "$(git rev-parse HEAD:tests/integration/test_evidence_independent_review.py)" = "18d1765681d8d57b086890e1632877413aa2191e"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - run: python -m pip install uv==0.11.21
+      - run: uv sync --frozen
+      - name: Install original fixed document sandbox dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap=0.11.1-1ubuntu0.3 apparmor=5.0.2-0ubuntu1~26.04.1 libapparmor1=5.0.2-0ubuntu1~26.04.1 libseccomp2=2.6.0-2ubuntu5
+          dpkg-query -W bubblewrap apparmor libapparmor1 libseccomp2
+          test -f /etc/apparmor.d/bwrap-userns-restrict
+          bwrap --version
+      - name: Run both complete evidence modules with individual outcomes
+        run: |
+          uv run --frozen pytest -vv -rA tests/integration/test_learning_evidence.py tests/integration/test_evidence_independent_review.py
