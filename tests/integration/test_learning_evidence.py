@@ -453,7 +453,7 @@ def test_recovery_stop_is_checked_on_already_handled_rows_and_keeps_cursor(tmp_p
 
 def test_recovery_commit_failure_does_not_advance_cursor_or_lose_item(tmp_path, monkeypatch):
     from contextlib import contextmanager
-    storage, old, _, _, _, _ = legacy_storage(tmp_path, monkeypatch)
+    storage, old, _, _, immutable, submissions = legacy_storage(tmp_path, monkeypatch)
     database, identity, _, _ = storage
     before = counts(database), raw_history(database)
     original_transaction = database.transaction
@@ -470,8 +470,28 @@ def test_recovery_commit_failure_does_not_advance_cursor_or_lose_item(tmp_path, 
     assert recovery._workspace_scan == (0, 0) and recovery._grade_scans == {}
     assert (counts(database), raw_history(database)) == before
     assert recovery.run_once()
+    # The real legacy producer has an automatic grade and a signed regrade.
+    # One bounded tick recovers only the first revision; history stays closed.
+    before_read = counts(database), raw_history(database)
     with database.connect() as connection:
-        assert [entry.grading_revision for entry in history(connection, identity.workspace_id, old.id)] == [1]
+        revisions = connection.execute(
+            'SELECT grading_revision FROM learning_grade_bindings WHERE workspace_id=? AND attempt_id=? ORDER BY grading_revision',
+            (identity.workspace_id, old.id)).fetchall()
+        assert [row[0] for row in revisions] == [1]
+        with pytest.raises(ApiError) as pending:
+            history(connection, identity.workspace_id, old.id)
+        assert pending.value.code == 'EVIDENCE_RECOVERY_PENDING'
+    assert (counts(database), raw_history(database)) == before_read
+    assert recovery.run_once()
+    with database.connect() as connection:
+        entries = history(connection, identity.workspace_id, old.id)
+        assert [entry.grading_revision for entry in entries] == [1, 2]
+        assert all(entry.qualification_basis == 'history_not_frozen' for entry in entries)
+        for table, original in immutable.items():
+            assert [tuple(row) for row in connection.execute(f'SELECT * FROM {table} ORDER BY rowid')] == original
+        assert [tuple(row) for row in connection.execute('SELECT id,submission_json,submission_sha256,submitted_responses_json FROM attempts ORDER BY id')] == submissions
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+    assert not recovery.run_once()
 
 
 def test_recovery_workspace_round_is_fair_and_new_workspace_is_revisited(tmp_path, monkeypatch):
@@ -502,16 +522,41 @@ def test_recovery_workspace_round_is_fair_and_new_workspace_is_revisited(tmp_pat
 
 
 def test_recovery_active_guard_defers_without_losing_grade_prefix(tmp_path, monkeypatch):
-    storage, old, _, _, _, _ = legacy_storage(tmp_path, monkeypatch)
+    storage, old, _, _, immutable, _ = legacy_storage(tmp_path, monkeypatch)
     database, identity, _, assessment = storage
     active = start(storage, mode='independent', key='bounded-active')
+    with database.connect() as connection:
+        submissions = [tuple(row) for row in connection.execute(
+            'SELECT id,submission_json,submission_sha256,submitted_responses_json FROM attempts ORDER BY id')]
     recovery = EvidenceRecovery(database)
+    before_guard = counts(database), raw_history(database)
     assert not recovery.run_once()
     assert recovery._grade_scans == {}
+    assert (counts(database), raw_history(database)) == before_guard
     assessment.abandon(identity, active.id, dm.AttemptSubmit(expected_revision=active.revision), 'bounded-abandon')
     assert recovery.run_once()
+    # The real legacy producer has an automatic grade and a signed regrade.
+    # One bounded tick recovers only the first revision; history stays closed.
+    before_read = counts(database), raw_history(database)
     with database.connect() as connection:
-        assert [entry.grading_revision for entry in history(connection, identity.workspace_id, old.id)] == [1]
+        revisions = connection.execute(
+            'SELECT grading_revision FROM learning_grade_bindings WHERE workspace_id=? AND attempt_id=? ORDER BY grading_revision',
+            (identity.workspace_id, old.id)).fetchall()
+        assert [row[0] for row in revisions] == [1]
+        with pytest.raises(ApiError) as pending:
+            history(connection, identity.workspace_id, old.id)
+        assert pending.value.code == 'EVIDENCE_RECOVERY_PENDING'
+    assert (counts(database), raw_history(database)) == before_read
+    assert recovery.run_once()
+    with database.connect() as connection:
+        entries = history(connection, identity.workspace_id, old.id)
+        assert [entry.grading_revision for entry in entries] == [1, 2]
+        assert all(entry.qualification_basis == 'history_not_frozen' for entry in entries)
+        for table, original in immutable.items():
+            assert [tuple(row) for row in connection.execute(f'SELECT * FROM {table} ORDER BY rowid')] == original
+        assert [tuple(row) for row in connection.execute('SELECT id,submission_json,submission_sha256,submitted_responses_json FROM attempts ORDER BY id')] == submissions
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+    assert not recovery.run_once()
 
 
 def test_recovery_scan_revisits_new_completion_and_revision_after_frozen_epoch(storage):
