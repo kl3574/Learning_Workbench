@@ -1,0 +1,14 @@
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -3318,9 +3318,9 @@
+         codex_home: AbsolutePathBuf,
+         config_layer_stack: ConfigLayerStack,
+     ) -> std::io::Result<(Self, FrozenConfigMaterializationContext)> {
+-        Self::materialize_config_with_layer_stack(
++        Box::pin(Self::materialize_config_with_layer_stack(
+             Some(fs), cfg, overrides, codex_home, config_layer_stack, None,
+-        )
++        ))
+         .await
+     }
+ 

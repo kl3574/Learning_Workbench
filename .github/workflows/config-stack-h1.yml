@@ -1,0 +1,130 @@
+name: Single-variable Config outer-future Box diagnostic with unchanged stage markers
+on:
+  push:
+    branches:
+      - fix/M6.3-config-stack-h1-outer-future
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  config-stack-h1:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/fix/M6.3-config-stack-h1-outer-future' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - name: Verify exact diagnostic and unchanged parent assets before setup
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          for name, size, digest in [
+              ('scripts/codex-turn/config-stack-h1-source.json', 12145, 'ddde352b848eb03d585403a9485e2f9fadf2fcb0dae170d0624d86b4fdf02cd1'),
+              ('scripts/codex-turn/replay_config_stack_h1.py', 44926, 'd0f12bb93c8713b746dc6630e8656874eff4346dbdbac7ac739e3ecbf11af2e5'),
+              ('scripts/codex-turn/config-stack-stages.patch', 4538, 'ef783cce1597e269a722769001e427c9a642d93330eb437b802b6e66a0de8f8a'),
+              ('scripts/codex-turn/config-stack-h1.patch', 493, '51d17dd275965aac5203ba8cee2d057454ce358cc1fddedfddbb6032bc6ad86d'),
+          ]:
+              path = Path(name)
+              if path.is_symlink() or not path.is_file() or path.stat().st_size != size or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                  raise ValueError('Exact diagnostic artifact required')
+          PY
+          python scripts/codex-turn/replay_config_stack_h1.py --mode verify \
+            --output-dir "$RUNNER_TEMP/config-stack-h1-verify"
+      - name: Acquire fixed official source archive
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+          manifest = json.loads(Path('scripts/codex-turn/config-stack-h1-source.json').read_text())
+          archive = Path(os.environ['RUNNER_TEMP']) / 'config-stack-h1-a956.tar.gz'
+          receipt = {'url': manifest['source']['archive_url'], 'started_at_utc': datetime.now(timezone.utc).isoformat(), 'status': 'RUNNING'}
+          try:
+              with urllib.request.urlopen(receipt['url'], timeout=60) as response, archive.open('xb') as output:
+                  receipt.update(http_status=response.status, final_url=response.geturl())
+                  budget = 20_000_000
+                  while chunk := response.read(min(1_048_576, budget + 1)):
+                      if len(chunk) > budget:
+                          raise ValueError('Fixed source download exceeds byte budget')
+                      output.write(chunk)
+                      budget -= len(chunk)
+              receipt.update(bytes=archive.stat().st_size, sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+              if receipt['sha256'] != '351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927':
+                  raise ValueError('Fixed source checksum mismatch')
+              receipt['status'] = 'PASS'
+          except Exception:
+              receipt['status'] = 'FAIL'
+              raise
+          finally:
+              receipt['ended_at_utc'] = datetime.now(timezone.utc).isoformat()
+              (archive.parent / 'config-stack-h1-source-acquisition.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY
+      - name: Prepare exact eleventh-application Config source and test-only metadata
+        run: >-
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode prepare
+          --archive "$RUNNER_TEMP/config-stack-h1-a956.tar.gz"
+          --output-dir "$RUNNER_TEMP/config-stack-h1-prepare"
+      - name: Install checksum-pinned official Rust1.95 in owned prefix
+        run: >-
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode provision
+          --output-dir "$RUNNER_TEMP/config-stack-h1-provision"
+      - name: Fetch original locked dependencies as explicit setup
+        run: |
+          mkdir "$RUNNER_TEMP/config-stack-h1-cargo"
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode fetch \
+            --prepared-dir "$RUNNER_TEMP/config-stack-h1-prepare" \
+            --toolchain-dir "$RUNNER_TEMP/config-stack-h1-provision/toolchain" \
+            --cargo-home "$RUNNER_TEMP/config-stack-h1-cargo" \
+            --output-dir "$RUNNER_TEMP/config-stack-h1-fetch"
+      - name: Apply one Config Box over fixed markers, collect and run both exact trials
+        run: >-
+          python scripts/codex-turn/replay_config_stack_h1.py --mode diagnose
+          --prepared-dir "$RUNNER_TEMP/config-stack-h1-prepare"
+          --fetch-dir "$RUNNER_TEMP/config-stack-h1-fetch"
+          --toolchain-dir "$RUNNER_TEMP/config-stack-h1-provision/toolchain"
+          --cargo-home "$RUNNER_TEMP/config-stack-h1-cargo"
+          --output-dir "$RUNNER_TEMP/config-stack-h1-test"
+      # Only declared command/graph receipts; no source trees, caches, libraries,
+      # databases, environment dump, original private failures or model material.
+      - name: Retain exact setup, marker traces, trial exits and instrumented source guards
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: config-stack-h1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/config-stack-h1-verify/report.json
+            ${{ runner.temp }}/config-stack-h1-source-acquisition.json
+            ${{ runner.temp }}/config-stack-h1-prepare/report.json
+            ${{ runner.temp }}/config-stack-h1-prepare/receipts/
+            ${{ runner.temp }}/config-stack-h1-prepare/source-before-files.json
+            ${{ runner.temp }}/config-stack-h1-prepare/test-before-files.json
+            ${{ runner.temp }}/config-stack-h1-prepare/static-auth-source-before-files.json
+            ${{ runner.temp }}/config-stack-h1-prepare/static-auth-test-before-files.json
+            ${{ runner.temp }}/config-stack-h1-provision/report.json
+            ${{ runner.temp }}/config-stack-h1-provision/receipts/
+            ${{ runner.temp }}/config-stack-h1-fetch/report.json
+            ${{ runner.temp }}/config-stack-h1-fetch/receipts/
+            ${{ runner.temp }}/config-stack-h1-fetch/source-after-files.json
+            ${{ runner.temp }}/config-stack-h1-fetch/test-after-files.json
+            ${{ runner.temp }}/config-stack-h1-test/report.json
+            ${{ runner.temp }}/config-stack-h1-test/receipts/
+            ${{ runner.temp }}/config-stack-h1-test/source-uninstrumented-files.json
+            ${{ runner.temp }}/config-stack-h1-test/test-uninstrumented-files.json
+            ${{ runner.temp }}/config-stack-h1-test/source-before-files.json
+            ${{ runner.temp }}/config-stack-h1-test/test-before-files.json
+            ${{ runner.temp }}/config-stack-h1-test/source-h1-after-files.json
+            ${{ runner.temp }}/config-stack-h1-test/test-h1-after-files.json
+            ${{ runner.temp }}/config-stack-h1-test/source-before-box-files.json
+            ${{ runner.temp }}/config-stack-h1-test/test-before-box-files.json
+            ${{ runner.temp }}/config-stack-h1-test/source-h1-before-files.json
+            ${{ runner.temp }}/config-stack-h1-test/test-h1-before-files.json
+          retention-days: 3
+          if-no-files-found: warn
+          include-hidden-files: false
