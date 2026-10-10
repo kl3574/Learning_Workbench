@@ -1,0 +1,125 @@
+name: Exact Config152 stack stages with declared test instrumentation
+on:
+  push:
+    branches:
+      - fix/M6.3-config-stack-stages
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  config-stack-stages:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/fix/M6.3-config-stack-stages' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - name: Verify exact diagnostic and unchanged parent assets before setup
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          for name, size, digest in [
+              ('scripts/codex-turn/config-stack-stages-source.json', 8357, '4d157b31c14d515ed619594ad255781307f98afaf37ac3d808f1e64f013730d8'),
+              ('scripts/codex-turn/replay_config_stack_stages.py', 34355, 'ac78963f04d61b9cdbba14bd06c268bcf60d48a5e8592bd9a4bf9d048ceef9a1'),
+              ('scripts/codex-turn/config-stack-stages.patch', 4538, 'ef783cce1597e269a722769001e427c9a642d93330eb437b802b6e66a0de8f8a'),
+          ]:
+              path = Path(name)
+              if path.is_symlink() or not path.is_file() or path.stat().st_size != size or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                  raise ValueError('Exact diagnostic artifact required')
+          PY
+          python scripts/codex-turn/replay_config_stack_stages.py --mode verify \
+            --output-dir "$RUNNER_TEMP/config-stack-stages-verify"
+      - name: Acquire fixed official source archive
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+          manifest = json.loads(Path('scripts/codex-turn/config-stack-stages-source.json').read_text())
+          archive = Path(os.environ['RUNNER_TEMP']) / 'config-stack-stages-a956.tar.gz'
+          receipt = {'url': manifest['source']['archive_url'], 'started_at_utc': datetime.now(timezone.utc).isoformat(), 'status': 'RUNNING'}
+          try:
+              with urllib.request.urlopen(receipt['url'], timeout=60) as response, archive.open('xb') as output:
+                  receipt.update(http_status=response.status, final_url=response.geturl())
+                  budget = 20_000_000
+                  while chunk := response.read(min(1_048_576, budget + 1)):
+                      if len(chunk) > budget:
+                          raise ValueError('Fixed source download exceeds byte budget')
+                      output.write(chunk)
+                      budget -= len(chunk)
+              receipt.update(bytes=archive.stat().st_size, sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+              if receipt['sha256'] != '351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927':
+                  raise ValueError('Fixed source checksum mismatch')
+              receipt['status'] = 'PASS'
+          except Exception:
+              receipt['status'] = 'FAIL'
+              raise
+          finally:
+              receipt['ended_at_utc'] = datetime.now(timezone.utc).isoformat()
+              (archive.parent / 'config-stack-stages-source-acquisition.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY
+      - name: Prepare exact eleventh-application Config source and test-only metadata
+        run: >-
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode prepare
+          --archive "$RUNNER_TEMP/config-stack-stages-a956.tar.gz"
+          --output-dir "$RUNNER_TEMP/config-stack-stages-prepare"
+      - name: Install checksum-pinned official Rust1.95 in owned prefix
+        run: >-
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode provision
+          --output-dir "$RUNNER_TEMP/config-stack-stages-provision"
+      - name: Fetch original locked dependencies as explicit setup
+        run: |
+          mkdir "$RUNNER_TEMP/config-stack-stages-cargo"
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode fetch \
+            --prepared-dir "$RUNNER_TEMP/config-stack-stages-prepare" \
+            --toolchain-dir "$RUNNER_TEMP/config-stack-stages-provision/toolchain" \
+            --cargo-home "$RUNNER_TEMP/config-stack-stages-cargo" \
+            --output-dir "$RUNNER_TEMP/config-stack-stages-fetch"
+      - name: Apply only stage markers, collect the exact case and run two explicit trials
+        run: >-
+          python scripts/codex-turn/replay_config_stack_stages.py --mode diagnose
+          --prepared-dir "$RUNNER_TEMP/config-stack-stages-prepare"
+          --fetch-dir "$RUNNER_TEMP/config-stack-stages-fetch"
+          --toolchain-dir "$RUNNER_TEMP/config-stack-stages-provision/toolchain"
+          --cargo-home "$RUNNER_TEMP/config-stack-stages-cargo"
+          --output-dir "$RUNNER_TEMP/config-stack-stages-test"
+      # Only declared command/graph receipts; no source trees, caches, libraries,
+      # databases, environment dump, original private failures or model material.
+      - name: Retain exact setup, marker traces, trial exits and instrumented source guards
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: config-stack-stages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/config-stack-stages-verify/report.json
+            ${{ runner.temp }}/config-stack-stages-source-acquisition.json
+            ${{ runner.temp }}/config-stack-stages-prepare/report.json
+            ${{ runner.temp }}/config-stack-stages-prepare/receipts/
+            ${{ runner.temp }}/config-stack-stages-prepare/source-before-files.json
+            ${{ runner.temp }}/config-stack-stages-prepare/test-before-files.json
+            ${{ runner.temp }}/config-stack-stages-prepare/static-auth-source-before-files.json
+            ${{ runner.temp }}/config-stack-stages-prepare/static-auth-test-before-files.json
+            ${{ runner.temp }}/config-stack-stages-provision/report.json
+            ${{ runner.temp }}/config-stack-stages-provision/receipts/
+            ${{ runner.temp }}/config-stack-stages-fetch/report.json
+            ${{ runner.temp }}/config-stack-stages-fetch/receipts/
+            ${{ runner.temp }}/config-stack-stages-fetch/source-after-files.json
+            ${{ runner.temp }}/config-stack-stages-fetch/test-after-files.json
+            ${{ runner.temp }}/config-stack-stages-test/report.json
+            ${{ runner.temp }}/config-stack-stages-test/receipts/
+            ${{ runner.temp }}/config-stack-stages-test/source-uninstrumented-files.json
+            ${{ runner.temp }}/config-stack-stages-test/test-uninstrumented-files.json
+            ${{ runner.temp }}/config-stack-stages-test/source-before-files.json
+            ${{ runner.temp }}/config-stack-stages-test/test-before-files.json
+            ${{ runner.temp }}/config-stack-stages-test/source-after-files.json
+            ${{ runner.temp }}/config-stack-stages-test/test-after-files.json
+          retention-days: 3
+          if-no-files-found: warn
+          include-hidden-files: false

@@ -1,0 +1,122 @@
+name: Exact Config152 single-case stack diagnosis
+on:
+  push:
+    branches:
+      - fix/M6.3-config-stack-diagnosis
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  config-stack-diagnosis:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/fix/M6.3-config-stack-diagnosis' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - name: Verify exact diagnostic and unchanged parent assets before setup
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          for name, size, digest in [
+              ('scripts/codex-turn/config-stack-diagnosis-source.json', 5269, '2397784a2f2d8501d2fb3542b6bb6c1132b7a578a3070333c9cf683c4394c197'),
+              ('scripts/codex-turn/replay_config_stack_diagnosis.py', 21314, '4a428a90e547c1c092ded4298bab3186c94b1898c700b7d15956cd164390784c'),
+          ]:
+              path = Path(name)
+              if path.is_symlink() or not path.is_file() or path.stat().st_size != size or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                  raise ValueError('Exact diagnostic artifact required')
+          PY
+          python scripts/codex-turn/replay_config_stack_diagnosis.py --mode verify \
+            --output-dir "$RUNNER_TEMP/config-stack-diagnosis-verify"
+      - name: Acquire fixed official source archive
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+          manifest = json.loads(Path('scripts/codex-turn/config-stack-diagnosis-source.json').read_text())
+          archive = Path(os.environ['RUNNER_TEMP']) / 'config-stack-diagnosis-a956.tar.gz'
+          receipt = {'url': manifest['source']['archive_url'], 'started_at_utc': datetime.now(timezone.utc).isoformat(), 'status': 'RUNNING'}
+          try:
+              with urllib.request.urlopen(receipt['url'], timeout=60) as response, archive.open('xb') as output:
+                  receipt.update(http_status=response.status, final_url=response.geturl())
+                  budget = 20_000_000
+                  while chunk := response.read(min(1_048_576, budget + 1)):
+                      if len(chunk) > budget:
+                          raise ValueError('Fixed source download exceeds byte budget')
+                      output.write(chunk)
+                      budget -= len(chunk)
+              receipt.update(bytes=archive.stat().st_size, sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+              if receipt['sha256'] != '351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927':
+                  raise ValueError('Fixed source checksum mismatch')
+              receipt['status'] = 'PASS'
+          except Exception:
+              receipt['status'] = 'FAIL'
+              raise
+          finally:
+              receipt['ended_at_utc'] = datetime.now(timezone.utc).isoformat()
+              (archive.parent / 'config-stack-diagnosis-source-acquisition.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY
+      - name: Prepare exact eleventh-application Config source and test-only metadata
+        run: >-
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode prepare
+          --archive "$RUNNER_TEMP/config-stack-diagnosis-a956.tar.gz"
+          --output-dir "$RUNNER_TEMP/config-stack-diagnosis-prepare"
+      - name: Install checksum-pinned official Rust1.95 in owned prefix
+        run: >-
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode provision
+          --output-dir "$RUNNER_TEMP/config-stack-diagnosis-provision"
+      - name: Fetch original locked dependencies as explicit setup
+        run: |
+          mkdir "$RUNNER_TEMP/config-stack-diagnosis-cargo"
+          python scripts/codex-turn/replay_frozen_config_materialization.py --mode fetch \
+            --prepared-dir "$RUNNER_TEMP/config-stack-diagnosis-prepare" \
+            --toolchain-dir "$RUNNER_TEMP/config-stack-diagnosis-provision/toolchain" \
+            --cargo-home "$RUNNER_TEMP/config-stack-diagnosis-cargo" \
+            --output-dir "$RUNNER_TEMP/config-stack-diagnosis-fetch"
+      - name: Collect exact failing case, run two explicit trials, then original36 only without single-case RED
+        run: >-
+          python scripts/codex-turn/replay_config_stack_diagnosis.py --mode diagnose
+          --prepared-dir "$RUNNER_TEMP/config-stack-diagnosis-prepare"
+          --fetch-dir "$RUNNER_TEMP/config-stack-diagnosis-fetch"
+          --toolchain-dir "$RUNNER_TEMP/config-stack-diagnosis-provision/toolchain"
+          --cargo-home "$RUNNER_TEMP/config-stack-diagnosis-cargo"
+          --output-dir "$RUNNER_TEMP/config-stack-diagnosis-test"
+      # Only declared command/graph receipts; no source trees, caches, libraries,
+      # databases, environment dump, original private failures or model material.
+      - name: Retain exact setup, trial exits, stdout/stderr and complete source guards
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: config-stack-diagnosis-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/config-stack-diagnosis-verify/report.json
+            ${{ runner.temp }}/config-stack-diagnosis-source-acquisition.json
+            ${{ runner.temp }}/config-stack-diagnosis-prepare/report.json
+            ${{ runner.temp }}/config-stack-diagnosis-prepare/receipts/
+            ${{ runner.temp }}/config-stack-diagnosis-prepare/source-before-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-prepare/test-before-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-prepare/static-auth-source-before-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-prepare/static-auth-test-before-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-provision/report.json
+            ${{ runner.temp }}/config-stack-diagnosis-provision/receipts/
+            ${{ runner.temp }}/config-stack-diagnosis-fetch/report.json
+            ${{ runner.temp }}/config-stack-diagnosis-fetch/receipts/
+            ${{ runner.temp }}/config-stack-diagnosis-fetch/source-after-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-fetch/test-after-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-test/report.json
+            ${{ runner.temp }}/config-stack-diagnosis-test/receipts/
+            ${{ runner.temp }}/config-stack-diagnosis-test/source-before-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-test/test-before-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-test/source-after-files.json
+            ${{ runner.temp }}/config-stack-diagnosis-test/test-after-files.json
+          retention-days: 3
+          if-no-files-found: warn
+          include-hidden-files: false
