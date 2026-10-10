@@ -1,0 +1,889 @@
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -3215,6 +3215,7 @@
+     sources: ConfigMaterializationSources,
+ }
+ 
++#[derive(Clone)]
+ struct ConfigMaterializationInputs {
+     cfg: ConfigToml,
+     overrides: ConfigOverrides,
+@@ -3225,7 +3226,7 @@
+ // The outer Option records whether a source operation actually ran. An inner
+ // Option preserves its native result, including an observed absence. A missing
+ // outer Option never falls back to live resolution during replay.
+-#[derive(Default)]
++#[derive(Clone, Default)]
+ struct ConfigMaterializationSources {
+     cwd: Option<AbsolutePathBuf>,
+     repo_root: Option<Option<AbsolutePathBuf>>,
+@@ -3335,6 +3336,24 @@
+             inputs.codex_home,
+             inputs.config_layer_stack,
+             Some(sources),
++        )
++        .await
++        .map(|(config, _)| config)
++    }
++
++    /// Reuses the SDK-owned capture while its exact context remains retained.
++    /// Replay data cannot establish prepared-owner or InputProof authority.
++    pub(crate) async fn replay_retained_config_materialization(
++        context: &FrozenConfigMaterializationContext,
++    ) -> std::io::Result<Self> {
++        let inputs = context.inputs.clone();
++        Self::materialize_config_with_layer_stack(
++            None,
++            inputs.cfg,
++            inputs.overrides,
++            inputs.codex_home,
++            inputs.config_layer_stack,
++            Some(context.sources.clone()),
+         )
+         .await
+         .map(|(config, _)| config)
+--- a/codex-rs/core/src/session/mod.rs
++++ b/codex-rs/core/src/session/mod.rs
+@@ -247,6 +247,7 @@
+ mod mcp_runtime;
+ pub(crate) mod multi_agents;
+ mod plugin_selection;
++pub(crate) mod pregrant_owner;
+ mod realtime_history;
+ mod retained_context;
+ mod retained_outbound_snapshot;
+--- /dev/null
++++ b/codex-rs/core/src/session/pregrant_owner.rs
+@@ -0,0 +1,366 @@
++//! Private SDK state ownership before any controlled send is available.
++//!
++//! This phase owns real Session/Step values without constructing runtime services.
++//! It is a mechanical lifetime boundary. SDK-owned config replay does not prove
++//! complete input materials, native deployment authority, consent, or a sender.
++
++use super::ForkPersistence;
++use super::GitEnrichmentPolicy;
++use super::input_queue::InputQueue;
++use super::mcp_refresh::McpRefresh;
++use super::retained_context::CodeModeMessageTasks;
++use super::session::Session;
++use super::step_context::StepContext;
++use crate::agent::AgentStatus;
++use crate::config::Config;
++use crate::config::FrozenConfigMaterializationContext;
++use crate::realtime_conversation::RealtimeConversationManager;
++use crate::state::SessionState;
++use crate::tools::ExecutedToolCalls;
++use crate::tools::ExecutedToolCallsCheckpoint;
++use crate::tools::ExecutedToolCallsCheckpointError;
++use codex_history::InitialHistory;
++use codex_history::ResponseItemEnvelope;
++use codex_protocol::ThreadId;
++use codex_protocol::models::BaseInstructions;
++use std::sync::Arc;
++use std::sync::OnceLock;
++use std::sync::atomic::AtomicU64;
++use tokio::sync::Mutex;
++use tokio::sync::Semaphore;
++use tokio::sync::watch;
++use tokio_util::sync::CancellationToken;
++
++/// Only SDK-native values enter this private packing boundary. Their ownership
++/// does not establish source authority. No ordinary Session/active-task is accepted.
++pub(crate) struct OwnedPregrantSessionInput {
++    pub(crate) thread_id: ThreadId,
++    pub(crate) installation_id: String,
++    pub(crate) state: SessionState,
++    pub(crate) step: StepContext,
++    pub(crate) initial_history: InitialHistory,
++    pub(crate) config_context: Arc<FrozenConfigMaterializationContext>,
++    pub(crate) windows_sandbox_proxy_settings_mode:
++        codex_sandboxing::WindowsSandboxProxySettingsMode,
++}
++
++/// No runtime handle, model client, MCP runtime, filesystem, or sender.
++pub(crate) struct PregrantServices {
++    config_context: Arc<FrozenConfigMaterializationContext>,
++    config: Arc<Config>,
++    executed_tool_calls: ExecutedToolCalls,
++    closed: CancellationToken,
++}
++
++#[derive(Debug, PartialEq, Eq)]
++pub(crate) enum PregrantOwnerError {
++    ConfigReplayUnavailable,
++    ConfigChanged,
++    ConfiguredModelUnavailable,
++    RuntimeStatePresent,
++    StepSettingsChanged,
++    SessionMismatch,
++    StepMismatch,
++    HistoryChanged,
++    HistoryMetadataUnavailable,
++    InstructionsChanged,
++    ExecutedState(ExecutedToolCallsCheckpointError),
++    Closed,
++    CompleteInputProofUnavailable,
++}
++
++/// The same outer Session and exactly one Step remain owned until cancellation
++/// or drop. This type has no conversion to an ordinary runtime Session.
++pub(crate) struct NativePregrantOwner {
++    session: Arc<Session<PregrantServices>>,
++    step: Arc<StepContext>,
++}
++
++/// Derives the configured material fields from the SDK's replayed Config and
++/// retains the actual Step's selected-input Arc. This is not model/history authority.
++fn bind_configured_session_materials(
++    mut state: SessionState,
++    config: &Arc<Config>,
++    step: &StepContext,
++) -> Result<SessionState, PregrantOwnerError> {
++    let model = config
++        .model
++        .as_ref()
++        .filter(|model| !model.is_empty())
++        .ok_or(PregrantOwnerError::ConfiguredModelUnavailable)?;
++    let configured = super::step_settings::StepSettings {
++        collaboration_mode: codex_protocol::config_types::CollaborationMode {
++            mode: codex_protocol::config_types::ModeKind::Default,
++            settings: codex_protocol::config_types::Settings {
++                model: model.clone(),
++                reasoning_effort: config.model_reasoning_effort.clone(),
++                developer_instructions: None,
++            },
++        },
++        reasoning_summary: config.model_reasoning_summary,
++        service_tier: config.service_tier.clone(),
++        personality: config.personality,
++        approval_policy: config.permissions.approval_policy.clone(),
++        approvals_reviewer: config.approvals_reviewer,
++    };
++    if step.settings.selected() != &configured {
++        return Err(PregrantOwnerError::StepSettingsChanged);
++    }
++    let mut configuration = state.session_configuration.clone();
++    configuration.step_settings = step.settings.selected_owner();
++    configuration.model_info_overrides = config.to_models_manager_config().into();
++    configuration.developer_instructions = config.developer_instructions.clone();
++    configuration.base_instructions = config
++        .base_instructions
++        .clone()
++        .unwrap_or_else(|| codex_prompts::render_model_instructions(&step.settings.model_info));
++    configuration.permission_profile_state =
++        config.permissions.permission_profile_state().clone();
++    configuration.allow_login_shell = config.permissions.allow_login_shell;
++    configuration.shell_environment_policy = config.permissions.shell_environment_policy.clone();
++    configuration.windows_sandbox_type = config.permissions.windows_sandbox_type;
++    configuration.use_legacy_landlock = config.features.use_legacy_landlock();
++    configuration.legacy_fallback_cwd = config.cwd.clone();
++    configuration.runtime_workspace_roots = config.workspace_roots.clone();
++    configuration.codex_home = config.codex_home.clone();
++    configuration.original_config_do_not_use = Arc::clone(config);
++    // The actual writer revokes the previous instruction generation before the
++    // new private Session is shared. It never refreshes or constructs another Step.
++    state.replace_session_configuration(configuration);
++    Ok(state)
++}
++
++impl NativePregrantOwner {
++    pub(super) async fn prepare(
++        input: OwnedPregrantSessionInput,
++    ) -> Result<Self, PregrantOwnerError> {
++        let OwnedPregrantSessionInput {
++            thread_id,
++            installation_id,
++            state,
++            step,
++            initial_history,
++            config_context,
++            windows_sandbox_proxy_settings_mode,
++        } = input;
++        let replayed = Config::replay_retained_config_materialization(&config_context)
++            .await
++            .map_err(|_| PregrantOwnerError::ConfigReplayUnavailable)?;
++        let config = Arc::clone(&state.session_configuration.original_config_do_not_use);
++        if config.as_ref() != &replayed || !Arc::ptr_eq(&config, &step.turn.config) {
++            return Err(PregrantOwnerError::ConfigChanged);
++        }
++        if state.shutting_down
++            || state.startup_prewarm.is_some()
++            || state.shell_snapshot_prewarm.is_some()
++            || state.last_started_turn_id.is_some()
++        {
++            return Err(PregrantOwnerError::RuntimeStatePresent);
++        }
++        if !Arc::ptr_eq(&step.settings, &step.turn.next_step_settings.load_full()) {
++            return Err(PregrantOwnerError::StepSettingsChanged);
++        }
++        let state = bind_configured_session_materials(state, &config, &step)?;
++        let executed_tool_calls = ExecutedToolCalls::new(config.features.get(), &initial_history);
++        let services = PregrantServices {
++            config_context,
++            config: Arc::clone(&config),
++            executed_tool_calls,
++            closed: CancellationToken::new(),
++        };
++        let (tx_event, _events) = async_channel::unbounded();
++        let (agent_status, _status) = watch::channel(AgentStatus::PendingInit);
++        let (mcp_prewarm_tx, _prewarm) = async_channel::bounded(1);
++        let (_hooks, async_hook_results) = async_channel::unbounded();
++        let multi_agent_version = OnceLock::new();
++        let session = Arc::new(Session {
++            thread_id,
++            installation_id,
++            tx_event,
++            agent_status,
++            state: Mutex::new(state),
++            thread_settings_persistence: Semaphore::new(1),
++            code_mode_message_tasks: CodeModeMessageTasks::default(),
++            managed_network_proxy_refresh_lock: Semaphore::new(1),
++            features: config.features.clone(),
++            isolation: codex_extension_api::SessionIsolation::Isolated,
++            tool_policy: Arc::new(codex_extension_api::ToolPolicy {
++                allowed_tools: Some(Vec::new()),
++                require_managed_sandbox: true,
++                require_unified_exec: true,
++                expose_additional_permissions: false,
++            }),
++            windows_sandbox_proxy_settings_mode,
++            multi_agent_version,
++            mcp_refresh: McpRefresh::new(),
++            mcp_tool_approval_metadata: Default::default(),
++            mcp_elicitation_reviewer_handle: OnceLock::new(),
++            mcp_elicitation_lifecycle_handle: OnceLock::new(),
++            mcp_prewarm_tx,
++            mcp_prewarm_shutdown: CancellationToken::new(),
++            mcp_prewarm_task: std::sync::Mutex::new(None),
++            conversation: Arc::new(RealtimeConversationManager::new()),
++            realtime_history: None,
++            active_turn: Mutex::new(None),
++            async_hook_results,
++            input_queue: InputQueue::new(),
++            services,
++            git_enrichment_policy: GitEnrichmentPolicy::Skip,
++            fork_persistence: ForkPersistence::Copied,
++            forked_from_ordinal_exclusive: None,
++            next_internal_sub_id: AtomicU64::new(0),
++        });
++        // This is the only Step allocation. There is no second-Step start path.
++        let step = Arc::new(step);
++        let owner = Self { session, step };
++        owner.retain().await?;
++        Ok(owner)
++    }
++
++    pub(crate) async fn retain(&self) -> Result<NativePregrantSnapshot, PregrantOwnerError> {
++        self.ensure_open()?;
++        let executed_state = self
++            .session
++            .services
++            .executed_tool_calls
++            .state_checkpoint()
++            .map_err(PregrantOwnerError::ExecutedState)?;
++        let state = self.session.state.lock().await;
++        let snapshot = NativePregrantSnapshot {
++            session: Arc::clone(&self.session),
++            step: Arc::clone(&self.step),
++            config_context: Arc::clone(&self.session.services.config_context),
++            config: Arc::clone(&state.session_configuration.original_config_do_not_use),
++            history: state.clone_history().into_shared_annotated_items(),
++            history_version: state.history.history_version(),
++            reference_context: serde_json::to_value(state.history.reference_context_item())
++                .map_err(|_| PregrantOwnerError::HistoryMetadataUnavailable)?,
++            instructions: BaseInstructions {
++                text: state.session_configuration.base_instructions.clone(),
++                provenance: state.base_instructions_provenance(),
++            },
++            history_reset: state.history_reset.child_token(),
++            instruction_reset: state.prompt_instruction_reset(),
++            executed_state,
++        };
++        drop(state);
++        snapshot.verify_current(self).await?;
++        Ok(snapshot)
++    }
++
++    pub(crate) fn cancel(&self) {
++        self.session.services.closed.cancel();
++    }
++
++    fn ensure_open(&self) -> Result<(), PregrantOwnerError> {
++        if self.session.services.closed.is_cancelled() {
++            Err(PregrantOwnerError::Closed)
++        } else {
++            Ok(())
++        }
++    }
++
++    /// Consumes this exact owner and snapshot. Complete proof and sender bindings
++    /// are unavailable, so there is no grant, request construction, or send.
++    pub(crate) async fn checked_start(
++        self,
++        snapshot: NativePregrantSnapshot,
++    ) -> Result<(), PregrantOwnerError> {
++        snapshot.verify_current(&self).await?;
++        Err(PregrantOwnerError::CompleteInputProofUnavailable)
++    }
++}
++
++impl Drop for NativePregrantOwner {
++    fn drop(&mut self) {
++        self.cancel();
++    }
++}
++
++/// Read-only mechanical state. Keeping this alive cannot keep a dropped owner
++/// usable: its cancellation token belongs to the owner lifetime.
++pub(crate) struct NativePregrantSnapshot {
++    session: Arc<Session<PregrantServices>>,
++    step: Arc<StepContext>,
++    config_context: Arc<FrozenConfigMaterializationContext>,
++    config: Arc<Config>,
++    history: Arc<Vec<ResponseItemEnvelope>>,
++    history_version: u64,
++    reference_context: serde_json::Value,
++    instructions: BaseInstructions,
++    history_reset: CancellationToken,
++    instruction_reset: CancellationToken,
++    executed_state: ExecutedToolCallsCheckpoint,
++}
++
++impl NativePregrantSnapshot {
++    pub(crate) async fn verify_current(
++        &self,
++        owner: &NativePregrantOwner,
++    ) -> Result<(), PregrantOwnerError> {
++        owner.ensure_open()?;
++        if !Arc::ptr_eq(&self.session, &owner.session) {
++            return Err(PregrantOwnerError::SessionMismatch);
++        }
++        if !Arc::ptr_eq(&self.step, &owner.step) {
++            return Err(PregrantOwnerError::StepMismatch);
++        }
++        if !Arc::ptr_eq(&self.config_context, &owner.session.services.config_context)
++            || !Arc::ptr_eq(&self.config, &owner.session.services.config)
++            || !Arc::ptr_eq(&self.config, &self.step.turn.config)
++        {
++            return Err(PregrantOwnerError::ConfigChanged);
++        }
++        if !Arc::ptr_eq(&self.step.settings, &self.step.turn.next_step_settings.load_full()) {
++            return Err(PregrantOwnerError::StepSettingsChanged);
++        }
++        let state = owner.session.state.lock().await;
++        if state.shutting_down {
++            return Err(PregrantOwnerError::Closed);
++        }
++        if self.history_reset.is_cancelled()
++            || self.history_version != state.history.history_version()
++            || !Arc::ptr_eq(
++                &self.history,
++                &state.clone_history().into_shared_annotated_items(),
++            )
++        {
++            return Err(PregrantOwnerError::HistoryChanged);
++        }
++        let reference_context = serde_json::to_value(state.history.reference_context_item())
++            .map_err(|_| PregrantOwnerError::HistoryMetadataUnavailable)?;
++        if self.reference_context != reference_context {
++            return Err(PregrantOwnerError::HistoryChanged);
++        }
++        if self.instruction_reset.is_cancelled()
++            || self.instructions
++                != (BaseInstructions {
++                    text: state.session_configuration.base_instructions.clone(),
++                    provenance: state.base_instructions_provenance(),
++                })
++        {
++            return Err(PregrantOwnerError::InstructionsChanged);
++        }
++        if !Arc::ptr_eq(
++            &self.config,
++            &state.session_configuration.original_config_do_not_use,
++        ) {
++            return Err(PregrantOwnerError::ConfigChanged);
++        }
++        drop(state);
++        owner.ensure_open()?;
++        if !Arc::ptr_eq(&self.step.settings, &self.step.turn.next_step_settings.load_full()) {
++            return Err(PregrantOwnerError::StepSettingsChanged);
++        }
++        owner
++            .session
++            .services
++            .executed_tool_calls
++            .verify_state_checkpoint(&self.executed_state)
++            .map_err(PregrantOwnerError::ExecutedState)
++    }
++}
++
++#[cfg(test)]
++#[path = "pregrant_owner_tests.rs"]
++mod tests;
+--- /dev/null
++++ b/codex-rs/core/src/session/pregrant_owner_tests.rs
+@@ -0,0 +1,409 @@
++//! Mechanical SDK ownership tests. The ordinary test fixture is setup only;
++//! it is not a production pregrant producer or complete InputProof authority.
++
++use super::*;
++use crate::config::ConfigOverrides;
++use crate::session::retained_sampling_preparation::prepare_owned_pregrant;
++use crate::session::tests::make_session_and_context;
++use crate::session::step_settings::ResolvedStepSettings;
++use crate::session::step_settings::StepSettings;
++use codex_features::Feature;
++use codex_protocol::config_types::CollaborationMode;
++use codex_protocol::config_types::ModeKind;
++use codex_protocol::config_types::Settings;
++use codex_config::ConfigLayerStack;
++use codex_config::config_toml::ConfigToml;
++use codex_exec_server::LOCAL_FS;
++use codex_utils_absolute_path::AbsolutePathBuf;
++
++struct MechanicalFixture {
++    input: OwnedPregrantSessionInput,
++    _root: tempfile::TempDir,
++}
++
++async fn mechanical_fixture() -> MechanicalFixture {
++    mechanical_fixture_with_configured_model(true).await
++}
++
++async fn mechanical_fixture_with_configured_model(model_present: bool) -> MechanicalFixture {
++    // The ordinary test fixture supplies native values only. Its Session never
++    // enters the factory, and this helper does not establish a common producer.
++    let (ordinary, mut turn) = make_session_and_context().await;
++    let native_model = turn.model_info().slug.clone();
++    let root = tempfile::tempdir().expect("mechanical fixture root");
++    let cwd = root.path().join("workspace");
++    let home = root.path().join("codex-home");
++    std::fs::create_dir_all(&cwd).expect("mechanical workspace");
++    std::fs::create_dir_all(&home).expect("mechanical codex home");
++    let (config, context) = Config::capture_config_with_layer_stack(
++        LOCAL_FS.as_ref(),
++        ConfigToml {
++            model: model_present.then(|| native_model.clone()),
++            ..Default::default()
++        },
++        ConfigOverrides {
++            cwd: Some(cwd),
++            base_instructions: Some("Captured mechanical base instructions".to_string()),
++            developer_instructions: Some("Captured mechanical developer instructions".to_string()),
++            ..Default::default()
++        },
++        AbsolutePathBuf::try_from(home).expect("absolute mechanical codex home"),
++        ConfigLayerStack::default(),
++    )
++    .await
++    .expect("actual SDK config capture");
++    let config = Arc::new(config);
++    let mut configuration = ordinary.state.lock().await.session_configuration.clone();
++    configuration.original_config_do_not_use = Arc::clone(&config);
++    configuration.legacy_fallback_cwd = config.cwd.clone();
++    configuration.runtime_workspace_roots = config.workspace_roots.clone();
++    configuration.codex_home = config.codex_home.clone();
++    let selected = Arc::new(StepSettings {
++        collaboration_mode: CollaborationMode {
++            mode: ModeKind::Default,
++            settings: Settings {
++                model: config.model.clone().unwrap_or(native_model),
++                reasoning_effort: config.model_reasoning_effort.clone(),
++                developer_instructions: None,
++            },
++        },
++        reasoning_summary: config.model_reasoning_summary,
++        service_tier: config.service_tier.clone(),
++        personality: config.personality,
++        approval_policy: config.permissions.approval_policy.clone(),
++        approvals_reviewer: config.approvals_reviewer,
++    });
++    let resolved = Arc::new(ResolvedStepSettings::new(
++        selected,
++        Arc::clone(&turn.initial_settings.model_info),
++        config.features.enabled(Feature::FastMode),
++    ));
++    turn.config = Arc::clone(&config);
++    turn.cwd = config.cwd.clone();
++    turn.initial_settings = resolved;
++    let turn = Arc::new(turn);
++    let step = StepContext::for_test(Arc::clone(&turn));
++    // for_test allocates a new settings Arc. Align the actual turn snapshot
++    // before consuming the test Arc and letting the owner allocate its one Step.
++    turn.next_step_settings.store(Arc::clone(&step.settings));
++    let step = Arc::try_unwrap(step)
++        .unwrap_or_else(|_| panic!("mechanical Step must have one test owner"));
++    let input = OwnedPregrantSessionInput {
++        thread_id: ordinary.thread_id,
++        installation_id: "mechanical-pregrant-test".to_string(),
++        state: SessionState::new(configuration),
++        step,
++        initial_history: InitialHistory::New,
++        config_context: Arc::new(context),
++        windows_sandbox_proxy_settings_mode:
++            codex_sandboxing::WindowsSandboxProxySettingsMode::Reconcile,
++    };
++    drop(ordinary);
++    MechanicalFixture { input, _root: root }
++}
++
++async fn prepared_mechanical_owner() -> (NativePregrantOwner, tempfile::TempDir) {
++    let MechanicalFixture { input, _root } = mechanical_fixture().await;
++    let owner = prepare_owned_pregrant(input)
++        .await
++        .unwrap_or_else(|error| panic!("mechanical owner preparation failed: {error:?}"));
++    (owner, _root)
++}
++
++#[tokio::test]
++async fn pregrant_owner_retains_the_actual_session_step_and_config_arcs() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let first = owner.retain().await.expect("first native snapshot");
++    let second = owner.retain().await.expect("second native snapshot");
++    assert!(Arc::ptr_eq(&first.session, &owner.session));
++    assert!(Arc::ptr_eq(&first.step, &owner.step));
++    assert!(Arc::ptr_eq(&first.session, &second.session));
++    assert!(Arc::ptr_eq(&first.step, &second.step));
++    assert!(Arc::ptr_eq(&first.config_context, &second.config_context));
++    assert!(Arc::ptr_eq(&first.config, &owner.session.services.config));
++    assert!(owner.session.active_turn.lock().await.is_none());
++    assert!(owner.session.mcp_prewarm_task.lock().expect("prewarm lock").is_none());
++    let state = owner.session.state.lock().await;
++    assert!(state.startup_prewarm.is_none());
++    assert!(state.shell_snapshot_prewarm.is_none());
++    assert!(state.last_started_turn_id.is_none());
++    assert!(Arc::ptr_eq(
++        &state.session_configuration.step_settings,
++        &owner.step.settings.selected_owner(),
++    ));
++    drop(state);
++    assert_eq!(first.verify_current(&owner).await, Ok(()));
++}
++
++#[tokio::test]
++async fn pregrant_owner_equal_thread_ids_do_not_replace_the_actual_session() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let snapshot = owner.retain().await.expect("native snapshot");
++    let MechanicalFixture { mut input, _root: other_root } = mechanical_fixture().await;
++    input.thread_id = owner.session.thread_id;
++    let other = prepare_owned_pregrant(input).await.expect("other native owner");
++    assert_eq!(owner.session.thread_id, other.session.thread_id);
++    assert!(!Arc::ptr_eq(&owner.session, &other.session));
++    assert_eq!(snapshot.verify_current(&other).await, Err(PregrantOwnerError::SessionMismatch));
++    assert_eq!(snapshot.verify_current(&owner).await, Ok(()));
++    drop(other_root);
++}
++
++#[tokio::test]
++async fn pregrant_owner_equal_turn_ids_do_not_replace_the_actual_step() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let (other, _other_root) = prepared_mechanical_owner().await;
++    let mut snapshot = owner.retain().await.expect("native snapshot");
++    assert_eq!(owner.step.turn.sub_id, other.step.turn.sub_id);
++    assert!(!Arc::ptr_eq(&owner.step, &other.step));
++    snapshot.step = Arc::clone(&other.step);
++    assert_eq!(snapshot.verify_current(&owner).await, Err(PregrantOwnerError::StepMismatch));
++}
++
++#[tokio::test]
++async fn pregrant_owner_rejects_a_foreign_config_capture_object() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let (other, _other_root) = prepared_mechanical_owner().await;
++    let mut snapshot = owner.retain().await.expect("native snapshot");
++    snapshot.config_context = Arc::clone(&other.session.services.config_context);
++    assert_eq!(snapshot.verify_current(&owner).await, Err(PregrantOwnerError::ConfigChanged));
++}
++
++#[tokio::test]
++async fn pregrant_owner_equal_config_value_cannot_replace_its_owned_arc() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let snapshot = owner.retain().await.expect("native snapshot");
++    let replacement = Arc::new(owner.session.services.config.as_ref().clone());
++    assert!(replacement.as_ref() == owner.session.services.config.as_ref());
++    assert!(!Arc::ptr_eq(&replacement, &owner.session.services.config));
++    owner.session.state.lock().await.session_configuration.original_config_do_not_use = replacement;
++    assert_eq!(snapshot.verify_current(&owner).await, Err(PregrantOwnerError::ConfigChanged));
++    assert!(matches!(owner.retain().await, Err(PregrantOwnerError::ConfigChanged)));
++}
++
++#[tokio::test]
++async fn pregrant_owner_config_changed_since_capture_is_rejected_before_ownership() {
++    let MechanicalFixture { mut input, _root } = mechanical_fixture().await;
++    let mut changed = input.state.session_configuration.original_config_do_not_use.as_ref().clone();
++    changed.model = Some("mechanically-different-model".to_string());
++    input.state.session_configuration.original_config_do_not_use = Arc::new(changed);
++    assert!(matches!(prepare_owned_pregrant(input).await, Err(PregrantOwnerError::ConfigChanged)));
++}
++
++#[tokio::test]
++async fn pregrant_owner_shutting_down_state_cannot_enter_pregrant() {
++    let MechanicalFixture { mut input, _root } = mechanical_fixture().await;
++    input.state.shutting_down = true;
++    assert!(
++        matches!(prepare_owned_pregrant(input).await, Err(PregrantOwnerError::RuntimeStatePresent)),
++    );
++}
++
++#[tokio::test]
++async fn pregrant_owner_previous_started_turn_cannot_enter_pregrant() {
++    let MechanicalFixture { mut input, _root } = mechanical_fixture().await;
++    input.state.last_started_turn_id = Some("already-started".to_string());
++    assert!(
++        matches!(prepare_owned_pregrant(input).await, Err(PregrantOwnerError::RuntimeStatePresent)),
++    );
++}
++
++#[tokio::test]
++async fn pregrant_owner_step_must_be_the_turns_actual_settings_snapshot() {
++    let MechanicalFixture { input, _root } = mechanical_fixture().await;
++    let equal_value = Arc::new(input.step.settings.as_ref().clone());
++    assert!(!Arc::ptr_eq(&equal_value, &input.step.settings));
++    input.step.turn.next_step_settings.store(equal_value);
++    assert!(
++        matches!(prepare_owned_pregrant(input).await, Err(PregrantOwnerError::StepSettingsChanged)),
++    );
++}
++
++#[tokio::test]
++async fn pregrant_owner_later_equal_settings_replacement_invalidates_the_snapshot() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let snapshot = owner.retain().await.expect("native snapshot");
++    owner.step.turn.next_step_settings.store(Arc::new(owner.step.settings.as_ref().clone()));
++    assert_eq!(snapshot.verify_current(&owner).await, Err(PregrantOwnerError::StepSettingsChanged));
++    assert!(matches!(owner.retain().await, Err(PregrantOwnerError::StepSettingsChanged)));
++}
++
++#[tokio::test]
++async fn pregrant_owner_equal_history_reset_invalidates_the_old_generation() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let old = owner.retain().await.expect("old native snapshot");
++    assert!(old.history.is_empty());
++    owner.session.state.lock().await.replace_history(Vec::new(), None);
++    assert!(old.history_reset.is_cancelled());
++    assert_eq!(old.verify_current(&owner).await, Err(PregrantOwnerError::HistoryChanged));
++    let current = owner.retain().await.expect("current history generation");
++    assert!(current.history.is_empty());
++    assert_eq!(current.verify_current(&owner).await, Ok(()));
++    assert_eq!(old.verify_current(&owner).await, Err(PregrantOwnerError::HistoryChanged));
++}
++
++#[tokio::test]
++async fn pregrant_owner_reference_metadata_change_invalidates_unchanged_items() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let old = owner.retain().await.expect("old native snapshot");
++    let item = owner.step.turn.to_turn_context_item();
++    let mut state = owner.session.state.lock().await;
++    state.history.set_reference_context_item(Some(item));
++    assert_eq!(state.history.history_version(), old.history_version);
++    assert!(Arc::ptr_eq(&old.history, &state.clone_history().into_shared_annotated_items()));
++    assert!(!old.history_reset.is_cancelled());
++    drop(state);
++    assert_eq!(old.verify_current(&owner).await, Err(PregrantOwnerError::HistoryChanged));
++    assert_eq!(
++        owner.retain().await.expect("current metadata").verify_current(&owner).await,
++        Ok(()),
++    );
++}
++
++#[tokio::test]
++async fn pregrant_owner_equal_instruction_reset_invalidates_the_old_generation() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let old = owner.retain().await.expect("old native snapshot");
++    let mut state = owner.session.state.lock().await;
++    let unchanged = state.session_configuration.clone();
++    state.replace_session_configuration(unchanged);
++    drop(state);
++    assert!(old.instruction_reset.is_cancelled());
++    assert_eq!(old.verify_current(&owner).await, Err(PregrantOwnerError::InstructionsChanged));
++    assert_eq!(
++        owner.retain().await.expect("current instructions").verify_current(&owner).await,
++        Ok(()),
++    );
++}
++
++#[tokio::test]
++async fn pregrant_owner_instruction_text_change_is_not_hidden_by_an_unchanged_token() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let old = owner.retain().await.expect("old native snapshot");
++    owner.session.state.lock().await.session_configuration.base_instructions.push_str("\nchanged native text");
++    assert!(!old.instruction_reset.is_cancelled());
++    assert_eq!(old.verify_current(&owner).await, Err(PregrantOwnerError::InstructionsChanged));
++}
++
++#[tokio::test]
++async fn pregrant_owner_noop_executed_recorder_refresh_revokes_the_old_checkpoint() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let old = owner.retain().await.expect("old native snapshot");
++    owner.session.services.executed_tool_calls.refresh(owner.session.features.get());
++    assert_eq!(
++        old.verify_current(&owner).await,
++        Err(PregrantOwnerError::ExecutedState(ExecutedToolCallsCheckpointError::Changed)),
++    );
++    assert_eq!(
++        owner.retain().await.expect("current recorder").verify_current(&owner).await,
++        Ok(()),
++    );
++}
++
++#[tokio::test]
++async fn pregrant_owner_a_foreign_executed_checkpoint_cannot_replace_native_state() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let (other, _other_root) = prepared_mechanical_owner().await;
++    let mut snapshot = owner.retain().await.expect("native snapshot");
++    snapshot.executed_state = other.session.services.executed_tool_calls.state_checkpoint().expect("other recorder checkpoint");
++    assert_eq!(
++        snapshot.verify_current(&owner).await,
++        Err(PregrantOwnerError::ExecutedState(ExecutedToolCallsCheckpointError::OwnerMismatch)),
++    );
++}
++
++#[tokio::test]
++async fn pregrant_owner_cancel_rejects_existing_snapshots_and_new_retention() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let snapshot = owner.retain().await.expect("native snapshot");
++    owner.cancel();
++    owner.cancel();
++    assert_eq!(snapshot.verify_current(&owner).await, Err(PregrantOwnerError::Closed));
++    assert!(matches!(owner.retain().await, Err(PregrantOwnerError::Closed)));
++    assert_eq!(owner.checked_start(snapshot).await, Err(PregrantOwnerError::Closed));
++}
++
++#[tokio::test]
++async fn pregrant_owner_drop_closes_state_even_when_a_snapshot_keeps_arcs_alive() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let snapshot = owner.retain().await.expect("native snapshot");
++    assert!(!snapshot.session.services.closed.is_cancelled());
++    drop(owner);
++    assert!(snapshot.session.services.closed.is_cancelled());
++    assert_eq!(snapshot.step.turn.sub_id, "turn_id");
++}
++
++#[tokio::test]
++async fn pregrant_owner_shutdown_after_retention_is_closed() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let snapshot = owner.retain().await.expect("native snapshot");
++    owner.session.state.lock().await.shutting_down = true;
++    assert_eq!(snapshot.verify_current(&owner).await, Err(PregrantOwnerError::Closed));
++    assert!(matches!(owner.retain().await, Err(PregrantOwnerError::Closed)));
++}
++
++#[tokio::test]
++async fn pregrant_owner_checked_start_cannot_admit_complete_input_proof() {
++    let (owner, _root) = prepared_mechanical_owner().await;
++    let snapshot = owner.retain().await.expect("native snapshot");
++    let closed = owner.session.services.closed.clone();
++    assert_eq!(
++        owner.checked_start(snapshot).await,
++        Err(PregrantOwnerError::CompleteInputProofUnavailable),
++    );
++    assert!(closed.is_cancelled());
++}
++
++#[tokio::test]
++async fn pregrant_owner_missing_configured_model_cannot_borrow_the_steps_model() {
++    let MechanicalFixture { input, _root } = mechanical_fixture_with_configured_model(false).await;
++    assert!(input.state.session_configuration.original_config_do_not_use.model.is_none());
++    assert!(!input.step.settings.model_info.slug.is_empty());
++    assert!(matches!(
++        prepare_owned_pregrant(input).await,
++        Err(PregrantOwnerError::ConfiguredModelUnavailable)
++    ));
++}
++
++#[tokio::test]
++async fn pregrant_owner_sdk_capture_replaces_caller_instruction_materials() {
++    let MechanicalFixture { mut input, _root } = mechanical_fixture().await;
++    input.state.session_configuration.base_instructions = "Caller base override".to_string();
++    input.state.session_configuration.developer_instructions = Some("Caller developer override".to_string());
++    let old_generation = input.state.prompt_instruction_reset();
++    let owner = prepare_owned_pregrant(input).await.expect("configured native owner");
++    assert!(old_generation.is_cancelled());
++    let state = owner.session.state.lock().await;
++    assert_eq!(
++        state.session_configuration.base_instructions,
++        "Captured mechanical base instructions"
++    );
++    assert_eq!(
++        state.session_configuration.developer_instructions.as_deref(),
++        Some("Captured mechanical developer instructions")
++    );
++    drop(state);
++    let snapshot = owner.retain().await.expect("native snapshot");
++    assert_eq!(
++        owner.checked_start(snapshot).await,
++        Err(PregrantOwnerError::CompleteInputProofUnavailable)
++    );
++}
++
++#[tokio::test]
++async fn pregrant_owner_equal_turn_config_value_cannot_replace_the_native_config_arc() {
++    let MechanicalFixture { mut input, _root } = mechanical_fixture().await;
++    let replacement = Arc::new(input.step.turn.config.as_ref().clone());
++    assert!(replacement.as_ref() == input.step.turn.config.as_ref());
++    assert!(!Arc::ptr_eq(
++        &replacement,
++        &input.state.session_configuration.original_config_do_not_use,
++    ));
++    assert_eq!(Arc::strong_count(&input.step.turn), 1);
++    let turn = Arc::get_mut(&mut input.step.turn).expect("input owns the actual native Turn");
++    turn.config = replacement;
++    assert!(matches!(
++        prepare_owned_pregrant(input).await,
++        Err(PregrantOwnerError::ConfigChanged)
++    ));
++}
+--- a/codex-rs/core/src/session/retained_sampling_preparation.rs
++++ b/codex-rs/core/src/session/retained_sampling_preparation.rs
+@@ -322,6 +322,17 @@
+     }
+ }
+ 
++/// Packs SDK-native values into the restricted phase without consulting an
++/// ordinary active task. This entry provides ownership only, never InputProof.
++pub(crate) async fn prepare_owned_pregrant(
++    input: super::pregrant_owner::OwnedPregrantSessionInput,
++) -> Result<
++    super::pregrant_owner::NativePregrantOwner,
++    super::pregrant_owner::PregrantOwnerError,
++> {
++    super::pregrant_owner::NativePregrantOwner::prepare(input).await
++}
++
+ /// An active ordinary task is not a trusted pre-consent prepared-native owner.
+ /// Refuse before history assembly/Guardian, auth, encode, grant/start or send.
+ #[allow(dead_code)]
+--- a/codex-rs/core/src/session/session.rs
++++ b/codex-rs/core/src/session/session.rs
+@@ -57,7 +57,7 @@
+ /// Context for an initialized model agent
+ ///
+ /// A session has at most 1 running task at a time, and can be interrupted by user input.
+-pub(crate) struct Session {
++pub(crate) struct Session<Services = SessionServices> {
+     pub(crate) thread_id: ThreadId,
+     pub(crate) installation_id: String,
+     pub(super) tx_event: Sender<Event>,
+@@ -92,7 +92,7 @@
+     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,
+     pub(crate) async_hook_results: async_channel::Receiver<HookCompletedEvent>,
+     pub(crate) input_queue: InputQueue,
+-    pub(crate) services: SessionServices,
++    pub(crate) services: Services,
+     pub(super) git_enrichment_policy: GitEnrichmentPolicy,
+     pub(super) fork_persistence: ForkPersistence,
+     pub(super) forked_from_ordinal_exclusive: Option<u64>,
+--- a/codex-rs/core/src/session/step_settings.rs
++++ b/codex-rs/core/src/session/step_settings.rs
+@@ -175,6 +175,11 @@
+     }
+ 
+     /// Retained inputs for constructing a snapshot against different model metadata.
++    /// Keeps the same configured input object when a restricted Session is packed.
++    pub(super) fn selected_owner(&self) -> Arc<StepSettings> {
++        Arc::clone(&self.selected)
++    }
++
+     pub(super) fn selected(&self) -> &StepSettings {
+         &self.selected
+     }

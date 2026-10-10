@@ -1,0 +1,105 @@
+name: Native pregrant owner original135 plus auth13 plus Config4 plus owner23 and original/provider Clippy
+on:
+  push:
+    branches:
+      - feat/M6.3-native-pregrant-owner
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-pregrant-owner-source135-auth13-config4-owner23-and-clippy:
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/feat/M6.3-native-pregrant-owner' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - name: Acquire fixed official source archive
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+          manifest = json.loads(Path('scripts/codex-turn/native-pregrant-owner-source.json').read_text())
+          archive = Path(os.environ['RUNNER_TEMP']) / 'native-pregrant-owner-a956.tar.gz'
+          receipt = {'url': manifest['source']['archive_url'], 'started_at_utc': datetime.now(timezone.utc).isoformat(), 'status': 'RUNNING'}
+          try:
+              with urllib.request.urlopen(receipt['url'], timeout=60) as response, archive.open('xb') as output:
+                  receipt.update(http_status=response.status, final_url=response.geturl())
+                  budget = 20_000_000
+                  while chunk := response.read(min(1_048_576, budget + 1)):
+                      if len(chunk) > budget:
+                          raise ValueError('Fixed source download exceeds byte budget')
+                      output.write(chunk)
+                      budget -= len(chunk)
+              receipt.update(bytes=archive.stat().st_size, sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+              if receipt['sha256'] != '351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927':
+                  raise ValueError('Fixed source checksum mismatch')
+              receipt['status'] = 'PASS'
+          except Exception:
+              receipt['status'] = 'FAIL'
+              raise
+          finally:
+              receipt['ended_at_utc'] = datetime.now(timezone.utc).isoformat()
+              (archive.parent / 'native-pregrant-owner-source-acquisition.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY
+      - name: Prepare exact twelfth-application owner source and test-only metadata
+        run: >-
+          python scripts/codex-turn/replay_native_pregrant_owner.py --mode prepare
+          --archive "$RUNNER_TEMP/native-pregrant-owner-a956.tar.gz"
+          --output-dir "$RUNNER_TEMP/native-pregrant-owner-prepare"
+      - name: Install checksum-pinned official Rust1.95 in owned prefix
+        run: >-
+          python scripts/codex-turn/replay_native_pregrant_owner.py --mode provision
+          --output-dir "$RUNNER_TEMP/native-pregrant-owner-provision"
+      - name: Fetch original locked dependencies as explicit setup
+        run: |
+          mkdir "$RUNNER_TEMP/native-pregrant-owner-cargo"
+          python scripts/codex-turn/replay_native_pregrant_owner.py --mode fetch \
+            --prepared-dir "$RUNNER_TEMP/native-pregrant-owner-prepare" \
+            --toolchain-dir "$RUNNER_TEMP/native-pregrant-owner-provision/toolchain" \
+            --cargo-home "$RUNNER_TEMP/native-pregrant-owner-cargo" \
+            --output-dir "$RUNNER_TEMP/native-pregrant-owner-fetch"
+      - name: Run original135, independent auth13, Config4 and owner23; retain original two-package and independent provider Clippy locked and offline
+        run: >-
+          python scripts/codex-turn/replay_native_pregrant_owner.py --mode test
+          --prepared-dir "$RUNNER_TEMP/native-pregrant-owner-prepare"
+          --toolchain-dir "$RUNNER_TEMP/native-pregrant-owner-provision/toolchain"
+          --cargo-home "$RUNNER_TEMP/native-pregrant-owner-cargo"
+          --output-dir "$RUNNER_TEMP/native-pregrant-owner-test"
+      # Only declared command/graph receipts; no source trees, caches, libraries,
+      # databases, environment dump, original private failures or model material.
+      - name: Retain setup, separate original135/auth13/Config4/owner23 counts and original/provider Clippy receipts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-pregrant-owner-source135-auth13-config4-owner23-and-clippy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/native-pregrant-owner-source-acquisition.json
+            ${{ runner.temp }}/native-pregrant-owner-prepare/report.json
+            ${{ runner.temp }}/native-pregrant-owner-prepare/receipts/
+            ${{ runner.temp }}/native-pregrant-owner-prepare/source-before-files.json
+            ${{ runner.temp }}/native-pregrant-owner-prepare/test-before-files.json
+            ${{ runner.temp }}/native-pregrant-owner-prepare/static-auth-source-before-files.json
+            ${{ runner.temp }}/native-pregrant-owner-prepare/static-auth-test-before-files.json
+            ${{ runner.temp }}/native-pregrant-owner-prepare/config-source-before-files.json
+            ${{ runner.temp }}/native-pregrant-owner-prepare/config-test-before-files.json
+            ${{ runner.temp }}/native-pregrant-owner-provision/report.json
+            ${{ runner.temp }}/native-pregrant-owner-provision/receipts/
+            ${{ runner.temp }}/native-pregrant-owner-fetch/report.json
+            ${{ runner.temp }}/native-pregrant-owner-fetch/receipts/
+            ${{ runner.temp }}/native-pregrant-owner-fetch/source-after-files.json
+            ${{ runner.temp }}/native-pregrant-owner-fetch/test-after-files.json
+            ${{ runner.temp }}/native-pregrant-owner-test/report.json
+            ${{ runner.temp }}/native-pregrant-owner-test/receipts/
+            ${{ runner.temp }}/native-pregrant-owner-test/source-after-files.json
+            ${{ runner.temp }}/native-pregrant-owner-test/test-after-files.json
+          retention-days: 3
+          if-no-files-found: warn
+          include-hidden-files: false
