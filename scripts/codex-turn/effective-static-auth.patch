@@ -1,0 +1,424 @@
+--- a/codex-rs/model-provider/src/auth.rs
++++ b/codex-rs/model-provider/src/auth.rs
+@@ -303,6 +303,132 @@
+     Ok(None)
+ }
+ 
++/// Opaque static credentials resolved by the configured provider itself.
++///
++/// This is sensitive in-memory material, not InputProof, native-owner authority,
++/// or a durable consent. There is no credential getter or caller constructor.
++pub struct ControlledStaticBearerSnapshot {
++    effective_auth: CodexAuth,
++    authorization: HeaderValue,
++}
++
++impl std::fmt::Debug for ControlledStaticBearerSnapshot {
++    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        formatter
++            .debug_struct("ControlledStaticBearerSnapshot")
++            .finish_non_exhaustive()
++    }
++}
++
++impl ControlledStaticBearerSnapshot {
++    /// A projection of the actual retained auth object, not a caller auth label.
++    pub fn is_api_key_auth(&self) -> bool {
++        self.effective_auth.is_api_key_auth()
++    }
++
++    /// Install the final sensitive header and return the same owned snapshot.
++    ///
++    /// The owner must retain that snapshot alongside the original request and
++    /// its final frozen handle. Do not invoke managed auth after this step.
++    /// Native owner, secret-version, InputProof and ledger binding remain absent.
++    pub fn apply_to_request(
++        self,
++        mut request: codex_http_client::Request,
++    ) -> codex_protocol::error::Result<(Self, codex_http_client::Request)> {
++        if request.headers.contains_key(http::header::AUTHORIZATION)
++            || request.headers.contains_key(http::header::PROXY_AUTHORIZATION)
++            || request.headers.contains_key(http::header::COOKIE)
++        {
++            return Err(controlled_static_auth_unavailable());
++        }
++        request
++            .headers
++            .insert(http::header::AUTHORIZATION, self.authorization.clone());
++        Ok((self, request))
++    }
++}
++
++fn controlled_static_auth_unavailable() -> CodexErr {
++    CodexErr::UnsupportedOperation("CODEX_STATIC_AUTH_SNAPSHOT_UNAVAILABLE".to_string())
++}
++
++/// Preserve the existing provider key-before-explicit-bearer precedence, but
++/// never enter command, managed, AgentIdentity, gateway or signing paths.
++/// The closure is private: production passes the actual provider api_key()
++/// resolver, while tests can prove precedence without inspecting the host.
++fn controlled_static_token_with<F>(
++    provider: &ModelProviderInfo,
++    api_key: F,
++) -> codex_protocol::error::Result<String>
++where
++    F: FnOnce() -> codex_protocol::error::Result<Option<String>>,
++{
++    if provider.auth.is_some()
++        || provider.gateway_oauth.is_some()
++        || provider.aws.is_some()
++        || provider.is_amazon_bedrock()
++    {
++        return Err(controlled_static_auth_unavailable());
++    }
++    provider.validate().map_err(CodexErr::InvalidRequest)?;
++    // A failed configured key resolution must not fall back to another source.
++    if let Some(token) = api_key()? {
++        return Ok(token);
++    }
++    provider
++        .experimental_bearer_token
++        .clone()
++        .map(|token| token.into_inner())
++        .ok_or_else(controlled_static_auth_unavailable)
++}
++
++pub(crate) fn resolve_controlled_static_bearer_snapshot(
++    provider: &ModelProviderInfo,
++) -> codex_protocol::error::Result<ControlledStaticBearerSnapshot> {
++    let token = controlled_static_token_with(provider, || provider.api_key())?;
++    controlled_static_snapshot_from_token(token)
++}
++
++fn controlled_static_snapshot_from_token(
++    token: String,
++) -> codex_protocol::error::Result<ControlledStaticBearerSnapshot> {
++    // One actual static auth object supplies both the retained identity and the
++    // final header. No ambient/account projection or AuthManager is consulted.
++    let effective_auth = CodexAuth::from_api_key(&token);
++    let headers = auth_provider_from_auth(&effective_auth).to_auth_headers();
++    let authorization_values = headers.get_all(http::header::AUTHORIZATION);
++    let mut values = authorization_values.iter();
++    let mut authorization = values
++        .next()
++        .cloned()
++        .ok_or_else(controlled_static_auth_unavailable)?;
++    if values.next().is_some() || headers.len() != 1 {
++        return Err(controlled_static_auth_unavailable());
++    }
++    let token = authorization
++        .to_str()
++        .ok()
++        .and_then(|value| value.strip_prefix("Bearer "))
++        .ok_or_else(controlled_static_auth_unavailable)?;
++    let mut parts = token.splitn(2, '=');
++    let value = parts.next().ok_or_else(controlled_static_auth_unavailable)?;
++    if value.is_empty()
++        || !value
++            .bytes()
++            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~+/".contains(&byte))
++        || parts
++            .next()
++            .is_some_and(|padding| !padding.bytes().all(|byte| byte == b'='))
++    {
++        return Err(controlled_static_auth_unavailable());
++    }
++    authorization.set_sensitive(true);
++    Ok(ControlledStaticBearerSnapshot {
++        effective_auth,
++        authorization,
++    })
++}
++
+ /// Builds request-header auth for a first-party Codex auth snapshot.
+ pub fn auth_provider_from_auth(auth: &CodexAuth) -> SharedAuthProvider {
+     match auth {
+@@ -851,4 +977,134 @@
+         assert!(second_fallback.is_engaged());
+         assert_eq!(registration_count.load(Ordering::SeqCst), 3);
+     }
+-}
++
++    #[test]
++    fn controlled_static_auth_uses_actual_key_before_explicit_bearer() {
++        let mut provider =
++            create_oss_provider_with_base_url("https://example.test/v1", WireApi::Responses);
++        provider.experimental_bearer_token = Some("explicit-synthetic".into());
++        let token = controlled_static_token_with(&provider, || Ok(Some("key-synthetic".into())))
++            .expect("actual key wins");
++        let snapshot = controlled_static_snapshot_from_token(token).expect("actual static auth");
++        assert!(snapshot.is_api_key_auth());
++        assert_eq!(
++            snapshot.authorization,
++            HeaderValue::from_static("Bearer key-synthetic")
++        );
++    }
++
++    #[test]
++    fn controlled_static_auth_key_error_never_falls_back() {
++        let mut provider =
++            create_oss_provider_with_base_url("https://example.test/v1", WireApi::Responses);
++        provider.experimental_bearer_token = Some("explicit-synthetic".into());
++        let error = controlled_static_token_with(&provider, || {
++            Err(CodexErr::InvalidRequest("synthetic key unavailable".into()))
++        })
++        .expect_err("key errors must propagate");
++        assert!(matches!(
++            error,
++            CodexErr::InvalidRequest(message) if message == "synthetic key unavailable"
++        ));
++    }
++
++    #[test]
++    fn controlled_static_auth_selects_explicit_only_after_known_key_absence() {
++        let mut provider =
++            create_oss_provider_with_base_url("https://example.test/v1", WireApi::Responses);
++        provider.experimental_bearer_token = Some("explicit-synthetic".into());
++        let token = controlled_static_token_with(&provider, || Ok(None))
++            .expect("explicit bearer is the actual configured winner");
++        let snapshot = controlled_static_snapshot_from_token(token).expect("valid static auth");
++        assert_eq!(
++            snapshot.authorization,
++            HeaderValue::from_static("Bearer explicit-synthetic")
++        );
++        provider.experimental_bearer_token = None;
++        assert!(controlled_static_token_with(&provider, || Ok(None)).is_err());
++    }
++
++    #[test]
++    fn controlled_static_auth_rejects_invalid_winning_key_without_fallback() {
++        let mut provider =
++            create_oss_provider_with_base_url("https://example.test/v1", WireApi::Responses);
++        provider.experimental_bearer_token = Some("explicit-synthetic".into());
++        for token in ["", "a b", "a,b", "a=b", "a\nb", "é"] {
++            let selected = controlled_static_token_with(&provider, || Ok(Some(token.into())))
++                .expect("actual selected key is not replaced");
++            assert!(controlled_static_snapshot_from_token(selected).is_err());
++        }
++    }
++
++    #[test]
++    fn controlled_static_snapshot_retains_sensitive_actual_auth_without_debug_secret() {
++        let snapshot = controlled_static_snapshot_from_token("synthetic-private-token".into())
++            .expect("valid static token");
++        assert!(snapshot.authorization.is_sensitive());
++        assert_eq!(
++            auth_provider_from_auth(&snapshot.effective_auth)
++                .to_auth_headers()
++                .get(http::header::AUTHORIZATION),
++            Some(&snapshot.authorization)
++        );
++        assert!(!format!("{snapshot:?}").contains("synthetic-private-token"));
++    }
++
++    #[test]
++    fn controlled_static_auth_rejects_command_before_any_key_resolver() {
++        let mut provider =
++            create_oss_provider_with_base_url("https://example.test/v1", WireApi::Responses);
++        provider.auth = Some(ModelProviderAuthInfo {
++            command: "never-run-synthetic-command".into(),
++            args: Vec::new(),
++            timeout_ms: NonZeroU64::new(5_000).expect("positive fixture"),
++            refresh_interval_ms: 300_000,
++            cwd: PathBuf::from("/synthetic-unread")
++                .try_into()
++                .expect("synthetic absolute path"),
++        });
++        provider.experimental_bearer_token = Some("configured-synthetic-token".into());
++        let calls = std::cell::Cell::new(0);
++        let result = controlled_static_token_with(&provider, || {
++            calls.set(calls.get() + 1);
++            Ok(Some("synthetic-key-must-not-resolve".into()))
++        });
++        assert!(result.is_err());
++        assert_eq!(calls.get(), 0);
++    }
++
++    #[test]
++    fn controlled_static_auth_rejects_bedrock_before_any_key_resolver() {
++        let mut provider = ModelProviderInfo::create_amazon_bedrock_provider(None);
++        provider.experimental_bearer_token = Some("configured-synthetic-token".into());
++        let calls = std::cell::Cell::new(0);
++        let result = controlled_static_token_with(&provider, || {
++            calls.set(calls.get() + 1);
++            Ok(Some("synthetic-key-must-not-resolve".into()))
++        });
++        assert!(result.is_err());
++        assert_eq!(calls.get(), 0);
++    }
++
++    #[test]
++    fn controlled_static_snapshot_survives_request_install_with_its_actual_auth_object() {
++        let provider =
++            create_oss_provider_with_base_url("https://example.test/v1", WireApi::Responses);
++        let request = provider
++            .to_api_provider(None)
++            .expect("synthetic API provider")
++            .build_request(http::Method::POST, "responses");
++        let snapshot = controlled_static_snapshot_from_token("owned-synthetic-token".into())
++            .expect("actual static auth");
++        let (retained, request) = snapshot
++            .apply_to_request(request)
++            .expect("retain the same owned auth snapshot");
++        let headers = auth_provider_from_auth(&retained.effective_auth).to_auth_headers();
++        assert_eq!(
++            headers.get(http::header::AUTHORIZATION),
++            request.headers.get(http::header::AUTHORIZATION)
++        );
++        assert!(retained.authorization.is_sensitive());
++        assert!(request.headers[http::header::AUTHORIZATION].is_sensitive());
++    }
++}
+--- a/codex-rs/model-provider/src/lib.rs
++++ b/codex-rs/model-provider/src/lib.rs
+@@ -15,6 +15,7 @@
+ 
+ pub use amazon_bedrock::is_supported_amazon_bedrock_region;
+ pub use auth::AgentIdentitySessionFallback;
++pub use auth::ControlledStaticBearerSnapshot;
+ pub use auth::ProviderAuthScope;
+ pub use auth::ResolvedProviderAuth;
+ pub use auth::auth_provider_from_auth;
+--- a/codex-rs/model-provider/src/provider.rs
++++ b/codex-rs/model-provider/src/provider.rs
+@@ -223,6 +223,18 @@
+ 
+     /// Returns the current provider-scoped auth value, if one is configured.
+     fn auth(&self) -> ModelProviderFuture<'_, Option<CodexAuth>>;
++
++    /// Resolve an opaque immutable static bearer without auth-manager activity.
++    ///
++    /// The default is unavailable. This does not grant native execution,
++    /// InputProof or consent; managed, command and gateway paths stay excluded.
++    fn controlled_static_bearer_snapshot(
++        &self,
++    ) -> codex_protocol::error::Result<crate::auth::ControlledStaticBearerSnapshot> {
++        Err(CodexErr::UnsupportedOperation(
++            "CODEX_STATIC_AUTH_SNAPSHOT_UNAVAILABLE".to_string(),
++        ))
++    }
+ 
+     /// Returns the current app-visible account state for this provider.
+     fn account_state(&self) -> ProviderAccountResult;
+@@ -551,6 +563,12 @@
+         })
+     }
+ 
++    fn controlled_static_bearer_snapshot(
++        &self,
++    ) -> codex_protocol::error::Result<crate::auth::ControlledStaticBearerSnapshot> {
++        crate::auth::resolve_controlled_static_bearer_snapshot(&self.info)
++    }
++
+     fn account_state(&self) -> ProviderAccountResult {
+         let account = if self.info.requires_openai_auth {
+             self.auth_manager
+@@ -1441,4 +1459,108 @@
+             }
+         }
+     }
++
++    #[test]
++    fn controlled_static_snapshot_does_not_enter_command_auth() {
++        let mut info = provider_for("https://example.test/v1".into());
++        info.auth = Some(ModelProviderAuthInfo {
++            command: "never-run-synthetic-command".into(),
++            args: Vec::new(),
++            timeout_ms: NonZeroU64::new(5_000).expect("positive fixture"),
++            refresh_interval_ms: 300_000,
++            cwd: PathBuf::from("/synthetic-unread")
++                .try_into()
++                .expect("synthetic absolute path"),
++        });
++        info.env_key = Some("CODEX_SYNTHETIC_UNREAD_COMMAND_KEY".into());
++        info.experimental_bearer_token = Some("synthetic-static-override".into());
++        let provider = ConfiguredModelProvider::new(info, None, None);
++        assert!(provider.controlled_static_bearer_snapshot().is_err());
++    }
++
++    #[test]
++    fn controlled_static_snapshot_does_not_accept_managed_api_key_projection() {
++        let mut info = provider_for("https://example.test/v1".into());
++        info.requires_openai_auth = true;
++        let manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
++            "ambient-synthetic-token",
++        ));
++        let provider = ConfiguredModelProvider::new(info, Some(manager), None);
++        assert_eq!(
++            provider
++                .account_state()
++                .expect("actual cached account state")
++                .account,
++            Some(ProviderAccount::ApiKey)
++        );
++        assert!(provider.controlled_static_bearer_snapshot().is_err());
++    }
++
++    #[test]
++    fn controlled_static_snapshot_uses_explicit_override_without_managed_resolution() {
++        let mut info = provider_for("https://example.test/v1".into());
++        info.experimental_bearer_token = Some("configured-synthetic-token".into());
++        let manager = AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
++            "ambient-synthetic-token",
++        ));
++        let provider = ConfiguredModelProvider::new(info, Some(manager), None);
++        let snapshot = provider
++            .controlled_static_bearer_snapshot()
++            .expect("configured static override wins without a managed call");
++        let mut request = provider
++            .info()
++            .to_api_provider(None)
++            .expect("synthetic API provider")
++            .build_request(http::Method::POST, "responses");
++        request
++            .headers
++            .insert("x-original", http::HeaderValue::from_static("retained"));
++        let (retained_snapshot, request) = snapshot
++            .apply_to_request(request)
++            .expect("install auth and retain the same owned snapshot");
++        assert!(retained_snapshot.is_api_key_auth());
++        assert_eq!(
++            request.headers.get(http::header::AUTHORIZATION),
++            Some(&http::HeaderValue::from_static("Bearer configured-synthetic-token"))
++        );
++        assert!(request.headers[http::header::AUTHORIZATION].is_sensitive());
++        assert_eq!(
++            request.headers.get("x-original"),
++            Some(&http::HeaderValue::from_static("retained"))
++        );
++    }
++
++    #[test]
++    fn controlled_static_snapshot_rejects_existing_auth_channels() {
++        for name in [
++            http::header::AUTHORIZATION,
++            http::header::PROXY_AUTHORIZATION,
++            http::header::COOKIE,
++        ] {
++            let mut info = provider_for("https://example.test/v1".into());
++            info.experimental_bearer_token = Some("configured-synthetic-token".into());
++            let provider = ConfiguredModelProvider::new(info, None, None);
++            let snapshot = provider
++                .controlled_static_bearer_snapshot()
++                .expect("configured static credential");
++            let mut request = provider
++                .info()
++                .to_api_provider(None)
++                .expect("synthetic API provider")
++                .build_request(http::Method::POST, "responses");
++            request
++                .headers
++                .insert(name, http::HeaderValue::from_static("existing-synthetic"));
++            assert!(snapshot.apply_to_request(request).is_err());
++        }
++    }
++
++    #[test]
++    fn controlled_static_snapshot_rejects_bedrock_before_key_resolution() {
++        let mut info = ModelProviderInfo::create_amazon_bedrock_provider(None);
++        info.env_key = Some("CODEX_SYNTHETIC_UNREAD_BEDROCK_KEY".into());
++        info.experimental_bearer_token = Some("synthetic-static-override".into());
++        let provider = ConfiguredModelProvider::new(info, None, None);
++        assert!(provider.controlled_static_bearer_snapshot().is_err());
++    }
+ }
