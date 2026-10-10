@@ -468,7 +468,7 @@ def verify_legacy_inputs(bundle: Path) -> dict:
 
 STATIC_AUTH_CLIPPY_ARGV = ["clippy", "--locked", "--offline", "-p", "codex-model-provider",
                           "--lib", "--tests", "--no-deps"]
-STATIC_AUTH_MANIFEST_SHA = "f6ec6987928fcdc58ec66710122f749940bd0583d7ab55da39c5e6825cd763ed"
+STATIC_AUTH_MANIFEST_SHA = "cf037cff5507ad91ba1db8b4a4f897fb4d505b53d36385306591bffc6c12dbd5"
 LEGACY_MANIFEST_SHA = "5008f10471cdfe2ae7b937e511f0cfa661b90b85f3cf4b048db7aac8e542dcc0"
 LEGACY_RUNNER_SHA = "571b5d84c609b2b412c9de58a61d7e851e24d51f2bba54efc57431e1668ad7dc"
 
@@ -503,7 +503,7 @@ STATIC_AUTH_FILES = json.loads('''[
     "before_bytes": 30476,
     "before_sha256": "1c1042b33df733ffb583d19bd3102c8511ab37b9e5e8cd91a673103321f249d8",
     "after_bytes": 41328,
-    "after_sha256": "bb051cf2f83c1bf7af97fbdeb392cd0c1e9bf78580bcdb7ce855d5b7592c84d9",
+    "after_sha256": "581fa80ada444b747033b53fa68597f92db5689df59365d4179581c7a51026ca",
     "before_mode": 436,
     "after_mode": 436
   },
@@ -602,7 +602,7 @@ def verify_inputs(bundle: Path) -> dict:
     require(type(patch) is dict and set(patch) == {"file", "bytes", "sha256"}
             and patch["file"] == "effective-static-auth.patch"
             and type(patch["bytes"]) is int and patch["bytes"] == 18064
-            and patch["sha256"] == "c7bd6edf65c9952347254c01aa696c12bc9e7dd1720f11349f2017ebf8acbc32",
+            and patch["sha256"] == "aa9f2352605942c48d47450ff3803209bd0e8af7a7e369d92936f64307ace8f3",
             "Exact thirteenth patch asset required")
     patch_path = bundle / patch["file"]
     require(patch_path.is_file() and not patch_path.is_symlink()

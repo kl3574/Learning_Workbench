@@ -76,11 +76,11 @@
 +    if let Some(token) = api_key()? {
 +        return Ok(token);
 +    }
-+    provider
++    let token = provider
 +        .experimental_bearer_token
 +        .clone()
-+        .map(|token| token.into_inner())
-+        .ok_or_else(controlled_static_auth_unavailable)
++        .ok_or_else(controlled_static_auth_unavailable)?;
++    Ok(token.into_inner())
 +}
 +
 +pub(crate) fn resolve_controlled_static_bearer_snapshot(
