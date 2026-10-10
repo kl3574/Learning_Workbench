@@ -3,10 +3,11 @@
 import hashlib
 import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from uuid import uuid4
 
 from packages.contracts.domain_models import WorkbenchSession
@@ -29,6 +30,8 @@ class Database:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.path = settings.data_dir / "workspace.sqlite3"
+        self._commit_lock = RLock()
+        self._commit_actions: dict[sqlite3.Connection, list[Callable[[], None]]] = {}
 
     @contextmanager
     def connect(self, *, busy_timeout_ms: int = 10_000) -> Iterator[sqlite3.Connection]:
@@ -47,16 +50,45 @@ class Database:
         finally:
             connection.close()
 
+    def after_commit(self, connection: sqlite3.Connection, action: Callable[[], None]) -> None:
+        """Register private resource cleanup with this managed transaction."""
+        with self._commit_lock:
+            callbacks = self._commit_actions.get(connection)
+            if callbacks is None or not connection.in_transaction:
+                raise MigrationError("Resource cleanup requires an active managed transaction.")
+            callbacks.append(action)
+
     @contextmanager
     def transaction(self, *, busy_timeout_ms: int = 10_000, immediate: bool = True) -> Iterator[sqlite3.Connection]:
         with self.connect(busy_timeout_ms=busy_timeout_ms) as connection:
             connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
+            callbacks: list[Callable[[], None]] = []
+            with self._commit_lock:
+                self._commit_actions[connection] = callbacks
             try:
-                yield connection
-                connection.commit()
-            except BaseException:
-                connection.rollback()
-                raise
+                try:
+                    yield connection
+                    if callbacks and not connection.in_transaction:
+                        raise MigrationError("Resource transaction ended before its managed commit.")
+                    connection.commit()
+                except BaseException:
+                    connection.rollback()
+                    raise
+                else:
+                    # A cleanup error cannot roll back an already committed ACK.
+                    # Callbacks run outside the registry lock and all get a turn.
+                    first_error: BaseException | None = None
+                    for action in callbacks:
+                        try:
+                            action()
+                        except BaseException as error:
+                            if first_error is None:
+                                first_error = error
+                    if first_error is not None:
+                        raise first_error
+            finally:
+                with self._commit_lock:
+                    self._commit_actions.pop(connection, None)
 
     def migration_files(self) -> list[Path]:
         files = sorted(self.settings.migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.sql"))

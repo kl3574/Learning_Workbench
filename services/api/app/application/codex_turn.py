@@ -21,6 +21,7 @@ from ..serialization import canonical_json, content_sha256
 from .codex_bootstrap import CodexBootstrapService
 from .codex_bootstrap_access import current_control_access
 from .codex_turn_context import CodexTurnContext, damaged
+from .codex_native_preparation import NativePreparationStore, NativeTurnPreparer
 from .codex_turn_models import (
     SessionAnchor, TurnRuntimeBinding, TurnInput, TurnPrepared, TurnCancelled, PrepareCommand, CancelCommand,
     preparation_digest, StartCommand, TurnStarted, TurnCancelRequested,
@@ -53,9 +54,11 @@ def missing() -> ApiError:
 
 
 class CodexTurnService:
-    def __init__(self, database: Database, bootstrap: CodexBootstrapService, proofs: ProofRegistry | None = None):
+    def __init__(self, database: Database, bootstrap: CodexBootstrapService, proofs: ProofRegistry | None = None,
+                 native_preparer: NativeTurnPreparer | None = None):
         self.database, self.bootstrap = database, bootstrap
         self.context = CodexTurnContext(database, bootstrap)
+        self.native_preparations = NativePreparationStore(native_preparer)
         self._cursor_key = secrets.token_bytes(32)
         self.proofs = (proofs or ProofRegistry()).codex
         self.outbound_owner: CodexConsentsService | None = None
@@ -74,7 +77,16 @@ class CodexTurnService:
 
     def prepare_turn(self, identity: SessionIdentity, session_id: str,
                      body: CodexTurnPrepareWrite, key: str) -> CodexTurnPreparationView:
-        return self._deliver(identity, self._prepare_turn(identity, session_id, body, key), subject=True)
+        value = self._prepare_turn(identity, session_id, body, key)
+        try:
+            return self._deliver(identity, value, subject=True)
+        except BaseException:
+            try:
+                self.native_preparations.close_job(value.job.id)
+            except ApiError:
+                # Permission delivery failure remains the primary error.
+                pass
+            raise
 
     def read_preparation(self, identity: SessionIdentity, identifier: str) -> CodexTurnPreparationView:
         return self._deliver(identity, self._read_preparation(identity, identifier), subject=True)
@@ -317,7 +329,7 @@ class CodexTurnService:
                      body: CodexTurnPrepareWrite, key: str) -> CodexTurnPreparationView:
         key = validate_key(key)
         body = CodexTurnPrepareWrite.model_validate(body.model_dump(mode='json'))
-        with self.database.transaction() as conn:
+        with self.native_preparations.staging() as native_stage, self.database.transaction() as conn:
             current, originals, repo, history = self._state(conn, identity, subject=True)
             replay = repo.replay(history, current, 'prepare', session_id, key, body)
             if replay is not None:
@@ -357,6 +369,7 @@ class CodexTurnService:
             repo.jobs.create(value.job_id, 'codex_turn', value)
             context = self.context.prepare_turn(conn, current, value, now, previous,
                 bootstrap_snapshot=original if available is None else None)
+            native_stage.prepare(current, original, value, context)
             summary = self.context.summary(context)
             ack = CodexTurnPreparationView(id='turnprep_' + uuid4().hex, preparation_sha256='0' * 64,
                 actor_session_id=current.id, session_id=session_id, session_revision=revision + 1,
@@ -501,6 +514,7 @@ class CodexTurnService:
         if self.broker_controls is not None:
             self.broker_controls.request_interrupt(conn, current, turn.control.id)
         current_control_access(conn, current, write=False)
+        self.database.after_commit(conn, lambda: self.native_preparations.close_job(identifier))
         return ack
 
     def _turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:

@@ -53,6 +53,7 @@ from .interfaces.codex_http import create_codex_router
 from .interfaces.static import WorkbenchStaticMount
 from .application.codex_bootstrap import CodexBootstrapService
 from .application.codex_turn import CodexTurnService
+from .application.codex_native_preparation import NativeTurnPreparer
 from .application.codex_approvals import CodexApprovalsService
 from .interfaces.codex_approval_http import create_codex_approval_router
 from .application.codex_turn_worker import CodexTurnExecutor, CodexTurnWorker
@@ -101,7 +102,8 @@ def create_app(settings: Settings | None = None, *,
                codex_executor: CodexTurnExecutor | None = None,
                codex_answer_materializer: CheckedAnswerMaterializer | None = None,
                codex_probe: CodexCapabilityProbe | None = None,
-               codex_bootstrap_runtime: CodexBootstrapRuntime | None = None) -> FastAPI:
+               codex_bootstrap_runtime: CodexBootstrapRuntime | None = None,
+               codex_native_preparer: NativeTurnPreparer | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     database = Database(settings)
     import_service = ImportService(database)
@@ -151,7 +153,7 @@ def create_app(settings: Settings | None = None, *,
     codex_bootstrap = CodexBootstrapService(database, codex_bootstrap_runtime if codex_bootstrap_runtime is not None
         else LocalCodexBootstrapRuntime(settings.data_dir, settings.codex_executable))
     codex_registry = codex_proofs if codex_proofs is not None else ProofRegistry()
-    codex_turn = CodexTurnService(database, codex_bootstrap, codex_registry)
+    codex_turn = CodexTurnService(database, codex_bootstrap, codex_registry, codex_native_preparer)
     codex_consents = CodexConsentsService(database, codex_turn, provider_secrets, codex_registry)
     codex_turn.outbound_owner = codex_consents
     codex_turn.approvals = CodexApprovalsService(codex_turn)
@@ -199,6 +201,7 @@ def create_app(settings: Settings | None = None, *,
             authoring_worker.stop()
             tutor_worker.stop()
             import_worker.stop()
+            codex_turn.native_preparations.close_all()
 
     application = FastAPI(
         title="知径 Learning Workbench",

@@ -1,0 +1,27 @@
+name: Codex private preparation lifetime boundary checks
+on:
+  push:
+    branches: ['feat/M6.3-native-preparation-lifetime']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: codex-native-preparation-lifetime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-preparation-lifetime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12.13'
+      - run: python -m pip install uv==0.11.21
+      - run: uv sync --frozen
+      - name: Check publication rules against all tracked files
+        run: python scripts/check_publication.py --all-tracked
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen mypy
+      - name: Test private preparation lifetime and existing checked worker receipts without InputProof admission
+        run: uv run --frozen pytest tests/unit/test_provider_codex_execution.py tests/integration/test_codex_turn_dispatch_http.py tests/integration/test_codex_turn_native_preparation_lifecycle.py
