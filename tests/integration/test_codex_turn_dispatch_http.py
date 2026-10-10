@@ -750,3 +750,349 @@ def test_dispatch_current_and_original_ack_reject_damaged_owned_graph(consent_ca
         case.get('sessions/'+sid),case.post(f'sessions/{sid}/turns',body,'start')]
     assert [(response.status_code,response.json()['error']['code']) for response in responses]==[(409,'CODEX_HISTORY_DAMAGED')]*4
     assert case.dump()==before
+
+
+
+def _worker_callback_error(callback):
+    from services.api.app.application.errors import ApiError
+    try:
+        callback()
+    except ApiError as error:
+        return error.code
+    return None
+
+
+def _worker_provider_state(case, turn_id):
+    worker = case.app.state.codex_turn_worker
+    with worker.database.transaction(immediate=False) as conn:
+        states, _ = worker.provider.owned_states(conn, worker.database.workspace_id())
+        return states[turn_id]
+
+
+def _bounded_worker_dispatch(worker):
+    # A lock held across the original guard would deadlock on reentry. Keep
+    # the regression observable without an unbounded executor-pool shutdown.
+    from threading import Thread
+    completed, errors = [], []
+    def run():
+        try:
+            completed.append(worker.run_once())
+        except BaseException as error:
+            errors.append(error)
+    thread = Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+    assert not thread.is_alive(), 'worker callback did not finish within the bounded join'
+    assert errors == []
+    assert completed == [True]
+
+
+def _assert_retained_worker_response(result, checked, code):
+    from packages.contracts.canonical import sha256_bytes
+    assert result is not None and checked.first_response is not None
+    assert result.outcome == 'failed' and result.error_code == code
+    assert result.output_state == 'partial'
+    assert result.consumed_provider_calls == checked.consumed_provider_calls == 1
+    assert result.answer == checked.answer == 'Synthetic exact answer α\n'
+    assert result.first_response == checked.first_response
+    assert result.first_response_sha256 == checked.first_response_sha256
+    assert result.first_response_sha256 == sha256_bytes(canonical_bytes(checked.first_response))
+    assert result.usage == checked.usage
+
+
+@pytest.mark.parametrize('response_outcome', ['completed', 'failed'])
+def test_worker_callback_duplicate_after_real_response_retains_checked_facts(consent_case, monkeypatch, response_outcome):
+    case, _, _, _, _, _ = consent_case
+    prep, consent, _, _ = queued(consent_case)
+    executor = case.app.state.synthetic_executor
+    original_execute, original_transport = executor.execute, executor.transport
+    checked, callback_codes = [], []
+    if response_outcome == 'failed':
+        def failed_transport(*args):
+            raw = original_transport(*args)
+            response = SyntheticCodexResponse.model_validate_json(raw)
+            return canonical_bytes(response.model_copy(update={
+                'outcome': 'failed', 'error_code': 'CODEX_OPERATION_FAILED'}))
+        monkeypatch.setattr(executor, 'transport', failed_transport)
+    def execute(prepared, summary, profile, before_request):
+        result = original_execute(prepared, summary, profile, before_request)
+        checked.append(result)
+        # The trusted adapter swallows the callback refusal and returns the
+        # original checked receipt. Worker closure must still see the failure.
+        callback_codes.append(_worker_callback_error(before_request))
+        return result
+    monkeypatch.setattr(executor, 'execute', execute)
+    assert type(executor) is SyntheticCodexExecutor
+    assert case.app.state.codex_turn_worker.run_once() is True
+    assert callback_codes == ['CODEX_NEW_OUTBOUND_CONSENT_REQUIRED']
+    assert checked[0].outcome == response_outcome
+    assert len(case.app.state.synthetic_transport_calls) == 1
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'failed'
+    assert control['error_code'] == 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED'
+    state = _worker_provider_state(case, prep['turn_id'])
+    _assert_retained_worker_response(state.finished.execution_result, checked[0], control['error_code'])
+    dispatch = case.get('consents/' + consent['id']).json()['dispatch']
+    assert dispatch['consumed_provider_calls'] == 1
+    assert dispatch['input_tokens'] == checked[0].usage.input_tokens
+    assert dispatch['output_tokens'] == checked[0].usage.output_tokens
+    before = case.dump()
+    assert case.app.state.codex_turn_worker.run_once() is False
+    assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+def test_worker_callback_foreign_thread_burns_before_guard_and_transport(consent_case, monkeypatch):
+    from threading import Thread
+    case, _, _, _, _, _ = consent_case
+    prep, consent, _, _ = queued(consent_case)
+    worker, executor = case.app.state.codex_turn_worker, case.app.state.synthetic_executor
+    original_execute, original_guard = executor.execute, worker._guard
+    callback_codes, callback_errors, foreign_alive, guard_calls = [], [], [], []
+    def guard(*args):
+        guard_calls.append(True)
+        return original_guard(*args)
+    def execute(prepared, summary, profile, before_request):
+        def foreign():
+            try:
+                callback_codes.append(_worker_callback_error(before_request))
+            except BaseException as error:
+                callback_errors.append(error)
+        thread = Thread(target=foreign, daemon=True)
+        thread.start()
+        thread.join(timeout=5)
+        foreign_alive.append(thread.is_alive())
+        if thread.is_alive():
+            raise RuntimeError('synthetic foreign callback exceeded bounded join')
+        # A later callback on the owning thread is now a duplicate. This is a
+        # real SyntheticCodexExecution receipt, with zero transport entries.
+        return original_execute(prepared, summary, profile, before_request)
+    monkeypatch.setattr(worker, '_guard', guard)
+    monkeypatch.setattr(executor, 'execute', execute)
+    _bounded_worker_dispatch(worker)
+    assert foreign_alive == [False] and callback_errors == []
+    assert callback_codes == ['CODEX_BINDING_INVALID']
+    assert guard_calls == [] and case.app.state.synthetic_transport_calls == []
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'failed'
+    assert control['error_code'] == 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED'
+    result = _worker_provider_state(case, prep['turn_id']).finished.execution_result
+    assert result.outcome == 'failed' and result.consumed_provider_calls == 0
+    assert result.first_response is None and result.first_response_sha256 is None
+    assert result.answer == '' and result.output_state == 'none'
+    assert case.get('consents/' + consent['id']).json()['dispatch']['consumed_provider_calls'] == 1
+
+
+def test_worker_callback_reentry_poison_finishes_without_deadlock_or_transport(consent_case, monkeypatch):
+    case, _, _, _, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    worker, executor = case.app.state.codex_turn_worker, case.app.state.synthetic_executor
+    original_execute, original_guard = executor.execute, worker._guard
+    callbacks, callback_codes, guard_calls = [], [], []
+    def guard(*args):
+        guard_calls.append(True)
+        if len(guard_calls) == 1:
+            callback_codes.append(_worker_callback_error(callbacks[0]))
+        return original_guard(*args)
+    def execute(prepared, summary, profile, before_request):
+        callbacks.append(before_request)
+        return original_execute(prepared, summary, profile, before_request)
+    monkeypatch.setattr(worker, '_guard', guard)
+    monkeypatch.setattr(executor, 'execute', execute)
+    _bounded_worker_dispatch(worker)
+    assert callback_codes == ['CODEX_NEW_OUTBOUND_CONSENT_REQUIRED']
+    assert guard_calls == [True] and case.app.state.synthetic_transport_calls == []
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'failed' and control['error_code'] == 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED'
+    result = _worker_provider_state(case, prep['turn_id']).finished.execution_result
+    assert result.consumed_provider_calls == 0 and result.first_response is None
+
+
+def test_worker_callback_guard_failure_burns_attempt_and_cannot_retry(consent_case, monkeypatch):
+    from services.api.app.application.errors import ApiError
+    case, _, _, _, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    worker, executor = case.app.state.codex_turn_worker, case.app.state.synthetic_executor
+    original_execute, original_guard = executor.execute, worker._guard
+    callback_codes, guard_calls = [], []
+    def guard(*args):
+        guard_calls.append(True)
+        if len(guard_calls) == 1:
+            raise ApiError(403, 'POLICY_DENIED', 'Synthetic first guard refusal.')
+        return original_guard(*args)
+    def execute(prepared, summary, profile, before_request):
+        callback_codes.append(_worker_callback_error(before_request))
+        callback_codes.append(_worker_callback_error(before_request))
+        return original_execute(prepared, summary, profile, before_request)
+    monkeypatch.setattr(worker, '_guard', guard)
+    monkeypatch.setattr(executor, 'execute', execute)
+    assert worker.run_once() is True
+    assert callback_codes == ['POLICY_DENIED', 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED']
+    assert guard_calls == [True] and case.app.state.synthetic_transport_calls == []
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'failed' and control['error_code'] == 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED'
+    result = _worker_provider_state(case, prep['turn_id']).finished.execution_result
+    assert result.consumed_provider_calls == 0 and result.first_response is None
+
+
+def test_worker_callback_late_after_completion_is_closed_without_database_change(consent_case, monkeypatch):
+    case, _, sid, _, _, _ = consent_case
+    prep, consent, body, ack = queued(consent_case)
+    executor = case.app.state.synthetic_executor
+    original_execute, callbacks = executor.execute, []
+    def execute(prepared, summary, profile, before_request):
+        callbacks.append(before_request)
+        return original_execute(prepared, summary, profile, before_request)
+    monkeypatch.setattr(executor, 'execute', execute)
+    worker = case.app.state.codex_turn_worker
+    assert worker.run_once() is True
+    control = case.get('turns/' + prep['turn_id']).content
+    dispatch = case.get('consents/' + consent['id']).content
+    assert case.get('turns/' + prep['turn_id']).json()['outcome'] == 'completed'
+    before = case.dump()
+    assert _worker_callback_error(callbacks[0]) == 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED'
+    assert _worker_callback_error(callbacks[0]) == 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED'
+    assert worker.run_once() is False
+    assert case.post(f'sessions/{sid}/turns', body, 'start').content == ack.content
+    assert case.get('turns/' + prep['turn_id']).content == control
+    assert case.get('consents/' + consent['id']).content == dispatch
+    assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+def test_worker_callback_duplicate_cannot_reclassify_actual_unknown_transport(consent_case, monkeypatch):
+    case, _, sid, _, _, _ = consent_case
+    prep, consent, body, ack = queued(consent_case)
+    executor = case.app.state.synthetic_executor
+    original_execute, original_transport = executor.execute, executor.transport
+    checked, callback_codes = [], []
+    def lost_response(*args):
+        original_transport(*args)
+        raise OSError('synthetic actual transport entered but its response was lost')
+    def execute(prepared, summary, profile, before_request):
+        result = original_execute(prepared, summary, profile, before_request)
+        checked.append(result)
+        callback_codes.append(_worker_callback_error(before_request))
+        return result
+    monkeypatch.setattr(executor, 'transport', lost_response)
+    monkeypatch.setattr(executor, 'execute', execute)
+    worker = case.app.state.codex_turn_worker
+    assert worker.run_once() is True
+    assert callback_codes == ['CODEX_NEW_OUTBOUND_CONSENT_REQUIRED']
+    assert checked[0].outcome == 'unknown' and checked[0].consumed_provider_calls == 1
+    assert checked[0].first_response is None and len(case.app.state.synthetic_transport_calls) == 1
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'unknown' and control['error_code'] == 'CODEX_OUTCOME_UNKNOWN'
+    result = _worker_provider_state(case, prep['turn_id']).finished.execution_result
+    assert result == checked[0]
+    assert result.answer == '' and result.output_state == 'none'
+    dispatch = case.get('consents/' + consent['id']).json()['dispatch']
+    assert dispatch['consumed_provider_calls'] == 1
+    assert dispatch['input_tokens'] is None and dispatch['output_tokens'] is None
+    before = case.dump()
+    assert worker.run_once() is False
+    assert case.post(f'sessions/{sid}/turns', body, 'start').content == ack.content
+    assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+def test_worker_revalidates_failed_receipt_with_response_and_zero_calls_as_unknown(consent_case, monkeypatch):
+    from services.api.app.application.provider_codex_execution import CodexExecutionResult
+    case, _, _, _, _, _ = consent_case
+    prep, consent, _, _ = queued(consent_case)
+    executor = case.app.state.synthetic_executor
+    original_execute, invalid_receipts = executor.execute, []
+    def execute(prepared, summary, profile, before_request):
+        checked = original_execute(prepared, summary, profile, before_request)
+        # model_copy deliberately bypasses validators; use failed/partial so
+        # the existing completion-only call invariant cannot reject this case.
+        invalid = checked.model_copy(update={'outcome': 'failed', 'output_state': 'partial',
+            'error_code': 'CODEX_OPERATION_FAILED', 'consumed_provider_calls': 0})
+        invalid_receipts.append(invalid)
+        return invalid
+    monkeypatch.setattr(executor, 'execute', execute)
+    assert case.app.state.codex_turn_worker.run_once() is True
+    assert len(case.app.state.synthetic_transport_calls) == 1
+    invalid = invalid_receipts[0]
+    assert invalid.first_response is not None and invalid.consumed_provider_calls == 0
+    with pytest.raises(ValueError):
+        CodexExecutionResult.model_validate(invalid.model_dump(mode='json'))
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'unknown' and control['error_code'] == 'CODEX_OUTCOME_UNKNOWN'
+    assert _worker_provider_state(case, prep['turn_id']).finished.execution_result is None
+    result = case.get('turns/' + prep['turn_id'] + '/result').json()
+    assert result['output_state'] == 'none' and result['answer_markdown'] == ''
+    dispatch = case.get('consents/' + consent['id']).json()['dispatch']
+    assert dispatch['consumed_provider_calls'] == 1
+    assert dispatch['input_tokens'] is None and dispatch['output_tokens'] is None
+
+
+@pytest.mark.parametrize('response_outcome', ['completed', 'failed'])
+def test_worker_checked_response_without_callback_cannot_claim_completed(consent_case, monkeypatch, response_outcome):
+    case, _, _, _, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    executor = case.app.state.synthetic_executor
+    original_execute, original_transport = executor.execute, executor.transport
+    checked = []
+    if response_outcome == 'failed':
+        def failed_transport(*args):
+            raw = original_transport(*args)
+            response = SyntheticCodexResponse.model_validate_json(raw)
+            return canonical_bytes(response.model_copy(update={
+                'outcome': 'failed', 'error_code': 'CODEX_OPERATION_FAILED'}))
+        monkeypatch.setattr(executor, 'transport', failed_transport)
+    def execute(prepared, summary, profile, before_request):
+        # Deliberately omit the real worker callback while retaining the exact
+        # synthetic adapter type and its real transport response and receipt.
+        result = original_execute(prepared, summary, profile, lambda: None)
+        checked.append(result)
+        return result
+    monkeypatch.setattr(executor, 'execute', execute)
+    assert type(executor) is SyntheticCodexExecutor
+    assert case.app.state.codex_turn_worker.run_once() is True
+    assert checked[0].outcome == response_outcome
+    assert len(case.app.state.synthetic_transport_calls) == 1
+    code = 'CODEX_BINDING_INVALID' if response_outcome == 'completed' else 'CODEX_OPERATION_FAILED'
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'failed' and control['error_code'] == code
+    result = _worker_provider_state(case, prep['turn_id']).finished.execution_result
+    _assert_retained_worker_response(result, checked[0], code)
+
+
+def test_worker_unknown_guard_preserves_checked_response_as_unknown(consent_case, monkeypatch):
+    case, _, _, _, _, _ = consent_case
+    prep, consent, _, _ = queued(consent_case)
+    worker, executor = case.app.state.codex_turn_worker, case.app.state.synthetic_executor
+    original_execute, guard_errors, checked = executor.execute, [], []
+    def guard(*args):
+        raise RuntimeError('synthetic current execution decision unavailable')
+    def execute(prepared, summary, profile, before_request):
+        try:
+            before_request()
+        except RuntimeError as error:
+            guard_errors.append(str(error))
+        # An adapter that ignores the failed guard cannot restore a valid
+        # decision merely by returning a checked response from its transport.
+        result = original_execute(prepared, summary, profile, lambda: None)
+        checked.append(result)
+        return result
+    monkeypatch.setattr(worker, '_guard', guard)
+    monkeypatch.setattr(executor, 'execute', execute)
+    assert worker.run_once() is True
+    assert guard_errors == ['synthetic current execution decision unavailable']
+    assert checked[0].outcome == 'completed'
+    assert len(case.app.state.synthetic_transport_calls) == 1
+    control = case.get('turns/' + prep['turn_id']).json()
+    assert control['outcome'] == 'unknown' and control['error_code'] == 'CODEX_OUTCOME_UNKNOWN'
+    result = _worker_provider_state(case, prep['turn_id']).finished.execution_result
+    assert result is not None and result.outcome == 'unknown'
+    assert result.error_code == 'CODEX_OUTCOME_UNKNOWN' and result.output_state == 'partial'
+    assert result.consumed_provider_calls == checked[0].consumed_provider_calls == 1
+    assert result.answer == checked[0].answer
+    assert result.first_response == checked[0].first_response
+    assert result.first_response_sha256 == checked[0].first_response_sha256
+    assert result.usage == checked[0].usage
+    dispatch = case.get('consents/' + consent['id']).json()['dispatch']
+    assert dispatch['consumed_provider_calls'] == 1
+    assert dispatch['input_tokens'] == checked[0].usage.input_tokens
+    assert dispatch['output_tokens'] == checked[0].usage.output_tokens
+    before = case.dump()
+    assert worker.run_once() is False
+    assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import sqlite3
 import threading
 import time
-from typing import Protocol, TYPE_CHECKING
+from typing import NoReturn, Protocol, TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import TypeAdapter
@@ -51,6 +51,65 @@ class SyntheticCodexExecutor:
     def execute(self, prepared, summary, profile, before_request):
         return SyntheticCodexExecution(prepared,summary,profile,transport=self.transport).run(
             self.peer,before_request=before_request)
+
+
+class _CodexRequestAttempt:
+    """One synchronous callback attempt, not proof of a native sender."""
+
+    def __init__(self, guard: Callable[[], None]):
+        self._guard = guard
+        self._thread = threading.current_thread()
+        self._lock = threading.Lock()
+        self._attempted = False
+        self._passed = False
+        self._closed = False
+        self._failure: SafeCode | None = None
+
+    def _reject_locked(self, code: SafeCode) -> NoReturn:
+        if self._failure is None:
+            self._failure = code
+        raise ApiError(409, code, '原 Codex 请求回调已被安全阻止。')
+
+    def __call__(self) -> None:
+        with self._lock:
+            if self._closed:
+                # A late callback cannot change the already frozen outcome.
+                raise ApiError(409, 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED', '原请求回调已关闭。')
+            if self._attempted:
+                self._reject_locked('CODEX_NEW_OUTBOUND_CONSENT_REQUIRED')
+            if threading.current_thread() is not self._thread:
+                self._attempted = True
+                self._reject_locked('CODEX_BINDING_INVALID')
+            # Consume before the database guard, including a failed guard.
+            self._attempted = True
+        try:
+            self._guard()
+        except Exception as error:
+            code: SafeCode = 'CODEX_OUTCOME_UNKNOWN'
+            if isinstance(error, ApiError):
+                try:
+                    code = TypeAdapter(SafeCode).validate_python(error.code)
+                except ValueError:
+                    pass
+            with self._lock:
+                if not self._closed and self._failure is None:
+                    self._failure = code
+            raise
+        with self._lock:
+            # Reentry or another thread may have failed while the guard ran.
+            if self._closed:
+                raise ApiError(409, 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED', '原请求回调已关闭。')
+            if self._failure is not None:
+                self._reject_locked(self._failure)
+            self._passed = True
+
+    def close(self) -> SafeCode | None:
+        with self._lock:
+            if not self._closed:
+                self._closed = True
+                if self._failure is None and not self._passed:
+                    self._failure = 'CODEX_BINDING_INVALID'
+            return self._failure
 
 
 class CodexTurnWorker:
@@ -279,19 +338,29 @@ class CodexTurnWorker:
                 workspace,turn_id,owner,prepared,summary,profile,auth=claimed
                 started=time.monotonic()
                 self._callback_context=(workspace,turn_id,owner,threading.get_ident())
+                attempt = _CodexRequestAttempt(
+                    lambda: self._guard(workspace, turn_id, owner, started, auth))
                 try:
                     if self.executor is None:
                         raise ApiError(503,'CODEX_RUNTIME_UNAVAILABLE','执行适配器不可用。')
-                    result=self.executor.execute(prepared,summary,profile,
-                        lambda:self._guard(workspace,turn_id,owner,started,auth))
+                    result=self.executor.execute(prepared,summary,profile,attempt)
                     result=CodexExecutionResult.model_validate(result.model_dump(mode='json'))
                 except Exception:
                     # The adapter did not yield a checked receipt. Preserve an
                     # unknown outcome; never invent a zero-call response fact.
                     result=None
                 finally:
+                    failure = attempt.close()
                     self._callback_context=None
                     self.controls.release(workspace, turn_id, owner)
+                if (result is not None and result.outcome != 'unknown' and failure is not None
+                        and (result.outcome == 'completed' or failure == 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED')):
+                    # Keep checked transport facts; a callback attempt never
+                    # supplies or rewrites a provider call count or response.
+                    result = CodexExecutionResult.model_validate({
+                        **result.model_dump(mode='json'), 'outcome': 'unknown' if failure == 'CODEX_OUTCOME_UNKNOWN' else 'failed',
+                        'output_state': 'partial' if result.answer else 'none',
+                        'error_code': failure})
                 collection, scan_error = None, None
                 if self.turns.artifacts is not None and self.turns.artifacts.producer is not None:
                     try:

@@ -66,6 +66,8 @@ class CodexExecutionResult(CodexTurnModel):
             raise ValueError('Only completed execution has no error')
         if self.outcome == 'completed' and (self.consumed_provider_calls != 1 or self.first_response_sha256 is None):
             raise ValueError('Completion requires a real checked response')
+        if self.first_response is not None and self.consumed_provider_calls != 1:
+            raise ValueError('A retained response requires one consumed provider call')
         if self.first_response is None:
             if self.first_response_sha256 is not None or self.answer or self.usage != UsageSnapshot(input_tokens=None, output_tokens=None):
                 raise ValueError('Response facts require their complete original response')
