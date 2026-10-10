@@ -9,6 +9,6 @@ Explicit CI setup uses the preserved checksum-pinned Rust 1.95.0 provisioner and
 Runner: scripts/codex-turn/replay_frozen_config_materialization.py
 Manifest: scripts/codex-turn/frozen-config-materialization-source.json
 Workflow: .github/workflows/frozen-config-materialization.yml
-Branches: feat/M6.3-frozen-config-materialization-snapshot; feat/M6.3-native-config-preparation
+Branches: feat/M6.3-frozen-config-materialization-snapshot; feat/M6.3-native-config-preparation; fix/M6.3-frozen-config-sqlite-field
 
 Local runner, source preparation, build, rustfmt, Clippy, Rust tests, and product execution are NOT_RUN. Future CI must supply actual results before any engineering PASS. The opaque Config context is replay data, not consent or InputProof authority. Native Session/Step owner is NOT_IMPLEMENTED, real Agent is NOT_RUN, and production is NOT_ADMITTED.
