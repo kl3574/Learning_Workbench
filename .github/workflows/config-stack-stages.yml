@@ -2,13 +2,13 @@ name: Exact Config152 stack stages with declared test instrumentation
 on:
   push:
     branches:
-      - fix/M6.3-config-stack-stages
+      - fix/M6.3-config-stack-stages-lint
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   config-stack-stages:
-    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/fix/M6.3-config-stack-stages' }}
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/fix/M6.3-config-stack-stages-lint' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -26,8 +26,8 @@ jobs:
           import hashlib
           from pathlib import Path
           for name, size, digest in [
-              ('scripts/codex-turn/config-stack-stages-source.json', 8357, '4d157b31c14d515ed619594ad255781307f98afaf37ac3d808f1e64f013730d8'),
-              ('scripts/codex-turn/replay_config_stack_stages.py', 34355, 'ac78963f04d61b9cdbba14bd06c268bcf60d48a5e8592bd9a4bf9d048ceef9a1'),
+              ('scripts/codex-turn/config-stack-stages-source.json', 8517, '74ab8fff654c68ff47bcfa587a59a71e5a1107aa4a1e35d4ffcac99e94ae75ae'),
+              ('scripts/codex-turn/replay_config_stack_stages.py', 34560, 'd5a5a7c9ce7491f07319e730e76d3cdd05f569403e756a83bf5dd9bd37619502'),
               ('scripts/codex-turn/config-stack-stages.patch', 4538, 'ef783cce1597e269a722769001e427c9a642d93330eb437b802b6e66a0de8f8a'),
           ]:
               path = Path(name)

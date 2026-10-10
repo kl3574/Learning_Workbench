@@ -1,6 +1,6 @@
 # Exact Config152 stack stage diagnosis
 
-The independent branch fix/M6.3-config-stack-stages follows the two actual
+The independent branch fix/M6.3-config-stack-stages-lint follows the two actual
 single-case stack-overflow failures at e62044e40f45126fd9de73b9a92c30d3ba6d15d3,
 run 38032670192, job 114156691390, attempt 1. That minimal RED is not a root cause.
 
@@ -15,9 +15,13 @@ assertions, inputs, loops, test declarations and original data remain.
 
 SDK source changes are declared diagnostic test instrumentation. Original 14
 patch assets and their 11 selected applications remain immutable. The original
-Config152 manifest, runner, workflow and profile and all four diagnostic-v1
-assets retain exact bytes. No boxing, stack override, production repair, 3b
-comparison or future owner/materialization candidate is included.
+Config152 manifest, runner, workflow and profile retain exact bytes. In this
+independent lint branch, the copied diagnostic-v1 runner loses only its unused
+sys import and its workflow mirrors that runner pin. Its manifest and README
+remain exact; original e620 assets and actual RED evidence remain immutable.
+The stage runner loses its unused sys import and guards those repinned copies.
+No boxing, stack override, production repair, 3b comparison or future
+owner/materialization candidate is included.
 
 Unchanged parent prepare/provision/locked-fetch stages run first. The diagnosis
 checks their actual receipts and original source/normalized 8797-row inventories,
@@ -49,3 +53,11 @@ Stage candidate v1 was never published or executed. Static review found its
 post-overlay call to an inherited original-byte guard would reject the declared
 marker changes before Cargo. This v2 corrects the order and uses the independent
 post-overlay checks above; it does not change SDK instrumentation or behavior.
+
+At public stage head 31c1fe8e14a7712807442d3d6cd7fcc5238df85a, the backend
+Ruff gate reported F401 for unused sys imports in the diagnostic-v1 runner and
+stage-v2 runner. This v3 removes only those imports and propagates exact harness
+pins and the new branch binding. It preserves SDK source/graphs, stage markers,
+stack/profile, lock, toolchain and all commands. No lint rule, ignore or gate is
+weakened. Prior 31 stage results belong only to that head; all v3 behavior and
+lint execution remain NOT_RUN.

@@ -14,7 +14,6 @@ import json
 import os
 from pathlib import Path
 import re
-import sys
 
 MANIFEST_FILE = "config-stack-diagnosis-source.json"
 MANIFEST_BYTES = 5269

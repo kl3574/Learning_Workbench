@@ -15,14 +15,13 @@ import json
 import os
 from pathlib import Path
 import re
-import sys
 
 MANIFEST_FILE = "config-stack-stages-source.json"
-MANIFEST_BYTES = 8357
-MANIFEST_SHA = "4d157b31c14d515ed619594ad255781307f98afaf37ac3d808f1e64f013730d8"
+MANIFEST_BYTES = 8517
+MANIFEST_SHA = "74ab8fff654c68ff47bcfa587a59a71e5a1107aa4a1e35d4ffcac99e94ae75ae"
 CASE = "tools::executed_tool_calls::request_metadata::tests::recorder_refreshes_without_changing_execution_features_or_claiming_missing_history"
 GROUP = "tools::executed_tool_calls::request_metadata::tests::"
-BRANCH = "fix/M6.3-config-stack-stages"
+BRANCH = "fix/M6.3-config-stack-stages-lint"
 PARENT_PATH = "scripts/codex-turn/replay_frozen_config_materialization.py"
 PARENT_MANIFEST = "scripts/codex-turn/frozen-config-materialization-source.json"
 ASSET_PATHS = {
@@ -41,13 +40,13 @@ FIELDS = {
 }
 
 V1_ASSETS = {'.github/workflows/config-stack-diagnosis.yml': {'bytes': 7304,
-                                                  'sha256': 'e8b34c585d9b00fb4448d7716bc924410a653dfa936513e0d017eee3aa31e6e6'},
+                                                  'sha256': '685a86233cbc8d481594f61930b5b7c9a38da7d711cca95a87ee04f769d35bcd'},
  'scripts/codex-turn/CONFIG_STACK_DIAGNOSIS.md': {'bytes': 2257,
                                                   'sha256': '267aacfa0aeca945b9ea6c2ceb332b7a8898c1cebfd3b7762edb1681d0bba2e3'},
  'scripts/codex-turn/config-stack-diagnosis-source.json': {'bytes': 5269,
                                                            'sha256': '2397784a2f2d8501d2fb3542b6bb6c1132b7a578a3070333c9cf683c4394c197'},
- 'scripts/codex-turn/replay_config_stack_diagnosis.py': {'bytes': 21314,
-                                                         'sha256': '4a428a90e547c1c092ded4298bab3186c94b1898c700b7d15956cd164390784c'}}
+ 'scripts/codex-turn/replay_config_stack_diagnosis.py': {'bytes': 21303,
+                                                         'sha256': '7f8e7c5f443775f21a034f223b0eef3adb70b35bf64e3510f2fb2ceaaeb62f3e'}}
 MINIMAL_RED_ANCHOR = {'attempt': 1,
  'case': 'tools::executed_tool_calls::request_metadata::tests::recorder_refreshes_without_changing_execution_features_or_claiming_missing_history',
  'cause': 'UNDETERMINED',
@@ -179,7 +178,7 @@ def verify_inputs(bundle: Path) -> tuple:
     repo = bundle.parents[1]
     for name, pin in assets.items():
         checked_file(repo / name, pin)
-    require(contract["v1_assets"] == V1_ASSETS, "Exact immutable diagnostic v1 assets required")
+    require(contract["v1_assets"] == V1_ASSETS, "Exact lint-repinned diagnostic v1 copies required")
     for name, pin in contract["v1_assets"].items():
         checked_file(repo / name, pin)
     red = contract["minimal_red_anchor"]
@@ -247,7 +246,10 @@ def verify_inputs(bundle: Path) -> tuple:
     require(contract["limits"] == {
                 "changes_to_SDK_source": True,
                 "SDK_source_change_scope": "Exactly one existing test function gains stderr stage markers",
-                "changes_to_diagnostic_v1_assets": False,
+                "changes_to_diagnostic_v1_assets": True,
+                "diagnostic_v1_change_scope": (
+                    "Remove one unused sys import and mirror its runner pin in the copied workflow; immutable e620 assets remain historical"
+                ),
                 "changes_to_original_assertions_or_data": False,
                 "changes_to_original_test_assets_or_selection_manifest": False,
                 "changes_to_build_profile": False, "RUST_MIN_STACK_override": False,
