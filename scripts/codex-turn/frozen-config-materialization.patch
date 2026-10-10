@@ -1,0 +1,777 @@
+--- a/codex-rs/core/src/config/mod.rs
++++ b/codex-rs/core/src/config/mod.rs
+@@ -3208,6 +3208,76 @@
+     Ok(())
+ }
+ 
++// Captured only by the SDK's own successful materialization path. These
++// private fields are replay data; they do not establish prepared-owner consent.
++pub(crate) struct FrozenConfigMaterializationContext {
++    inputs: ConfigMaterializationInputs,
++    sources: ConfigMaterializationSources,
++}
++
++struct ConfigMaterializationInputs {
++    cfg: ConfigToml,
++    overrides: ConfigOverrides,
++    codex_home: AbsolutePathBuf,
++    config_layer_stack: ConfigLayerStack,
++}
++
++// The outer Option records whether a source operation actually ran. An inner
++// Option preserves its native result, including an observed absence. A missing
++// outer Option never falls back to live resolution during replay.
++#[derive(Default)]
++struct ConfigMaterializationSources {
++    cwd: Option<AbsolutePathBuf>,
++    repo_root: Option<Option<AbsolutePathBuf>>,
++    permission_home: Option<Option<PathUri>>,
++    prefer_mxc: Option<bool>,
++    legacy_permission_profile: Option<PermissionProfile>,
++    features: Option<(ManagedFeatures, Vec<String>)>,
++    mcp_enterprise_managed_auth: Option<Option<McpEnterpriseManagedAuthConfig>>,
++    agent_roles: Option<(BTreeMap<String, AgentRoleConfig>, Vec<String>)>,
++    model_providers: Option<HashMap<String, ModelProviderInfo>>,
++    unload_check_time: Option<std::time::Instant>,
++    base_instructions_file: Option<Option<String>>,
++    compact_prompt_file: Option<Option<String>>,
++    zsh_path: Option<Option<PathBuf>>,
++    model_catalog: Option<Option<ModelsResponse>>,
++    sqlite_home_env: Option<Option<AbsolutePathBuf>>,
++    prepared_network_proxy: Option<NetworkProxyConfig>,
++    network: Option<Option<NetworkProxySpec>>,
++    helper_readable_roots: Option<Vec<AbsolutePathBuf>>,
++    deny_read_context: Option<(Option<PathUri>, Vec<PathUri>)>,
++    otel: Option<(codex_config::types::OtelConfig, Vec<String>)>,
++}
++
++#[derive(Debug, thiserror::Error)]
++#[error("frozen config materialization is missing captured source: {field}")]
++struct MissingConfigMaterializationSource {
++    field: &'static str,
++}
++
++fn captured_config_source<T: Clone>(
++    source: &Option<T>,
++    field: &'static str,
++) -> std::io::Result<T> {
++    source.clone().ok_or_else(|| {
++        std::io::Error::new(
++            std::io::ErrorKind::InvalidInput,
++            MissingConfigMaterializationSource { field },
++        )
++    })
++}
++
++fn live_config_materialization_fs(
++    fs: Option<&dyn ExecutorFileSystem>,
++) -> std::io::Result<&dyn ExecutorFileSystem> {
++    fs.ok_or_else(|| {
++        std::io::Error::new(
++            std::io::ErrorKind::InvalidInput,
++            MissingConfigMaterializationSource { field: "live filesystem" },
++        )
++    })
++}
++
+ impl Config {
+     #[cfg(test)]
+     async fn load_from_base_config_with_overrides(
+@@ -3229,11 +3299,63 @@
+ 
+     pub(crate) async fn load_config_with_layer_stack(
+         fs: &dyn ExecutorFileSystem,
++        cfg: ConfigToml,
++        overrides: ConfigOverrides,
++        codex_home: AbsolutePathBuf,
++        config_layer_stack: ConfigLayerStack,
++    ) -> std::io::Result<Self> {
++        Self::capture_config_with_layer_stack(
++            fs, cfg, overrides, codex_home, config_layer_stack,
++        )
++        .await
++        .map(|(config, _)| config)
++    }
++
++    pub(crate) async fn capture_config_with_layer_stack(
++        fs: &dyn ExecutorFileSystem,
++        cfg: ConfigToml,
++        overrides: ConfigOverrides,
++        codex_home: AbsolutePathBuf,
++        config_layer_stack: ConfigLayerStack,
++    ) -> std::io::Result<(Self, FrozenConfigMaterializationContext)> {
++        Self::materialize_config_with_layer_stack(
++            Some(fs), cfg, overrides, codex_home, config_layer_stack, None,
++        )
++        .await
++    }
++
++    pub(crate) async fn replay_config_materialization(
++        context: FrozenConfigMaterializationContext,
++    ) -> std::io::Result<Self> {
++        let FrozenConfigMaterializationContext { inputs, sources } = context;
++        Self::materialize_config_with_layer_stack(
++            None,
++            inputs.cfg,
++            inputs.overrides,
++            inputs.codex_home,
++            inputs.config_layer_stack,
++            Some(sources),
++        )
++        .await
++        .map(|(config, _)| config)
++    }
++
++    async fn materialize_config_with_layer_stack(
++        fs: Option<&dyn ExecutorFileSystem>,
+         mut cfg: ConfigToml,
+         overrides: ConfigOverrides,
+         codex_home: AbsolutePathBuf,
+         config_layer_stack: ConfigLayerStack,
+-    ) -> std::io::Result<Self> {
++        replay: Option<ConfigMaterializationSources>,
++    ) -> std::io::Result<(Self, FrozenConfigMaterializationContext)> {
++        let inputs = ConfigMaterializationInputs {
++            cfg: cfg.clone(),
++            overrides: overrides.clone(),
++            codex_home: codex_home.clone(),
++            config_layer_stack: config_layer_stack.clone(),
++        };
++        let replay = replay.as_ref();
++        let mut captured = ConfigMaterializationSources::default();
+         // Keep the large config-construction future off small test thread stacks.
+         Box::pin(async move {
+         if cfg.experimental_thread_store_endpoint.is_some() {
+@@ -3390,27 +3512,45 @@
+             web_search_request: override_tools_web_search_request,
+         };
+ 
+-        let configured_features = Features::from_sources(
+-            FeatureConfigSource {
+-                features: cfg.features.as_ref(),
+-                experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
+-            },
+-            FeatureConfigSource {
+-                ..Default::default()
+-            },
+-            feature_overrides,
+-        );
+-        let features = ManagedFeatures::from_configured_with_warnings(
+-            configured_features,
+-            feature_requirements,
+-            &mut startup_warnings,
+-        )?;
+-        let mcp_enterprise_managed_auth = McpEnterpriseManagedAuthConfig::resolve(
+-            &config_layer_stack,
+-            cfg.mcp_enterprise_managed_auth.as_ref(),
+-            &cfg.mcp_servers,
+-            features.enabled(Feature::UseXaa),
+-        )?;
++        let feature_warnings_before = startup_warnings.len();
++        let features = match replay {
++            Some(sources) => {
++                let (features, warnings) = captured_config_source(&sources.features, "features")?;
++                startup_warnings.extend(warnings);
++                features
++            }
++            None => {
++                let configured_features = Features::from_sources(
++                    FeatureConfigSource {
++                        features: cfg.features.as_ref(),
++                        experimental_use_unified_exec_tool: cfg.experimental_use_unified_exec_tool,
++                    },
++                    FeatureConfigSource {
++                        ..Default::default()
++                    },
++                    feature_overrides,
++                );
++                ManagedFeatures::from_configured_with_warnings(
++                    configured_features,
++                    feature_requirements,
++                    &mut startup_warnings,
++                )?
++            }
++        };
++        captured.features = Some((
++            features.clone(),
++            startup_warnings[feature_warnings_before..].to_vec(),
++        ));
++        let mcp_enterprise_managed_auth = match replay {
++            Some(sources) => captured_config_source(&sources.mcp_enterprise_managed_auth, "mcp_enterprise_managed_auth")?,
++            None => McpEnterpriseManagedAuthConfig::resolve(
++                &config_layer_stack,
++                cfg.mcp_enterprise_managed_auth.as_ref(),
++                &cfg.mcp_servers,
++                features.enabled(Feature::UseXaa),
++            )?,
++        };
++        captured.mcp_enterprise_managed_auth = Some(mcp_enterprise_managed_auth.clone());
+         let non_prefixed_mcp_tool_servers = if features.enabled(Feature::NonPrefixedMcpToolNames) {
+             cfg.features
+                 .as_ref()
+@@ -3434,29 +3574,37 @@
+             &mut constrained_windows_sandbox_mode,
+             &mut startup_warnings,
+         )?;
+-        let resolved_cwd = AbsolutePathBuf::try_from(normalize_for_native_workdir({
+-            use std::env;
+-
+-            match cwd {
+-                None => {
+-                    tracing::info!("cwd not set, using current dir");
+-                    env::current_dir()?
++        let resolved_cwd = match replay {
++            Some(sources) => captured_config_source(&sources.cwd, "cwd")?,
++            None => AbsolutePathBuf::try_from(normalize_for_native_workdir({
++                use std::env;
++                match cwd {
++                    None => {
++                        tracing::info!("cwd not set, using current dir");
++                        env::current_dir()?
++                    }
++                    Some(p) if p.is_absolute() => p,
++                    Some(p) => {
++                        tracing::info!("cwd is relative, resolving against current dir");
++                        let mut current = env::current_dir()?;
++                        current.push(p);
++                        current
++                    }
+                 }
+-                Some(p) if p.is_absolute() => p,
+-                Some(p) => {
+-                    // Resolve relative path against the current working directory.
+-                    tracing::info!("cwd is relative, resolving against current dir");
+-                    let mut current = env::current_dir()?;
+-                    current.push(p);
+-                    current
+-                }
+-            }
+-        }))?;
++            }))?,
++        };
++        captured.cwd = Some(resolved_cwd.clone());
+         let requested_additional_writable_roots: Vec<AbsolutePathBuf> = additional_writable_roots
+             .into_iter()
+             .map(|path| AbsolutePathBuf::resolve_path_against_base(path, resolved_cwd.as_path()))
+             .collect();
+-        let repo_root = resolve_root_git_project_for_trust(fs, &resolved_cwd).await;
++        let repo_root = match replay {
++            Some(sources) => captured_config_source(&sources.repo_root, "repo_root")?,
++            None => resolve_root_git_project_for_trust(
++                live_config_materialization_fs(fs)?, &resolved_cwd,
++            ).await,
++        };
++        captured.repo_root = Some(repo_root.clone());
+         let active_project = cfg
+             .get_active_project(
+                 resolved_cwd.as_path(),
+@@ -3477,11 +3625,16 @@
+         } else {
+             persisted_permission_profile_id.as_deref()
+         };
++        let permission_home = match replay {
++            Some(sources) => captured_config_source(&sources.permission_home, "permission_home")?,
++            None => AbsolutePathBufGuard::home_directory()
++                .and_then(|home| PathUri::from_host_native_path(home).ok()),
++        };
++        captured.permission_home = Some(permission_home.clone());
+         let permission_path_context = ConfigPathContext::new(
+             PathConvention::native(),
+             Some(PathUri::from_abs_path(&resolved_cwd)),
+-            AbsolutePathBufGuard::home_directory()
+-                .and_then(|home| PathUri::from_host_native_path(home).ok()),
++            permission_home,
+         );
+         let effective_permission_selection = resolve_effective_permission_selection(
+             cfg.permissions.as_ref(),
+@@ -3512,16 +3665,20 @@
+             default_permissions_override.as_deref(),
+             permission_config_syntax,
+         );
+-        let prefer_mxc = features.enabled(Feature::PreferMxc)
+-            && network_config_allows_mxc(
+-                &effective_permission_selection,
+-                profiles_are_active,
+-                permission_profile.as_ref(),
+-                network_requirements.as_ref(),
+-                cfg.features.as_ref(),
+-                enable_network_proxy,
+-            )?
+-            && codex_sandboxing::windows_mxc_available();
++        let prefer_mxc = match replay {
++            Some(sources) => captured_config_source(&sources.prefer_mxc, "prefer_mxc")?,
++            None => features.enabled(Feature::PreferMxc)
++                && network_config_allows_mxc(
++                    &effective_permission_selection,
++                    profiles_are_active,
++                    permission_profile.as_ref(),
++                    network_requirements.as_ref(),
++                    cfg.features.as_ref(),
++                    enable_network_proxy,
++                )?
++                && codex_sandboxing::windows_mxc_available(),
++        };
++        captured.prefer_mxc = Some(prefer_mxc);
+         let local_windows_sandbox_type =
+             resolve_windows_sandbox_type(windows_sandbox_type, prefer_mxc);
+         let legacy_windows_sandbox_level = windows_sandbox_level_for_legacy_checks(
+@@ -3685,14 +3842,20 @@
+             // Derive the old `sandbox_mode` defaults as a profile first, then
+             // keep a legacy-compatible projection only for the remaining code
+             // paths that still speak `SandboxPolicy`.
+-            let mut permission_profile = cfg
+-                .derive_permission_profile(
+-                    sandbox_mode,
+-                    legacy_windows_sandbox_level,
+-                    Some(&active_project),
+-                    Some(&constrained_permission_profile),
+-                )
+-                .await;
++            let mut permission_profile = match replay {
++                Some(sources) => captured_config_source(
++                    &sources.legacy_permission_profile, "legacy_permission_profile",
++                )?,
++                None => cfg
++                    .derive_permission_profile(
++                        sandbox_mode,
++                        legacy_windows_sandbox_level,
++                        Some(&active_project),
++                        Some(&constrained_permission_profile),
++                    )
++                    .await,
++            };
++            captured.legacy_permission_profile = Some(permission_profile.clone());
+             // The legacy-derived profiles above are expected to be
+             // representable as `SandboxPolicy`. This guard keeps the old safe
+             // fallback behavior if future changes make this branch derive a
+@@ -3716,13 +3879,19 @@
+                 Vec::new(),
+             )
+         };
+-        let prepared_network = PreparedNetworkConfig::from_inputs(NetworkConfigInputs {
+-            configured_proxy: configured_network_proxy_config,
+-            feature_enabled: enable_network_proxy,
+-            features: cfg.features.as_ref(),
+-            candidate_permission_profile: &permission_profile,
+-            credential_broker_base_url: cfg.openai_base_url.as_deref(),
+-        });
++        let prepared_network = match replay {
++            Some(sources) => PreparedNetworkConfig {
++                configured_proxy: captured_config_source(&sources.prepared_network_proxy, "prepared_network_proxy")?,
++            },
++            None => PreparedNetworkConfig::from_inputs(NetworkConfigInputs {
++                configured_proxy: configured_network_proxy_config,
++                feature_enabled: enable_network_proxy,
++                features: cfg.features.as_ref(),
++                candidate_permission_profile: &permission_profile,
++                credential_broker_base_url: cfg.openai_base_url.as_deref(),
++            }),
++        };
++        captured.prepared_network_proxy = Some(prepared_network.configured_proxy.clone());
+         if cfg.approval_policy == Some(AskForApproval::UnlessTrusted) {
+             return Err(std::io::Error::new(
+                 ErrorKind::InvalidData,
+@@ -3801,17 +3970,35 @@
+             .unwrap_or_default();
+         let terminal_resize_reflow = resolve_terminal_resize_reflow_config(&cfg);
+ 
+-        let agent_roles =
+-            load_agent_roles(fs, &cfg, &config_layer_stack, &mut startup_warnings).await?;
++        let role_warnings_before = startup_warnings.len();
++        let agent_roles = match replay {
++            Some(sources) => {
++                let (roles, warnings) = captured_config_source(&sources.agent_roles, "agent_roles")?;
++                startup_warnings.extend(warnings);
++                roles
++            }
++            None => load_agent_roles(
++                live_config_materialization_fs(fs)?, &cfg, &config_layer_stack, &mut startup_warnings,
++            ).await?,
++        };
++        captured.agent_roles = Some((
++            agent_roles.clone(),
++            startup_warnings[role_warnings_before..].to_vec(),
++        ));
+ 
+         let openai_base_url = cfg
+             .openai_base_url
+             .clone()
+             .filter(|value| !value.is_empty());
+ 
+-        let model_providers =
+-            merge_configured_model_providers(built_in_model_providers(openai_base_url), cfg.model_providers)
+-                .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
++        let model_providers = match replay {
++            Some(sources) => captured_config_source(&sources.model_providers, "model_providers")?,
++            None => merge_configured_model_providers(
++                built_in_model_providers(openai_base_url), cfg.model_providers,
++            )
++            .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?,
++        };
++        captured.model_providers = Some(model_providers.clone());
+ 
+         let model_provider_id = config_layer_stack.required_model_provider().map(str::to_string)
+             .or(model_provider)
+@@ -3910,10 +4097,12 @@
+             .max(MIN_EMPTY_YIELD_TIME_MS);
+         let thread_unload_delay =
+             Duration::from_secs(cfg.thread_unload_delay_secs.unwrap_or(/*default*/ 60));
+-        if std::time::Instant::now()
+-            .checked_add(thread_unload_delay)
+-            .is_none()
+-        {
++        let unload_check_time = match replay {
++            Some(sources) => captured_config_source(&sources.unload_check_time, "unload_check_time")?,
++            None => std::time::Instant::now(),
++        };
++        captured.unload_check_time = Some(unload_check_time);
++        if unload_check_time.checked_add(thread_unload_delay).is_none() {
+             return Err(std::io::Error::new(
+                 std::io::ErrorKind::InvalidInput,
+                 "thread_unload_delay_secs is too large",
+@@ -3990,12 +4179,15 @@
+         // path is relative, resolve it against the effective cwd so the
+         // behaviour matches other path-like config values.
+         let model_instructions_path = cfg.model_instructions_file.as_ref();
+-        let file_base_instructions = Self::try_read_non_empty_file(
+-            fs,
+-            model_instructions_path,
+-            "model instructions file",
+-        )
+-        .await?;
++        let file_base_instructions = match replay {
++            Some(sources) => captured_config_source(&sources.base_instructions_file, "base_instructions_file")?,
++            None => Self::try_read_non_empty_file(
++                live_config_materialization_fs(fs)?,
++                model_instructions_path,
++                "model instructions file",
++            ).await?,
++        };
++        captured.base_instructions_file = Some(file_base_instructions.clone());
+         let base_instructions = base_instructions
+             .or(file_base_instructions)
+             .or(cfg.instructions.clone());
+@@ -4057,28 +4249,43 @@
+         let personality = personality.or(cfg.personality);
+ 
+         let experimental_compact_prompt_path = cfg.experimental_compact_prompt_file.as_ref();
+-        let file_compact_prompt = Self::try_read_non_empty_file(
+-            fs,
+-            experimental_compact_prompt_path,
+-            "experimental compact prompt file",
+-        )
+-        .await?;
++        let file_compact_prompt = match replay {
++            Some(sources) => captured_config_source(&sources.compact_prompt_file, "compact_prompt_file")?,
++            None => Self::try_read_non_empty_file(
++                live_config_materialization_fs(fs)?,
++                experimental_compact_prompt_path,
++                "experimental compact prompt file",
++            ).await?,
++        };
++        captured.compact_prompt_file = Some(file_compact_prompt.clone());
+         let compact_prompt = compact_prompt.or(file_compact_prompt);
+-        let zsh_path = default_zsh_path
+-            .or_else(|| InstallContext::current().bundled_zsh_path())
+-            .map(AbsolutePathBuf::into_path_buf);
++        let zsh_path = match replay {
++            Some(sources) => captured_config_source(&sources.zsh_path, "zsh_path")?,
++            None => default_zsh_path
++                .or_else(|| InstallContext::current().bundled_zsh_path())
++                .map(AbsolutePathBuf::into_path_buf),
++        };
++        captured.zsh_path = Some(zsh_path.clone());
+ 
+         let review_model = override_review_model.or(cfg.review_model);
+ 
+         let check_for_update_on_startup = cfg.check_for_update_on_startup.unwrap_or(true);
+-        let model_catalog = load_model_catalog(cfg.model_catalog_json.clone())?;
++        let model_catalog = match replay {
++            Some(sources) => captured_config_source(&sources.model_catalog, "model_catalog")?,
++            None => load_model_catalog(cfg.model_catalog_json.clone())?,
++        };
++        captured.model_catalog = Some(model_catalog.clone());
+ 
+         let log_dir = cfg
+             .log_dir
+             .as_ref()
+             .map(AbsolutePathBuf::to_path_buf)
+             .unwrap_or_else(|| codex_home.join("log").to_path_buf());
+-        let sqlite_home_env = resolve_sqlite_home_env(&resolved_cwd);
++        let sqlite_home_env = match replay {
++            Some(sources) => captured_config_source(&sources.sqlite_home_env, "sqlite_home_env")?,
++            None => resolve_sqlite_home_env(&resolved_cwd),
++        };
++        captured.sqlite_home_env = Some(sqlite_home_env.clone());
+         requirements::push_sqlite_home_env_override_warning(
+             configured_sqlite_home.as_ref(),
+             sqlite_home_env.as_deref(),
+@@ -4155,17 +4362,25 @@
+             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("{e}")))?;
+ 
+         let network_permission_profile = constrained_permission_profile.get().clone();
+-        let network = build_network_proxy_spec(
+-            prepared_network.configured_proxy,
+-            network_requirements,
+-            &network_permission_profile,
+-            &shell_environment_policy.r#set,
+-        )?;
+-        let mut helper_readable_roots = get_readable_roots_required_for_codex_runtime(
+-            &codex_home,
+-            zsh_path.as_ref(),
+-            main_execve_wrapper_exe.as_ref(),
+-        );
++        let network = match replay {
++            Some(sources) => captured_config_source(&sources.network, "network")?,
++            None => build_network_proxy_spec(
++                prepared_network.configured_proxy,
++                network_requirements,
++                &network_permission_profile,
++                &shell_environment_policy.r#set,
++            )?,
++        };
++        captured.network = Some(network.clone());
++        let mut helper_readable_roots = match replay {
++            Some(sources) => captured_config_source(&sources.helper_readable_roots, "helper_readable_roots")?,
++            None => get_readable_roots_required_for_codex_runtime(
++                &codex_home,
++                zsh_path.as_ref(),
++                main_execve_wrapper_exe.as_ref(),
++            ),
++        };
++        captured.helper_readable_roots = Some(helper_readable_roots.clone());
+         if features.enabled(Feature::MemoryTool) && memories_config.use_memories {
+             helper_readable_roots.push(memories_root);
+         }
+@@ -4207,13 +4422,19 @@
+             && let Some(managed_file_system_policy) = managed_deny_read_policy.as_ref()
+         {
+             let cwd = PathUri::from_abs_path(&resolved_cwd);
+-            let user_home_dir = PathUri::from_host_native_path("~").ok();
+-            let temporary_directories = std::env::var_os("TMPDIR")
+-                .filter(|path| !path.is_empty())
+-                .and_then(|path| AbsolutePathBuf::from_absolute_path(PathBuf::from(path)).ok())
+-                .map(PathUri::from)
+-                .into_iter()
+-                .collect::<Vec<_>>();
++            let (user_home_dir, temporary_directories) = match replay {
++                Some(sources) => captured_config_source(&sources.deny_read_context, "deny_read_context")?,
++                None => (
++                    PathUri::from_host_native_path("~").ok(),
++                    std::env::var_os("TMPDIR")
++                        .filter(|path| !path.is_empty())
++                        .and_then(|path| AbsolutePathBuf::from_absolute_path(PathBuf::from(path)).ok())
++                        .map(PathUri::from)
++                        .into_iter()
++                        .collect::<Vec<_>>(),
++                ),
++            };
++            captured.deny_read_context = Some((user_home_dir.clone(), temporary_directories.clone()));
+             let context = FileSystemSandboxPolicyContext {
+                 cwd: &cwd,
+                 workspace_roots: std::slice::from_ref(&cwd),
+@@ -4271,7 +4492,16 @@
+             profile_workspace_roots,
+         )
+         .map_err(std::io::Error::from)?;
+-        let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
++        let otel_warnings_before = startup_warnings.len();
++        let otel = match replay {
++            Some(sources) => {
++                let (otel, warnings) = captured_config_source(&sources.otel, "otel")?;
++                startup_warnings.extend(warnings);
++                otel
++            }
++            None => otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings),
++        };
++        captured.otel = Some((otel.clone(), startup_warnings[otel_warnings_before..].to_vec()));
+         let config = Self {
+             prefer_mxc,
+             model,
+@@ -4563,7 +4793,7 @@
+                 .unwrap_or_default(),
+             otel,
+         };
+-        Ok(config)
++        Ok((config, FrozenConfigMaterializationContext { inputs, sources: captured }))
+         })
+         .await
+     }
+--- a/codex-rs/core/src/config/config_tests.rs
++++ b/codex-rs/core/src/config/config_tests.rs
+@@ -13475,3 +13475,175 @@
+ 
+     Ok(())
+ }
++
++async fn capture_config_materialization_fixture(
++    fixture: &PrecedenceTestFixture,
++) -> std::io::Result<(Config, FrozenConfigMaterializationContext)> {
++    Config::capture_config_with_layer_stack(
++        LOCAL_FS.as_ref(),
++        fixture.cfg.clone(),
++        ConfigOverrides {
++            cwd: Some(fixture.cwd_path()),
++            ..Default::default()
++        },
++        fixture.codex_home(),
++        ConfigLayerStack::default(),
++    )
++    .await
++}
++
++#[tokio::test]
++async fn config_materialization_replay_preserves_values_and_warnings() -> std::io::Result<()> {
++    let mut fixture = create_test_fixture()?;
++    let warning_cfg: ConfigToml = toml::from_str(
++        r#"
++[otel]
++environment = "frozen-config-test"
++
++[otel.span_attributes]
++"" = "missing-key"
++"example.trace_attr" = "enabled"
++
++[otel.tracestate.example]
++alpha = "one"
++beta = "two\ntoo"
++"#,
++    )
++    .expect("TOML deserialization should succeed");
++    fixture.cfg.otel = warning_cfg.otel;
++    fixture.cfg.sqlite_home = Some(fixture.codex_home());
++
++    let (captured, context) = capture_config_materialization_fixture(&fixture).await?;
++
++    assert_eq!(captured.model.as_deref(), Some("o3"));
++    assert_eq!(captured.cwd, fixture.cwd.abs());
++    assert_eq!(captured.sqlite_home, fixture.codex_home());
++    assert_eq!(captured.otel.environment, "frozen-config-test");
++    assert_eq!(
++        captured.otel.span_attributes,
++        BTreeMap::from([("example.trace_attr".to_string(), "enabled".to_string())])
++    );
++    assert!(captured.startup_warnings.iter().any(|warning| {
++        warning.contains("Ignoring invalid `otel.span_attributes` config")
++            && warning.contains("configured span attribute key must not be empty")
++    }));
++    assert!(captured.startup_warnings.iter().any(|warning| {
++        warning.contains("Ignoring invalid `otel.tracestate` config")
++            && warning.contains("invalid configured tracestate value for example.beta")
++    }));
++
++    let replayed = Config::replay_config_materialization(context).await?;
++
++    assert_eq!(replayed.startup_warnings, captured.startup_warnings);
++    assert_eq!(replayed, captured);
++    Ok(())
++}
++
++#[tokio::test]
++async fn config_materialization_replay_keeps_captured_file_sources() -> std::io::Result<()> {
++    let mut fixture = create_test_fixture()?;
++    let instructions_path = fixture.cwd_path().join("model_instructions.txt");
++    let compact_prompt_path = fixture.cwd_path().join("compact_prompt.txt");
++    let catalog_path = fixture.codex_home.path().join("catalog.json");
++    let mut catalog = bundled_models_response()
++        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
++    catalog.models = catalog.models.into_iter().take(1).collect();
++    std::fs::write(&instructions_path, "  original instructions  ")?;
++    std::fs::write(&compact_prompt_path, "  original compact prompt  ")?;
++    std::fs::write(
++        &catalog_path,
++        serde_json::to_string(&catalog).expect("serialize catalog"),
++    )?;
++    fixture.cfg.model_instructions_file = Some(instructions_path.abs());
++    fixture.cfg.experimental_compact_prompt_file = Some(compact_prompt_path.abs());
++    fixture.cfg.model_catalog_json = Some(catalog_path.abs());
++
++    let (captured, context) = capture_config_materialization_fixture(&fixture).await?;
++    assert_eq!(
++        captured.base_instructions.as_deref(),
++        Some("original instructions")
++    );
++    assert_eq!(
++        captured.compact_prompt.as_deref(),
++        Some("original compact prompt")
++    );
++    assert_eq!(captured.model_catalog, Some(catalog));
++
++    std::fs::write(&instructions_path, "changed instructions")?;
++    std::fs::write(&compact_prompt_path, "changed compact prompt")?;
++    let (changed, _) = capture_config_materialization_fixture(&fixture).await?;
++    assert_eq!(
++        changed.base_instructions.as_deref(),
++        Some("changed instructions")
++    );
++    assert_eq!(
++        changed.compact_prompt.as_deref(),
++        Some("changed compact prompt")
++    );
++    assert_ne!(changed.base_instructions, captured.base_instructions);
++    assert_ne!(changed.compact_prompt, captured.compact_prompt);
++
++    std::fs::write(&catalog_path, r#"{"models":[]}"#)?;
++    let live_error = Config::load_config_with_layer_stack(
++        LOCAL_FS.as_ref(),
++        fixture.cfg.clone(),
++        ConfigOverrides {
++            cwd: Some(fixture.cwd_path()),
++            ..Default::default()
++        },
++        fixture.codex_home(),
++        ConfigLayerStack::default(),
++    )
++    .await
++    .expect_err("live loading must reject the changed empty model catalog");
++    assert_eq!(live_error.kind(), ErrorKind::InvalidData);
++
++    let replayed = Config::replay_config_materialization(context).await?;
++
++    assert_eq!(replayed, captured);
++    Ok(())
++}
++
++#[tokio::test]
++async fn config_materialization_replay_rejects_missing_source_record() -> std::io::Result<()> {
++    let fixture = create_test_fixture()?;
++    let (_, mut context) = capture_config_materialization_fixture(&fixture).await?;
++    assert!(context.sources.model_catalog.is_some());
++    context.sources.model_catalog = None;
++
++    let error = Config::replay_config_materialization(context)
++        .await
++        .expect_err("a missing source record must not fall back to live resolution");
++
++    assert_eq!(error.kind(), ErrorKind::InvalidInput);
++    let missing = error
++        .get_ref()
++        .and_then(|source| source.downcast_ref::<MissingConfigMaterializationSource>())
++        .expect("the error must preserve the structured missing-source cause");
++    assert_eq!(missing.field, "model_catalog");
++    Ok(())
++}
++
++#[tokio::test]
++async fn config_materialization_replay_accepts_observed_absence() -> std::io::Result<()> {
++    let fixture = create_test_fixture()?;
++    let (captured, context) = capture_config_materialization_fixture(&fixture).await?;
++
++    assert!(matches!(context.sources.model_catalog.as_ref(), Some(None)));
++    assert!(matches!(
++        context.sources.base_instructions_file.as_ref(),
++        Some(None)
++    ));
++    assert!(matches!(
++        context.sources.compact_prompt_file.as_ref(),
++        Some(None)
++    ));
++    assert_eq!(captured.model_catalog, None);
++    assert_eq!(captured.base_instructions, None);
++    assert_eq!(captured.compact_prompt, None);
++
++    let replayed = Config::replay_config_materialization(context).await?;
++
++    assert_eq!(replayed, captured);
++    Ok(())
++}
