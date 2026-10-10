@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-09T12:33:17.259793+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-10T01:46:03Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：ONLY_ISSUE32_PR56_ACTUAL_LATEST_BODY_HASH_UTC_READBACK; other36_issue full sync remains historical
-实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
+实施：IN_PROGRESS；2026-10-10：隔离代码57e64e3落实一次回调/线程/关闭保护及首响应调用计数校验；聚焦88PASS2WARN，完整六CI运行中，真实native Agent仍未准入。；当前任务：M6.3；下一任务：M6.3
 
-下一任务：从当前SDK identity与具名真实session caller开始落实私有typed owner交接，保留真实Session/Step/history/reset及所有late mutation后最终EncodedJson→同一frozen sender；闭合完整InputProof、权威versions/capacity/token、已有durable-start/额度/取消竞争与qualifiedruntime，再执行已授权的单次DeepSeek真实Agent验证。source/fixture/CI不能代替genuinecapture或onlineproof；physical numeric仍BLOCKED_ENVIRONMENT，Agent/M6.3/AC21未验收，M7todo。
+继续回读57e64e3原六项CI的真实终态并保留原失败/环境跳过；随后补齐有序SDK叠加、实际有效鉴权来源与pre-preview真实Session/Step冻结对象到同一sender的接线，闭合完整InputProof、权威版本/容量/token、持久开始/额度/取消及qualifiedruntime，再执行已授权的单次DeepSeek真实Agent测试。M6.3/AC21未验收；真实数值BLOCKED_ENVIRONMENT，M7todo。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -33,7 +33,7 @@
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
 | M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 75f6f995f20fe3899a97ba7836277581ea176364 |
-| M6.3 CodexBroker/App Server、操作审批、产物清单 | in_progress | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | f4e41f613800a01a0a0a52ac2dc0f57cec5933ad |
+| M6.3 CodexBroker/App Server、操作审批、产物清单 | in_progress | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 57e64e397cc63b88ea0d0a9954e9f46336f43291 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
 | M7.3 独立内容审校、真实用户试用、交付说明 | todo | [#35](https://github.com/kl3574/Learning_Workbench/issues/35) | 未验证提交 |
@@ -245,7 +245,8 @@
 - M6.3_worker_fixture_lease_diagnosis: {'at': '2026-10-03T12:19:51.495122+00:00', 'conclusion': 'Historical Group terminal recorded past persisted lease; injected expiry reproduces original two assertion REDs, valid controls and fresh-owner recovery pass without second Provider dispatch. Underlying host clock/suspension mechanism and historical Import cause remain UNKNOWN. No new production defect established.', 'evidence': 'progress/evidence/2026-10-03/M6.3-worker-lease-fixture-bounded-diagnosis/REPORT.json', 'gate_status': 'Root3633PASS2ENVSKIP1ERROR and backup-owner221PASS1ERROR remain actual failed complete/related gates; diagnostic expectedRED/PASS cannot overwrite.', 'public_candidates_verified': 39, 'raw_items_verified': 122, 'report_sha256': '29a5db268f13a9a71ca66f0104d65c89dd4aa0b7ad2af0c4ec55157a8406140b', 'root_verified_inputs': 1340, 'scope': 'independent hash/provenance/report readback only; no new execution, system security probes or native UI', 'source': 'unchanged ad494; diagnostics use ordinary synthetic protocol/real local parser and private UTC seam, no new production commit', 'sourcepush': False}
 - M7.1_session_history_backup_repair: {'evidence': 'progress/evidence/2026-10-03/M7.1-session-backup-history-local-repair/REPORT.json', 'fixed': 'b6340d913df252e30b920ec548e6cfd580505ec9', 'immutable_evidence_admission': 'progress/evidence/2026-10-03/M7.1-backup-original-evidence-whitespace-admission/REPORT.json', 'inputs': 1344, 'm7_task': 'todo', 'owner_gate': '221PASS1setupERROR; exact diagnostic1PASS does not clearoriginal', 'public_selected': 64, 'raw_private_only': 1665, 'sourcepush': False, 'status': 'LOCAL_REPAIRED_STATIC_AND_EVIDENCE_REVIEWED_NOT_FULL_ACCEPTANCE'}
 - browser_native: 固定06b新串行原133PASS0FAIL/actual0/20.4m；原30s/1worker/retry0，10generated先freeze后原bytes/fullmode恢复，25334source/index/link exact；旧26P107FAIL和ENOSPC116完整109P7F+117partial/nofooter保留。当前5da3bundle变化整套未重跑，非真实Agent验收。证据：progress/evidence/2026-10-08/M6.3-public5da-native133PASS-native03FAILENV/REPORT.json
-- ci: 精确cf873原完整CI37923776848实际6SUCCESS：backend1114P3WARN及Ruff/Mypy296PASS；frontend1424P/167files；spec962P2WARN且原verify-spec仅structural；browser原整套133P/38.4m；integration2550collected/2548P2真实numericENVskip2WARN2683.54s；原scanner25509files。六首raw各download1/checkout同head，没有printedexit0；当前worker8在compact原件未逐名报告，SDK135仍只旧1be8实际PASS，E2E静态TSC未跑。两numericENVskip不当数值PASS，Agent/M6.3/AC21仍未验收，M7todo；密钥读取/外发、模型请求、本地写入0。
+- ci: CURRENT57 original six-CI RUNNING_AT_CAPTURE (4metadata-success/2running), no global pass borrowed; focused boundary88PASS2WARN separate. Prior exactcf873 complete success retained in archived checkpoint and original Git parent.
+- codex_worker_request_attempt: {'focused': '88PASS2WARN139.55s', 'mypy': '296PASS', 'publication': '25528PASS', 'real_Agent': 'NOT_RUN', 'report': 'progress/evidence/2026-10-10/M6.3-worker-request-attempt/REPORT.json', 'ruff': 'PASS', 'source': '57e64e397cc63b88ea0d0a9954e9f46336f43291'}
 - contract: 固定06b原完整Python实际4604collected/4602PASS/0FAIL/2numericENVskip/3warnings/exit0；新owned37venv，来源/source/fullPOSIX核合。当前fc仅3bundle工程变化，整套未重跑；旧438六失败与27authowner机制证据另存，不改历史。证据：progress/evidence/2026-10-08/M6.3-metadata24-adopted-fixed06b-PythonPASS-nativeFAILENV-serialRUNNING/REPORT.json
 - integration: 固定06b原完整Python实际4604collected/4602PASS/0FAIL/2numericENVskip/3warnings/exit0；新owned37venv，来源/source/fullPOSIX核合。当前fc仅3bundle工程变化，整套未重跑；旧438六失败与27authowner机制证据另存，不改历史。证据：progress/evidence/2026-10-08/M6.3-metadata24-adopted-fixed06b-PythonPASS-nativeFAILENV-serialRUNNING/REPORT.json
 - learning_effectiveness: NOT_RUN
