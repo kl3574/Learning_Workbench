@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-10T04:18:34.180305+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-10T05:06:32.741375+00:00；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：ONLY_ISSUE32_PR56_ACTUAL_LATEST_BODY_HASH_UTC_READBACK; other36_issue full sync remains historical
-实施：IN_PROGRESS；5f两行结构化错误测试窄修已公开，新SDK135+13/两Clippy及原六CI运行；旧a41 SDK实际FAIL/原135与原ClippyPASS、新auth13未运行，旧a41原六CI4成功2取消，无完整PASS；native Session链路未实现，Agent未验收。；当前任务：M6.3；下一任务：M6.3
+实施：IN_PROGRESS；3b SDK实际148PASS/两Clippy exit0、原六6SUCCESS且六原日志本head完整footer已核，仅工程CI门禁；integration2个真实numericENVskip仍BLOCKED_ENVIRONMENT；真实Session/Step和平台prepare/cancel未闭合，Agent NOT_RUN/NOT_ACCEPTED。；当前任务：M6.3；下一任务：M6.3
 
-Verify fixed3b own complete135+13/twoClippy and original6 actual terminal/readback; continue genuine constrained pure SessionServices/Session/Step owner and actual private platform prepare bridge, complete authority/material versions/InputProof/start/cancel/same frozen sender and runtime, then execute already-authorized real DeepSeek Agent acceptance.
+Retain 3b own SDK148/twoClippy and all6 original CI actual raw terminal proof; implement/review restricted real SessionServices/Session/Step owner, explicit config materializer and actual private platform prepare/cancel bridge. Close actual same-Step material versions/InputProof/unique durable start/cancel/same frozen sender and runtime before already-authorized real DeepSeek Agent acceptance. Numeric actual sealed runtime remains BLOCKED_ENVIRONMENT.
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
